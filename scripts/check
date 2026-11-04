@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Pre-commit check: formatting, lints, tests (release profile for speed). Stops on the first failure.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+cargo fmt --all --check
+cargo clippy -q --workspace --all-targets -- -D warnings
+cargo test -q --release --workspace
+echo "check: OK"
