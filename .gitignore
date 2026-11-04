@@ -1,0 +1,12 @@
+/target
+/out/*
+!/out/.gitkeep
+/reference/*
+!/reference/README.md
+__pycache__/
+*.pyc
+.venv/
+# Godot
+godot/.godot/
+godot/bin/
+*.import

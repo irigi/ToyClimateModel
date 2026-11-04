@@ -1,0 +1,24 @@
+[package]
+name = "toyclim-headless"
+description = "Headless runner for toyclim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "toyclim"
+path = "src/main.rs"
+
+[features]
+f32 = ["toyclim-core/f32"]
+
+[dependencies]
+toyclim-core.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+log.workspace = true
+env_logger.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

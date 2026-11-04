@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test
+        run: cargo test --workspace
+      - name: smoke run
+        run: cargo run --release --bin toyclim -- run --config cases/dummy.toml --out out/ci-dummy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: plot
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/plot_field.py out/ci-dummy analytic -o out/ci-dummy/analytic.png

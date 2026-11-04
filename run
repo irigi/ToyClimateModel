@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Build the GDExtension and start the Godot viewer.
+# Usage: ./run [--debug] [extra godot args...]
+set -euo pipefail
+cd "$(dirname "$0")"
+profile=release
+if [[ "${1:-}" == "--debug" ]]; then profile=debug; shift; fi
+if [[ $profile == release ]]; then
+  cargo build -p toyclim-godot --release
+else
+  cargo build -p toyclim-godot
+fi
+GODOT="${GODOT:-godot}"
+command -v "$GODOT" >/dev/null || { echo "Godot not found; set GODOT=/path/to/godot" >&2; exit 1; }
+exec "$GODOT" --path godot "$@"

@@ -1,0 +1,13 @@
+[package]
+name = "toyclim-godot"
+description = "GDExtension wrapper exposing toyclim to the Godot viewer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+toyclim-core.workspace = true
+godot = { version = "0.5.5", features = ["api-4-5"] }

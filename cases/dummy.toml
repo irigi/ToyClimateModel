@@ -1,0 +1,11 @@
+# M0 pipeline check: writes an analytic field f = sin φ + cos²φ cos 3(λ − Ωt).
+description = "M0 dummy: analytic field, no dynamics"
+model = "dummy"
+truncation = 42
+dt = "30min"
+length = "1day"
+output_every = "6h"
+output_fields = ["analytic"]
+
+[planet]
+preset = "earth"
