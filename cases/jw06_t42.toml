@@ -1,0 +1,34 @@
+# Jablonowski & Williamson (2006), QJRMS 132, 2943–2975: baroclinic wave test.
+# Constants from the paper (§2): u0 = 35 m/s, η0 = 0.252, ηt = 0.2, T0 = 288 K,
+# Γ = 0.005 K/m, ΔT = 4.8e5 K, perturbation u_p = 1 m/s at (20°E, 40°N), R = a/10;
+# a = 6.371229e6 m, Ω = 7.29212e-5 s⁻¹, R_d = 287.0, c_p = 1004.5, g = 9.80616.
+# Levels: L26 from NCAR TN-469+STR Table B.1 evaluated at σ = η = a + b; the top interface
+# (η = 0.002194) is set to σ = 0 as the σ discretization requires (top layer slightly thicker).
+# p_s = 1000 hPa uniform, Φ_s from eq. (7) at η = 1.
+description = "JW06 baroclinic wave (PERT, T42 quick look)"
+model = "primitive"
+truncation = 42
+sigma_half = [
+  0.0, 0.004895209, 0.009882418, 0.01805201, 0.02983724, 0.04462334,
+  0.06160587, 0.07851243, 0.0923658, 0.10866359, 0.12783708, 0.15039371,
+  0.17693043, 0.20814944, 0.24487709, 0.28808522, 0.33891731, 0.39871865,
+  0.4690718, 0.55183871, 0.64920969, 0.74438289, 0.83102123, 0.90330029,
+  0.95599746, 0.9851122, 1.0
+]
+dt = "20min"
+length = "15day"
+output_every = "1day"
+output_fields = ["ps", "t850", "u", "vor850"]
+initial_condition = { case = "jw06", perturbed = true }
+
+[planet]
+preset = "earth"
+radius = 6.371229e6
+rotation_rate = 7.29212e-5
+gas_constant = 287.0
+cp = 1004.5
+gravity = 9.80616
+
+[diffusion]
+order = 4
+tau = "2.4h"

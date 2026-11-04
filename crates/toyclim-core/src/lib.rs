@@ -5,13 +5,18 @@
 #![forbid(unsafe_code)]
 // Casts like `x as f64` are no-ops in the default build but needed with `--features f32`.
 #![allow(clippy::unnecessary_cast)]
+// Numerical kernels index several arrays with the same loop variable; iterator chains
+// would obscure the correspondence with the equations.
+#![allow(clippy::needless_range_loop)]
 
 pub mod build;
 pub mod config;
 pub mod grid;
 pub mod io;
 pub mod model;
+pub mod physics;
 pub mod planet;
+pub mod primitive;
 pub mod runtime;
 pub mod shallow_water;
 pub mod spectral;

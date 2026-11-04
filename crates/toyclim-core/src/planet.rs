@@ -19,6 +19,14 @@ pub struct Planet {
     pub cp: f64,
     /// Reference surface pressure p₀ \[Pa\].
     pub p0: f64,
+    /// Isothermal reference temperature T̄ of the semi-implicit scheme \[K\]. Must be at
+    /// least as warm as typical temperatures for stability (SPEC.md §5.2).
+    #[serde(default = "default_tref")]
+    pub t_ref: f64,
+}
+
+fn default_tref() -> f64 {
+    300.0
 }
 
 impl Planet {
@@ -32,6 +40,7 @@ impl Planet {
             gas_constant: 287.04,
             cp: 1004.64,
             p0: 1.0e5,
+            t_ref: 300.0,
         }
     }
 

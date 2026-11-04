@@ -40,6 +40,9 @@ enum Cmd {
     Bench {
         #[arg(long)]
         config: PathBuf,
+        /// Override the run length (e.g. "1day").
+        #[arg(long)]
+        length: Option<String>,
     },
     /// List the configs in a cases directory.
     ListCases {
@@ -67,7 +70,13 @@ fn main() -> Result<()> {
                 run_model(&c, &out, restart.as_deref())
             }
         }
-        Cmd::Bench { config } => bench(&Config::from_file(&config)?),
+        Cmd::Bench { config, length } => {
+            let mut c = Config::from_file(&config)?;
+            if let Some(l) = length {
+                c.length = l.parse()?;
+            }
+            bench(&c)
+        }
         Cmd::ListCases { dir } => list_cases(&dir),
     }
 }

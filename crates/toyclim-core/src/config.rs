@@ -139,6 +139,8 @@ pub struct PlanetConfig {
     pub cp: Option<f64>,
     /// \[Pa\]
     pub p0: Option<f64>,
+    /// Semi-implicit reference temperature T̄ \[K\].
+    pub t_ref: Option<f64>,
 }
 
 impl PlanetConfig {
@@ -182,12 +184,16 @@ impl PlanetConfig {
         if let Some(v) = self.p0 {
             p.p0 = v;
         }
+        if let Some(v) = self.t_ref {
+            p.t_ref = v;
+        }
         for (what, v) in [
             ("radius", p.radius),
             ("gravity", p.gravity),
             ("gas_constant", p.gas_constant),
             ("cp", p.cp),
             ("p0", p.p0),
+            ("t_ref", p.t_ref),
         ] {
             if !(v.is_finite() && v > 0.0) {
                 return Err(ConfigError::Invalid(format!("planet {what} must be > 0")));
@@ -285,6 +291,8 @@ pub struct Config {
     pub diffusion: DiffusionConfig,
     #[serde(default)]
     pub time_filter: TimeFilterConfig,
+    /// Global dry-mass fixer for the primitive-equation model (default true).
+    pub mass_fixer: Option<bool>,
     /// Point time series ("weather stations"), see docs/design-decisions.md.
     #[serde(default)]
     pub stations: Vec<StationConfig>,

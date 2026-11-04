@@ -15,26 +15,6 @@ use rayon::prelude::*;
 
 const ZERO: Complex = Complex { re: 0.0, im: 0.0 };
 
-/// (Σ_{i even} a_i t_i, Σ_{i odd} a_i t_i).
-#[inline]
-fn pair_dot(a: &[Complex], t: &[Real]) -> (Complex, Complex) {
-    let (mut er, mut ei, mut or, mut oi) = (0.0, 0.0, 0.0, 0.0);
-    let ac = a.chunks_exact(2);
-    let tc = t.chunks_exact(2);
-    let (ar, tr) = (ac.remainder(), tc.remainder());
-    for (x, y) in ac.zip(tc) {
-        er += x[0].re * y[0];
-        ei += x[0].im * y[0];
-        or += x[1].re * y[1];
-        oi += x[1].im * y[1];
-    }
-    if let (Some(x), Some(y)) = (ar.first(), tr.first()) {
-        er += x.re * y;
-        ei += x.im * y;
-    }
-    (Complex::new(er, ei), Complex::new(or, oi))
-}
-
 /// out_i += (i even ? e : o) · t_i.
 #[inline]
 fn pair_axpy(out: &mut [Complex], e: Complex, o: Complex, t: &[Real]) {
@@ -64,6 +44,9 @@ pub struct Transform {
     p: Vec<Vec<Real>>,
     /// H per m, same layout.
     h: Vec<Vec<Real>>,
+    /// P̄ and H per m transposed to `[ℓ−m][j]` (latitude innermost, for synthesis).
+    pt: Vec<Vec<Real>>,
+    ht: Vec<Vec<Real>>,
     /// Gaussian weight per northern row.
     w: Vec<Real>,
     /// Gaussian weight / (a (1 − μ²)) per northern row.
@@ -101,6 +84,23 @@ impl Transform {
                 (pm, hm)
             })
             .unzip();
+        let transpose = |tab: &Vec<Vec<Real>>| -> Vec<Vec<Real>> {
+            tab.iter()
+                .enumerate()
+                .map(|(m, t)| {
+                    let nl = mmax + 1 - m;
+                    let mut o = vec![0.0 as Real; nl * nhalf];
+                    for j in 0..nhalf {
+                        for i in 0..nl {
+                            o[i * nhalf + j] = t[j * nl + i];
+                        }
+                    }
+                    o
+                })
+                .collect()
+        };
+        let pt = transpose(&p);
+        let ht = transpose(&h);
         let w = grid.weights[..nhalf].iter().map(|&x| x as Real).collect();
         let w_div = (0..nhalf)
             .map(|j| (grid.weights[j] / (radius * (1.0 - grid.mu[j] * grid.mu[j]))) as Real)
@@ -118,6 +118,8 @@ impl Transform {
             nhalf,
             p,
             h,
+            pt,
+            ht,
             w,
             w_div,
             inv_cos2,
@@ -169,27 +171,42 @@ impl Transform {
         let cols: Vec<Vec<Complex>> = self.map_m(|m| {
             let r = self.layout.m_range(m);
             let nl = r.len();
-            let am = a.map(|x| &x[r.clone()]);
-            let bm = b.map(|x| &x[r.clone()]);
-            let (pm, hm) = (&self.p[m], &self.h[m]);
+            // sym/anti parts per northern row, real and imaginary separately so the
+            // inner loops over latitude vectorize (no reductions).
+            let mut sr = vec![0.0 as Real; nhalf];
+            let mut si = vec![0.0 as Real; nhalf];
+            let mut ar = vec![0.0 as Real; nhalf];
+            let mut ai = vec![0.0 as Real; nhalf];
+            let mut accumulate = |coef: &[Complex], tab: &[Real], even_to_sym: bool| {
+                for i in 0..nl {
+                    let c = coef[i];
+                    if c.re == 0.0 && c.im == 0.0 {
+                        continue;
+                    }
+                    let row = &tab[i * nhalf..(i + 1) * nhalf];
+                    let to_sym = (i % 2 == 0) == even_to_sym;
+                    let (dr, di) = if to_sym {
+                        (&mut sr, &mut si)
+                    } else {
+                        (&mut ar, &mut ai)
+                    };
+                    for ((x, y), &t) in dr.iter_mut().zip(di.iter_mut()).zip(row) {
+                        *x += c.re * t;
+                        *y += c.im * t;
+                    }
+                }
+            };
+            if let Some(a) = a {
+                accumulate(&a[r.clone()], &self.pt[m], true);
+            }
+            if let Some(b) = b {
+                accumulate(&b[r.clone()], &self.ht[m], false);
+            }
             let mut col = vec![ZERO; nlat];
             for j in 0..nhalf {
-                let pj = &pm[j * nl..(j + 1) * nl];
-                let hj = &hm[j * nl..(j + 1) * nl];
-                // sym: even part about the equator; anti: odd part.
-                let (mut sym, mut anti) = (ZERO, ZERO);
-                if let Some(am) = am {
-                    let (e, o) = pair_dot(am, pj);
-                    sym += e;
-                    anti += o;
-                }
-                if let Some(bm) = bm {
-                    let (e, o) = pair_dot(bm, hj);
-                    anti += e;
-                    sym += o;
-                }
-                col[j] = sym + anti;
-                col[nlat - 1 - j] = sym - anti;
+                let (sy, an) = (Complex::new(sr[j], si[j]), Complex::new(ar[j], ai[j]));
+                col[j] = sy + an;
+                col[nlat - 1 - j] = sy - an;
             }
             col
         });

@@ -7,7 +7,7 @@ use crate::model::Model;
 pub fn build_model(cfg: &Config) -> Result<Box<dyn Model>, String> {
     match cfg.model {
         ModelKind::ShallowWater => Ok(Box::new(crate::shallow_water::from_config(cfg)?)),
-        ModelKind::Primitive => Err("primitive-equation model not implemented yet".into()),
+        ModelKind::Primitive => Ok(Box::new(crate::primitive::from_config(cfg)?)),
         ModelKind::Dummy => Err("the dummy model has no dynamics".into()),
     }
 }
