@@ -106,7 +106,8 @@ impl ColumnPhysics for GrayRadiation {
             sw[k] = s0 * (-(self.tau_sw * s * s) / mu).exp();
         }
         let sw_sfc = sw[l];
-        let sw_sfc_abs = sw_sfc * (1.0 - self.albedo);
+        let albedo = col.surface_albedo.map(|a| a as f64).unwrap_or(self.albedo);
+        let sw_sfc_abs = sw_sfc * (1.0 - albedo);
         // heating: net downward flux F = SW_down − (U − D); layer gains F(top) − F(bottom)
         for k in 0..l {
             let f_top = sw[k] - (up[k] - down[k]);
@@ -116,7 +117,7 @@ impl ColumnPhysics for GrayRadiation {
         }
         *out.surface_heat += (sw_sfc_abs + down[l] - up[l]) as Real;
         out.diag[0] += up[0] as Real;
-        out.diag[1] += (s0 - self.albedo * sw_sfc) as Real;
+        out.diag[1] += (s0 - albedo * sw_sfc) as Real;
         out.diag[2] += sw_sfc as Real;
         out.diag[3] += down[l] as Real;
     }
@@ -167,6 +168,8 @@ mod tests {
             t_surface: Some(ts),
             insolation,
             cos_zenith: 1.0,
+            surface_albedo: None,
+            wetness: 1.0,
             time: 0.0,
             dt: 1800.0,
         };
@@ -214,7 +217,10 @@ mod tests {
         assert!(dt.iter().all(|&x| x <= 0.0));
         assert!(sh < 0.0);
         let p = Planet::earth();
-        let atm: f64 = dt.iter().map(|&x| x as f64 * p.cp * 1e5 / 30.0 / p.gravity).sum();
+        let atm: f64 = dt
+            .iter()
+            .map(|&x| x as f64 * p.cp * 1e5 / 30.0 / p.gravity)
+            .sum();
         assert!((-(diag[0] as f64) - atm - sh as f64).abs() < 1e-6);
     }
 }

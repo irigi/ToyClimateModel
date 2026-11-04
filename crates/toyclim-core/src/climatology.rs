@@ -82,7 +82,11 @@ impl Climatology {
     /// Also accumulate the map fields per calendar month.
     pub fn enable_monthly(&mut self, calendar: crate::orbit::Calendar) {
         let nm = calendar.months.len();
-        self.monthly = self.maps.iter().map(|(_, _, s)| vec![vec![0.0; s.len()]; nm]).collect();
+        self.monthly = self
+            .maps
+            .iter()
+            .map(|(_, _, s)| vec![vec![0.0; s.len()]; nm])
+            .collect();
         self.monthly_count = vec![0; nm];
         self.calendar = Some(calendar);
     }

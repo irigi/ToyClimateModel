@@ -253,3 +253,99 @@ mod sampler_tests {
         assert!(s.k1 == 0);
     }
 }
+
+impl GaussianGrid {
+    /// Cell edges in μ = sin φ (north to south, N_lat + 1 values) such that each cell's
+    /// area fraction equals its Gaussian weight / 2.
+    pub fn mu_edges(&self) -> Vec<f64> {
+        let mut e = Vec::with_capacity(self.nlat + 1);
+        let mut m = 1.0;
+        e.push(m);
+        for w in &self.weights {
+            m -= w;
+            e.push(m);
+        }
+        *e.last_mut().unwrap() = -1.0;
+        e
+    }
+
+    /// Average an equirectangular field (`[lat][lon]`, row 0 at the north, cell centres,
+    /// column 0 starting at 0°E) over each Gaussian grid cell, and the fraction of source
+    /// pixels where `pred` holds. Cells without any source pixel (very coarse source) take
+    /// the nearest source pixel. Pixels are weighted by cos φ (area).
+    pub fn box_average(
+        &self,
+        src: &[f32],
+        nlat_src: usize,
+        nlon_src: usize,
+        pred: impl Fn(f32) -> bool,
+    ) -> (Vec<f64>, Vec<f64>) {
+        let edges = self.mu_edges();
+        let n = self.len();
+        let mut sum = vec![0.0; n];
+        let mut frac = vec![0.0; n];
+        let mut wsum = vec![0.0; n];
+        let dl = std::f64::consts::TAU / self.nlon as f64;
+        for r in 0..nlat_src {
+            let lat = std::f64::consts::FRAC_PI_2
+                - std::f64::consts::PI * (r as f64 + 0.5) / nlat_src as f64;
+            let mu = lat.sin();
+            let j = edges
+                .partition_point(|&e| e > mu)
+                .saturating_sub(1)
+                .min(self.nlat - 1);
+            let w = lat.cos();
+            for c in 0..nlon_src {
+                let lon = std::f64::consts::TAU * (c as f64 + 0.5) / nlon_src as f64;
+                let k = (((lon + 0.5 * dl) / dl).floor() as usize) % self.nlon;
+                let v = src[r * nlon_src + c];
+                let p = j * self.nlon + k;
+                sum[p] += w * v as f64;
+                frac[p] += if pred(v) { w } else { 0.0 };
+                wsum[p] += w;
+            }
+        }
+        for j in 0..self.nlat {
+            for k in 0..self.nlon {
+                let p = j * self.nlon + k;
+                if wsum[p] > 0.0 {
+                    sum[p] /= wsum[p];
+                    frac[p] /= wsum[p];
+                } else {
+                    // nearest source pixel
+                    let r = (((std::f64::consts::FRAC_PI_2 - self.lat[j]) / std::f64::consts::PI
+                        * nlat_src as f64)
+                        .floor() as usize)
+                        .min(nlat_src - 1);
+                    let c = ((self.lon[k] / std::f64::consts::TAU * nlon_src as f64).floor()
+                        as usize)
+                        % nlon_src;
+                    let v = src[r * nlon_src + c];
+                    sum[p] = v as f64;
+                    frac[p] = if pred(v) { 1.0 } else { 0.0 };
+                }
+            }
+        }
+        (sum, frac)
+    }
+}
+
+#[cfg(test)]
+mod box_tests {
+    use super::*;
+
+    #[test]
+    fn box_average_preserves_area_fraction() {
+        let g = GaussianGrid::new(32, 64);
+        // half the planet (northern hemisphere) is "land"
+        let (nl, nn) = (360, 720);
+        let src: Vec<f32> = (0..nl)
+            .flat_map(|r| std::iter::repeat_n(if r < nl / 2 { 1.0 } else { -1.0 }, nn))
+            .collect();
+        let (_, frac) = g.box_average(&src, nl, nn, |v| v > 0.0);
+        let area: f64 = g.integrate(&frac, 1.0) / (4.0 * std::f64::consts::PI);
+        assert!((area - 0.5).abs() < 1e-3, "{area}");
+        let e = g.mu_edges();
+        assert!((e[0] - 1.0).abs() < 1e-15 && (e[32] + 1.0).abs() < 1e-15);
+    }
+}

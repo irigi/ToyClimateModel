@@ -109,15 +109,36 @@ struct PhysTend {
     surface_heat: Vec<Real>,
 }
 
-/// Slab (mixed-layer) surface: prognostic surface temperature with heat capacity C.
+/// Surface model: slab (mixed-layer) ocean and simple land with a bucket.
 #[derive(Debug, Clone)]
 pub struct SlabSurface {
     /// Surface temperature per grid point \[K\].
     pub ts: Vec<Real>,
-    /// Heat capacity per unit area \[J m⁻² K⁻¹\] (ρ_w c_w h).
-    pub heat_capacity: f64,
+    /// Heat capacity per unit area per point \[J m⁻² K⁻¹\] (ocean ρ_w c_w h, land soil).
+    pub heat_capacity: Vec<f64>,
     /// Hold T_s fixed (prescribed SST) instead of integrating it.
     pub fixed: bool,
+    /// Land fraction per point (cells with ≥ 0.5 are treated as land).
+    pub land_fraction: Vec<Real>,
+    /// Surface albedo per point; negative = use the radiation scheme's default.
+    pub albedo: Vec<Real>,
+    /// Bucket soil water \[kg m⁻²\] (land points only).
+    pub bucket: Vec<Real>,
+    /// Bucket capacity \[kg m⁻²\]; evaporation efficiency β = min(1, W / (0.75 W_max)).
+    pub bucket_capacity: f64,
+}
+
+impl SlabSurface {
+    pub fn is_land(&self, p: usize) -> bool {
+        self.land_fraction[p] >= 0.5
+    }
+    pub fn wetness(&self, p: usize) -> Real {
+        if self.is_land(p) {
+            (self.bucket[p] / (0.75 * self.bucket_capacity as Real)).min(1.0)
+        } else {
+            1.0
+        }
+    }
 }
 
 /// Vertical constants used by the column kernel.
@@ -558,6 +579,11 @@ impl Primitive {
                         tracers: &qc,
                         phis: self.phis_grid[p],
                         t_surface: self.surface.as_ref().map(|s| s.ts[p]),
+                        surface_albedo: self
+                            .surface
+                            .as_ref()
+                            .and_then(|s| (s.albedo[p] >= 0.0).then_some(s.albedo[p])),
+                        wetness: self.surface.as_ref().map_or(1.0, |s| s.wetness(p)),
                         insolation: insol[p],
                         cos_zenith: coszen[p],
                         time,
@@ -1008,11 +1034,28 @@ impl Model for Primitive {
         };
         if let Some(ph) = &phys {
             self.surface_heat = ph.surface_heat.clone();
+            // precipitation and evaporation for the land bucket [kg m⁻² s⁻¹]
+            let mut precip = vec![0.0 as Real; self.tr.ngrid()];
+            let mut evap = vec![0.0 as Real; self.tr.ngrid()];
+            for (n, g) in &self.physics_diag {
+                if n.starts_with("precip_") {
+                    precip.iter_mut().zip(g).for_each(|(a, b)| *a += *b);
+                } else if n == "evap" {
+                    evap.copy_from_slice(g);
+                }
+            }
+            let dt = self.settings.dt;
             if let Some(sfc) = self.surface.as_mut() {
                 if !sfc.fixed {
-                    let f = (self.settings.dt / sfc.heat_capacity) as Real;
-                    for (t, h) in sfc.ts.iter_mut().zip(&ph.surface_heat) {
-                        *t += f * h;
+                    for (p, (t, h)) in sfc.ts.iter_mut().zip(&ph.surface_heat).enumerate() {
+                        *t += (dt / sfc.heat_capacity[p]) as Real * h;
+                    }
+                }
+                let cap = sfc.bucket_capacity as Real;
+                for p in 0..sfc.bucket.len() {
+                    if sfc.land_fraction[p] >= 0.5 {
+                        let w = sfc.bucket[p] + dt as Real * (precip[p] - evap[p]);
+                        sfc.bucket[p] = w.clamp(0.0, cap); // excess runs off
                     }
                 }
             }
@@ -1081,13 +1124,15 @@ impl Model for Primitive {
         self.levels.full.clone()
     }
     fn field_names(&self) -> Vec<&'static str> {
-        let mut v = vec!["u", "v", "t", "vor", "div", "phi", "ps", "phis", "tas"];
+        let mut v = vec![
+            "u", "v", "t", "vor", "div", "phi", "ps", "phis", "orog", "tas",
+        ];
         v.extend_from_slice(PRESSURE_FIELDS);
         if !self.curr.tracers.is_empty() {
             v.extend_from_slice(&["q", "rh", "pw"]);
         }
         if self.surface.is_some() {
-            v.extend_from_slice(&["ts", "surface_heat"]);
+            v.extend_from_slice(&["ts", "surface_heat", "land", "bucket"]);
         }
         if self.physics.iter().any(|p| {
             p.diagnostic_names()
@@ -1122,6 +1167,23 @@ impl Model for Primitive {
                     .synthesis(&self.curr.tmp[self.nlev() - 1])
                     .iter()
                     .map(|t| t + self.planet.t_ref as Real)
+                    .collect(),
+            }),
+            "land" => self.surface.as_ref().map(|sf| GridField {
+                nlev: 1,
+                data: sf.land_fraction.clone(),
+            }),
+            "bucket" => self.surface.as_ref().map(|sf| GridField {
+                nlev: 1,
+                data: sf.bucket.clone(),
+            }),
+            // filtered surface height Φ_s / g [m]
+            "orog" => Some(GridField {
+                nlev: 1,
+                data: self
+                    .phis_grid
+                    .iter()
+                    .map(|p| p / self.planet.gravity as Real)
                     .collect(),
             }),
             "ts" => self.surface.as_ref().map(|sf| GridField {
@@ -1237,6 +1299,12 @@ impl Model for Primitive {
                 .map(|c| Complex::new(c[0], c.get(1).copied().unwrap_or(0.0)))
                 .collect();
             a.push(("grid_ts".to_string(), packed));
+            let pb: Vec<Complex> = sf
+                .bucket
+                .chunks(2)
+                .map(|c| Complex::new(c[0], c.get(1).copied().unwrap_or(0.0)))
+                .collect();
+            a.push(("grid_bucket".to_string(), pb));
         }
         (
             a,
@@ -1291,6 +1359,14 @@ impl Model for Primitive {
                     sf.ts[2 * i + 1] = c.im;
                 }
             }
+            if let Some(pb) = arrays.iter().find(|(n, _)| n == "grid_bucket") {
+                for (i, c) in pb.1.iter().enumerate() {
+                    sf.bucket[2 * i] = c.re;
+                    if 2 * i + 1 < sf.bucket.len() {
+                        sf.bucket[2 * i + 1] = c.im;
+                    }
+                }
+            }
         }
         for (k, v) in scalars {
             match k.as_str() {
@@ -1301,6 +1377,11 @@ impl Model for Primitive {
         }
         Ok(())
     }
+}
+
+/// Global-mean surface pressure of a spectral ln p_s \[Pa\] (from the ℓ = 0 coefficient).
+fn init_ps_mean(_tr: &Transform, lnps: &[Complex]) -> f64 {
+    ((lnps[0].re as f64) / std::f64::consts::SQRT_2).exp()
 }
 
 /// The TJ16 SST profile on the grid.
@@ -1358,11 +1439,58 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
                     vec![t as Real; tr.ngrid()]
                 }
             };
-            Some(SlabSurface {
+            let n = tr.ngrid();
+            let ocean_c = 1000.0 * 4000.0 * sc.mixed_layer_depth;
+            let ocean_albedo = sc.ocean_albedo.unwrap_or(-1.0) as Real;
+            let mut sfc = SlabSurface {
                 ts,
-                heat_capacity: 1000.0 * 4000.0 * sc.mixed_layer_depth,
+                heat_capacity: vec![ocean_c; n],
                 fixed: sc.fixed,
-            })
+                land_fraction: vec![0.0; n],
+                albedo: vec![ocean_albedo; n],
+                bucket: vec![0.0; n],
+                bucket_capacity: sc.bucket_capacity,
+            };
+            if let Some(path) = &sc.heightmap {
+                let (h, nlat_h, nlon_h) = crate::io::heightmap::read(std::path::Path::new(path))
+                    .map_err(|e| format!("heightmap {path}: {e}"))?;
+                let (mean_land_h, frac) = tr.grid.box_average(&h, nlat_h, nlon_h, |v| v > 0.0);
+                // elevation of the cell: mean of max(h, 0) (ocean at sea level)
+                let hpos: Vec<f32> = h.iter().map(|&v| v.max(0.0)).collect();
+                let (elev, _) = tr.grid.box_average(&hpos, nlat_h, nlon_h, |_| false);
+                let _ = mean_land_h;
+                let g = planet.gravity;
+                let phis_raw: Vec<Real> = elev.iter().map(|&z| (g * z) as Real).collect();
+                let mut spec = tr.analysis(&phis_raw);
+                // spectral filter against Gibbs ringing: exp(−c (ℓ(ℓ+1)/(M(M+1)))²), c from the
+                // factor at ℓ = M
+                let mm = (tr.mmax() * (tr.mmax() + 1)) as f64;
+                let c = -sc.orography_filter.clamp(1e-6, 1.0).ln();
+                for (x, &l) in spec.iter_mut().zip(&tr.layout.l_of) {
+                    *x *= (-c * ((l * (l + 1)) as f64 / mm).powi(2)).exp() as Real;
+                }
+                let phis = tr.synthesis(&spec);
+                // hydrostatic initial surface pressure over the mountains (T ≈ 288 K)
+                let lnps: Vec<Real> = phis
+                    .iter()
+                    .map(|&ph| {
+                        (init_ps_mean(&tr, &init.state.lnps).ln()
+                            - ph as f64 / (planet.gas_constant * 288.0))
+                            as Real
+                    })
+                    .collect();
+                init.state.lnps = tr.analysis(&lnps);
+                init.phis_grid = phis;
+                for p in 0..n {
+                    sfc.land_fraction[p] = frac[p] as Real;
+                    if frac[p] >= 0.5 {
+                        sfc.heat_capacity[p] = sc.land_heat_capacity;
+                        sfc.albedo[p] = sc.land_albedo as Real;
+                        sfc.bucket[p] = (sc.initial_bucket * sc.bucket_capacity) as Real;
+                    }
+                }
+            }
+            Some(sfc)
         }
     };
     let mut m = Primitive::new(tr, planet, settings, levels, init, physics);

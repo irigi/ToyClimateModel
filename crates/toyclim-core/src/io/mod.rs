@@ -2,6 +2,7 @@
 //! in this module.
 
 pub mod climatology;
+pub mod heightmap;
 pub mod meta;
 pub mod npy;
 pub mod restart;

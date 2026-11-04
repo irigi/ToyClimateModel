@@ -435,6 +435,42 @@ pub struct SurfaceConfig {
     /// Keep T_s fixed (prescribed SST).
     #[serde(default)]
     pub fixed: bool,
+    /// Equirectangular heightmap (.npy, float32/64, `[lat][lon]`, row 0 north, metres; ≤ 0 is
+    /// ocean). Path relative to the working directory. Absent → aquaplanet.
+    pub heightmap: Option<String>,
+    /// Land heat capacity \[J m⁻² K⁻¹\] (default 2e5 ≈ 5 cm of water).
+    #[serde(default = "default_land_c")]
+    pub land_heat_capacity: f64,
+    /// Land albedo (default 0.3).
+    #[serde(default = "default_land_albedo")]
+    pub land_albedo: f64,
+    /// Ocean albedo (default: the radiation scheme's own value).
+    pub ocean_albedo: Option<f64>,
+    /// Bucket capacity \[kg m⁻²\] (default 150).
+    #[serde(default = "default_bucket")]
+    pub bucket_capacity: f64,
+    /// Initial bucket fill fraction (default 0.75 = fully wet).
+    #[serde(default = "default_bucket_init")]
+    pub initial_bucket: f64,
+    /// Spectral orography filter: damping factor at ℓ = M (default 0.1).
+    #[serde(default = "default_oro_filter")]
+    pub orography_filter: f64,
+}
+
+fn default_land_c() -> f64 {
+    2.0e5
+}
+fn default_land_albedo() -> f64 {
+    0.3
+}
+fn default_bucket() -> f64 {
+    150.0
+}
+fn default_bucket_init() -> f64 {
+    0.75
+}
+fn default_oro_filter() -> f64 {
+    0.1
 }
 
 fn default_mld() -> f64 {

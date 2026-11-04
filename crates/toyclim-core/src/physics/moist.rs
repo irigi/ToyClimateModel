@@ -168,7 +168,9 @@ impl ColumnPhysics for SurfaceFluxes {
             .unwrap_or_else(|| self.sst.at(col.lat as f64, col.lon as f64));
         let qs = self.cond.qsat(planet, ts, ps);
         let dt = col.dt;
-        let (ah, ae) = (self.c_h * wind * dt / za, self.c_e * wind * dt / za);
+        // evaporation efficiency β (bucket wetness over land, 1 over water)
+        let beta = (col.wetness as f64).clamp(0.0, 1.0);
+        let (ah, ae) = (self.c_h * wind * dt / za, beta * self.c_e * wind * dt / za);
         let t_new = (ta + ah * ts) / (1.0 + ah);
         let q_new = (qa + ae * qs) / (1.0 + ae);
         out.dt[k] += ((t_new - ta) / dt) as Real;
@@ -350,6 +352,8 @@ mod scheme_tests {
             t_surface: None,
             insolation: 0.0,
             cos_zenith: 0.0,
+            surface_albedo: None,
+            wetness: 1.0,
             time: 0.0,
             dt: 1800.0,
         };

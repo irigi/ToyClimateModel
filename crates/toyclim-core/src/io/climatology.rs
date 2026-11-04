@@ -54,8 +54,12 @@ pub fn write(c: &Climatology, dir: &Path, nlon: usize) -> std::io::Result<()> {
             super::npy::write(&dir.join(format!("monthly_{name}.npy")), &mean, &shape)
                 .map_err(std::io::Error::other)?;
             let flat: Vec<f64> = c.monthly[fi].iter().flatten().copied().collect();
-            super::npy::write(&dir.join(format!("sums_monthly_{name}.npy")), &flat, &[flat.len()])
-                .map_err(std::io::Error::other)?;
+            super::npy::write(
+                &dir.join(format!("sums_monthly_{name}.npy")),
+                &flat,
+                &[flat.len()],
+            )
+            .map_err(std::io::Error::other)?;
         }
     }
     let meta = json!({"count": c.count, "start_s": c.start, "every_steps": c.every_steps,

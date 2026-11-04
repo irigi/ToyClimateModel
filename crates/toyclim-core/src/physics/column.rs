@@ -43,6 +43,10 @@ pub struct ColumnIn<'a> {
     pub insolation: Real,
     /// Cosine of the stellar zenith angle (0 at night).
     pub cos_zenith: Real,
+    /// Surface albedo from the surface model, if it prescribes one (else the scheme's own).
+    pub surface_albedo: Option<Real>,
+    /// Evaporation efficiency β ∈ [0, 1] of the surface (1 = open water).
+    pub wetness: Real,
     /// Model time \[s\].
     pub time: f64,
     /// Length of the step the tendencies are applied over (2Δt for leapfrog) \[s\].
