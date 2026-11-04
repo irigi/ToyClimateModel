@@ -339,6 +339,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ce6fed360f27cc44ee188246880bb842cdb96bf13aec1d0ec31cccfa50b1cf6"
 dependencies = [
  "gdextension-api",
+ "nanoserde",
+ "which",
 ]
 
 [[package]]
@@ -882,6 +884,7 @@ name = "toyclim-godot"
 version = "0.1.0"
 dependencies = [
  "godot",
+ "serde_json",
  "toyclim-core",
 ]
 
@@ -937,6 +940,15 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "which"
+version = "8.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bae2f2b2b816647a1cab1acc91f5bd20812d53cb344382635ec2181940c8034f"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

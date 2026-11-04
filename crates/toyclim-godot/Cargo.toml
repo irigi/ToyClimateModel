@@ -10,4 +10,14 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 toyclim-core.workspace = true
-godot = { version = "0.5.5", features = ["api-4-5"] }
+godot = { version = "0.5.5", default-features = true }
+serde_json.workspace = true
+
+[features]
+# Default: bindings for the stock single-precision Godot 4.3 API (what CI compiles).
+default = ["godot/api-4-3"]
+# The owner's custom double-precision Godot: generate bindings from that build's API JSON.
+#   godot4 --headless --dump-extension-api   (writes extension_api.json)
+#   GODOT4_GDEXTENSION_JSON=$PWD/extension_api.json \
+#     cargo build -p toyclim-godot --release --no-default-features --features double
+double = ["godot/api-custom-json", "godot/double-precision"]

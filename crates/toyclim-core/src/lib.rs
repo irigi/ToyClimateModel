@@ -12,6 +12,7 @@ pub mod grid;
 pub mod io;
 pub mod model;
 pub mod planet;
+pub mod runtime;
 pub mod shallow_water;
 pub mod spectral;
 pub mod stations;
