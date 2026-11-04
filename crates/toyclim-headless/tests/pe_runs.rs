@@ -152,3 +152,56 @@ fn moist_bitwise_and_sane() {
     }
     std::fs::remove_file(&cfg).ok();
 }
+
+/// Land, orography, bucket, slab ocean, gray radiation and orbit together: the model runs,
+/// stays finite and keeps the bucket within its bounds; restart is bitwise.
+#[test]
+fn land_world_runs_and_restarts() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let hm = root.join("worlds/testworld.npy");
+    let cfg_text = format!(
+        r#"
+model = "primitive"
+truncation = 21
+levels = 10
+dt = "30min"
+length = "4day"
+output_every = "2day"
+output_fields = ["ts", "bucket", "precip", "orog", "land"]
+initial_condition = {{ case = "rest", temperature = 280.0 }}
+[moisture]
+condensable = "water"
+[orbit]
+diurnal = true
+[surface]
+heightmap = "{}"
+[planet]
+preset = "earth"
+[forcing]
+type = "gray_aquaplanet"
+"#,
+        hm.display()
+    );
+    let cfg = tmp("land.toml");
+    std::fs::write(&cfg, cfg_text).unwrap();
+    let (a, c) = (tmp("la"), tmp("lc"));
+    run(&cfg, &a, "2", &[]);
+    run(&cfg, &c, "2", &["--length", "2day"]);
+    let r = c.join("restart");
+    run(&cfg, &c, "2", &["--restart", r.to_str().unwrap()]);
+    for f in ["ts_000192.npy", "bucket_000192.npy", "precip_000192.npy"] {
+        let x = std::fs::read(a.join("fields").join(f)).unwrap();
+        let y = std::fs::read(c.join("fields").join(f)).unwrap();
+        assert!(x == y, "{f} differs after restart");
+    }
+    let (b, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/bucket_000192.npy")).unwrap();
+    let (land, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/land_000000.npy")).unwrap();
+    let (ts, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/ts_000192.npy")).unwrap();
+    assert!(b.iter().all(|&w| (0.0..=150.0).contains(&w)));
+    assert!(land.iter().any(|&f| f >= 0.5) && land.iter().any(|&f| f < 0.5));
+    assert!(ts.iter().all(|&t| t.is_finite() && t > 150.0 && t < 350.0));
+    for d in [&a, &c] {
+        std::fs::remove_dir_all(d).ok();
+    }
+    std::fs::remove_file(&cfg).ok();
+}
