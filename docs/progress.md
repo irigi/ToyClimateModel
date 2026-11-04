@@ -11,7 +11,9 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M2 Shallow water | done |
 | M3 Godot viewer | Rust side done (runner + gdext wrapper compile); Godot side pending on laptop |
 | M4 Primitive equations | done (tests 1–3 pass, test 4 recorded at T85) |
-| M5–M6 | in progress |
+| M5 Held–Suarez / tidally locked | implemented; cloud smoke runs at T21 L10 qualitatively right; acceptance runs (T42 L20, 800–1200 days) pending on laptop |
+| M6 Performance/robustness | determinism + restart tests pass; f32 builds; budget met in cloud; viewer PE level selection in Rust API; f32 HS jet check pending (laptop) |
+| M7 Moisture | in progress (owner go-ahead given 2026-11-04) |
 
 ## Versions
 
@@ -253,6 +255,51 @@ Tests: `resting_atmosphere`, `linear_gravity_wave_external`, `jw_steady_state_sh
 `pe_restart_is_bitwise`, `pe_thread_independent`, `vertical::*` (normal);
 `linear_gravity_waves`, `conservation_30_days`, `jw_steady_state_t85` (`--ignored`).
 
+## 2026-11-04 (night) — M5 forcing, online climatology, M6 robustness
+
+**M5 implemented**
+- `physics/held_suarez.rs`: `HeldSuarez` (all constants configurable in `[forcing]`) and
+  `TidallyLocked` (T_n = 250 K, ΔT_d = 70 K, λ_ss = 180°, cos⁴φ → max(0, cos φ cos(λ−λ_ss))⁴).
+  Damping times as durations (`tau_friction = "1day"` etc.). Unknown keys are rejected.
+- Cases: `held_suarez.toml` (T42 L20, Δt 20 min, 1200 d), `held_suarez_omega{025,2}.toml`
+  (800 d; Ω×2 at T85), `tidally_locked{,_omega01,_omega002}.toml` (T42 L20, 800 d),
+  quick-look `*_t21.toml` versions.
+- **Online climatology** (`[climatology] start, every, maps`): zonal means and second
+  moments `[lev][lat]` (u, v, t, uu, vv, tt, uv, vt and eddy covariances) plus full time-mean
+  maps, accumulated after spin-up and written to `out/<run>/climatology/`; continues
+  bitwise after a restart. A 1200-day T42 L20 run therefore needs no daily 3D output.
+- `tools/zonal_mean.py` (cross sections + all HS acceptance metrics, Hadley-cell edge from
+  the mean meridional streamfunction, KE trend), `tools/tidally_locked.py` (maps + metrics).
+- Pressure-level fields and global kinetic energy in `diagnostics.csv`.
+
+**Cloud smoke runs (NOT the acceptance configuration)**
+- HS T21 L10, 300 days, statistics days 100–300 (481 samples): jets 29.7 m/s (NH) and
+  29.3 m/s (SH) near 45–52°; lowest-level [u] −3.9 m/s in the tropics and +3.9 m/s in
+  midlatitudes; hemispheric asymmetry 2.2 m/s; Hadley cells to ≈ 36°; KE trend +6.5% over
+  200 days (spin-up still visible at day 100). With only 10 levels the jet maximum sits at
+  the top full level σ = 0.05 in the NH; the formal criterion needs T42 L20.
+  Figure `docs/figures/M5/hs_t21l10_300d_zonal_mean.png` (qualitatively HS94 Fig. 1–2).
+- Tidally locked T21 L10, 200 days, statistics days 100–200:
+
+  | Ω/Ω⊕ | equatorial [u] above σ = 0.5 (mean) | T850 day–night | T500 day–night |
+  |---|---|---|---|
+  | 1 | +8.2 m/s (superrotation) | 7.9 K | 7.1 K |
+  | 0.1 | +16.1 m/s | 6.8 K | 2.4 K |
+  | 0.02 | +7.4 m/s | 3.8 K | **0.6 K** (weak temperature gradient) |
+
+  At Ω⊕/50 the 850 hPa flow converges on the substellar point (day–night overturning).
+  Figures `docs/figures/M5/tl_t21l10_omega{1.0,0.1,0.02}.png`.
+
+**M6**
+- Integration test `pe_bitwise_across_threads_and_restart` (normal, ≈ 8 s release): HS-forced
+  T21 L10 with stations and climatology, 10 days; output byte-identical for 1 vs 4 threads,
+  and for a 6 + 4 day restart (with different thread counts) vs an uninterrupted run.
+- `f32` feature: library, headless and test code compile; CI builds f32 and runs W6 for 2 days.
+  Precision-specific unit tests assert f64 tolerances and are not meant to pass in f32.
+- Budget: HS T42 L20 Δt 20 min = **0.67 model days/s on 4 vCPU** (cloud VM, `nproc` = 4) → one
+  model year ≈ 9 min. The SPEC target is ≤ 10 min on 8 threads of the i7-11850H.
+- Viewer: `ModelRunner` snapshots carry all levels of 3D fields; `get_field_image(name, level)`.
+
 ---
 
 ## Laptop checklist (things the cloud session could not do)
@@ -262,6 +309,27 @@ Tests: `resting_atmosphere`, `linear_gravity_wave_external`, `jw_steady_state_sh
    `--features double`, fix `godot/toyclim.gdextension` (compatibility_minimum 4.3), run the
    headless check, then build the globe/map/UI scene.
 2. Re-check Williamson test 6 and Galewsky constants against the original papers.
+3. **Acceptance runs** (each in the background, `--release`; analyse with the tools):
+
+   ```bash
+   cargo build --release
+   RAYON_NUM_THREADS=8 target/release/toyclim run --config cases/held_suarez.toml --out out/hs
+   python tools/zonal_mean.py out/hs -o docs/figures/M5/hs_t42l20_zonal_mean.png
+   for c in tidally_locked tidally_locked_omega01 tidally_locked_omega002; do
+     target/release/toyclim run --config cases/$c.toml --out out/$c
+     python tools/tidally_locked.py out/$c -o docs/figures/M5/$c.png; done
+   for c in held_suarez_omega025 held_suarez_omega2; do
+     target/release/toyclim run --config cases/$c.toml --out out/$c
+     python tools/zonal_mean.py out/$c -o docs/figures/M5/$c.png; done
+   ```
+
+   M5 criteria (jets 26–34 m/s at 38–50°, σ 0.15–0.35; surface easterlies/westerlies;
+   asymmetry < 3 m/s; KE trend < 5% over the last 1000 days) are printed by
+   `zonal_mean.py`. Also time one model year (`toyclim bench --config cases/held_suarez.toml
+   --length 365day`) on 8 threads → M6 budget.
+4. M6 f32 check: build with `--features f32` (`cargo build --release -p toyclim-headless
+   --features f32 --target-dir target/f32`), rerun HS, compare jets and record the speedup.
+5. Compare HS with SpeedyWeather/Isca output placed in `reference/` (and later PlaSim).
 
 ---
 
