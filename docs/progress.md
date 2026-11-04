@@ -9,7 +9,8 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M0 Skeleton | done (CI to be confirmed on first push) |
 | M1 Spectral transforms | done |
 | M2 Shallow water | done |
-| M3–M6 | not started |
+| M3 Godot viewer | Rust side done (runner + gdext wrapper compile); Godot side pending on laptop |
+| M4–M6 | not started |
 
 ## Versions
 
@@ -165,6 +166,45 @@ Tests: `williamson2_t42`, `williamson5_t42`, `williamson6_t42`, `rossby_haurwitz
 
 **Figures** (`docs/figures/M2/`): `w5_t85_eta_day{05,10,15}.png`, `w6_t42_h_day{0,14}.png`,
 `galewsky_t85_vor_day6.png`.
+
+## 2026-11-04 (night) — Stations and M3 (Rust side)
+
+**Stations** (owner-approved SPEC §6 addition): `[[stations]]`, `station_every`,
+`station_fields`; bilinear `PointSampler`; series kept in memory and rewritten at each
+output step; a restart into the same directory reloads the series. Verified: a run
+stopped at day 2 and restarted gives byte-identical station series, fields and
+diagnostics to an uninterrupted run (integration test `stations_and_restart_are_bitwise`).
+`tools/station_stats.py` prints exceedance frequencies, e.g. W5 at T42, u at 30°N over 4 days:
+P(u ≥ 20 m/s) = 0.00 upstream, 0.06 at the summit, 0.36 in the lee (figure
+`docs/figures/M2/stations_w5_u.png`).
+
+**M3, Rust side**
+- `runtime.rs`: `ModelRunner` (worker thread; commands Run/Pause/Step(n)/SetStepsPerSecond/
+  SetFields/SetPublishInterval/SaveRestart/Shutdown; `Mutex<Arc<Snapshot>>` double buffer;
+  snapshots carry requested fields regridded to equirectangular f32 with per-level ranges,
+  diagnostics, error state). Tests: step/run/pause semantics, pacing.
+- `grid::LatLonRegridder` (default 2·N_lon × N_lon, linear in latitude).
+- `toyclim-godot`: `ClimateModel` node wrapping the runner (API table in
+  `docs/godot-integration.md`), `get_field_image` returns a FORMAT_RF `Image`.
+- Owner uses a custom **double-precision Godot 4.3** (read from irigi/SpaceTrains: built with
+  `scons precision=double`, editor at `~/.local/bin/godot4`; SpaceTrains talks to it through
+  a file bridge, not gdext). gdext 0.5 refuses `double-precision` with the bundled API JSON
+  (godot#86346) → feature `double` = `api-custom-json` + `double-precision`; default
+  features build against stock 4.3 for CI. irigi/TheLongRun was not accessible from this
+  session (no GitHub access), so only SpaceTrains was used as reference.
+- `godot/shaders/field_globe.gdshader`: untested sketch.
+
+**Not done (laptop)**: anything that needs a Godot binary.
+
+---
+
+## Laptop checklist (things the cloud session could not do)
+
+1. **Godot integration (early):** follow `docs/godot-integration.md` §"What the Godot side
+   still needs" — dump `extension_api.json` from the double-precision editor, build with
+   `--features double`, fix `godot/toyclim.gdextension` (compatibility_minimum 4.3), run the
+   headless check, then build the globe/map/UI scene.
+2. Re-check Williamson test 6 and Galewsky constants against the original papers.
 
 ---
 
