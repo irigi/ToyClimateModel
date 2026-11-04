@@ -126,12 +126,32 @@ pub struct SlabSurface {
     pub bucket: Vec<Real>,
     /// Bucket capacity \[kg m⁻²\]; evaporation efficiency β = min(1, W / (0.75 W_max)).
     pub bucket_capacity: f64,
+    /// Albedo of ice (ocean below `ocean_freeze`) and snow (land below `land_freeze`);
+    /// negative disables the ice–albedo switch.
+    pub ice_albedo: Real,
+    pub ocean_freeze: Real,
+    pub land_freeze: Real,
 }
 
 impl SlabSurface {
     pub fn is_land(&self, p: usize) -> bool {
         self.land_fraction[p] >= 0.5
     }
+    /// Effective surface albedo at point p (negative = scheme default).
+    pub fn albedo_at(&self, p: usize) -> Real {
+        if self.ice_albedo >= 0.0 {
+            let freeze = if self.is_land(p) {
+                self.land_freeze
+            } else {
+                self.ocean_freeze
+            };
+            if self.ts[p] < freeze {
+                return self.ice_albedo;
+            }
+        }
+        self.albedo[p]
+    }
+
     pub fn wetness(&self, p: usize) -> Real {
         if self.is_land(p) {
             (self.bucket[p] / (0.75 * self.bucket_capacity as Real)).min(1.0)
@@ -579,10 +599,10 @@ impl Primitive {
                         tracers: &qc,
                         phis: self.phis_grid[p],
                         t_surface: self.surface.as_ref().map(|s| s.ts[p]),
-                        surface_albedo: self
-                            .surface
-                            .as_ref()
-                            .and_then(|s| (s.albedo[p] >= 0.0).then_some(s.albedo[p])),
+                        surface_albedo: self.surface.as_ref().and_then(|s| {
+                            let a = s.albedo_at(p);
+                            (a >= 0.0).then_some(a)
+                        }),
                         wetness: self.surface.as_ref().map_or(1.0, |s| s.wetness(p)),
                         insolation: insol[p],
                         cos_zenith: coszen[p],
@@ -1450,6 +1470,9 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
                 albedo: vec![ocean_albedo; n],
                 bucket: vec![0.0; n],
                 bucket_capacity: sc.bucket_capacity,
+                ice_albedo: sc.ice_albedo as Real,
+                ocean_freeze: sc.ocean_freeze as Real,
+                land_freeze: sc.land_freeze as Real,
             };
             if let Some(path) = &sc.heightmap {
                 let (h, nlat_h, nlon_h) = crate::io::heightmap::read(std::path::Path::new(path))

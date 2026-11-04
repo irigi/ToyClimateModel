@@ -455,6 +455,25 @@ pub struct SurfaceConfig {
     /// Spectral orography filter: damping factor at ℓ = M (default 0.1).
     #[serde(default = "default_oro_filter")]
     pub orography_filter: f64,
+    /// Albedo of sea ice / snow (default 0.6; negative disables the ice–albedo switch).
+    #[serde(default = "default_ice_albedo")]
+    pub ice_albedo: f64,
+    /// Ocean freezing temperature \[K\] (default 271.15).
+    #[serde(default = "default_ocean_freeze")]
+    pub ocean_freeze: f64,
+    /// Land snow threshold \[K\] (default 273.15).
+    #[serde(default = "default_land_freeze")]
+    pub land_freeze: f64,
+}
+
+fn default_ice_albedo() -> f64 {
+    0.6
+}
+fn default_ocean_freeze() -> f64 {
+    271.15
+}
+fn default_land_freeze() -> f64 {
+    273.15
 }
 
 fn default_land_c() -> f64 {
