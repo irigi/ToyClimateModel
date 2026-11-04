@@ -44,6 +44,9 @@ def main():
     ap.add_argument("--level", type=int, default=None, help="level index for 3D fields (default: lowest)")
     ap.add_argument("--kind", choices=["map", "polar", "zonal"], default="map")
     ap.add_argument("--cmap", default="RdBu_r")
+    ap.add_argument("--lat-range", default=None, help="e.g. 0,90 (map view only)")
+    ap.add_argument("--scale", type=float, default=1.0, help="multiply data (e.g. 0.01 for Pa→hPa)")
+    ap.add_argument("--levels", type=int, default=12, help="number of contour levels")
     ap.add_argument("-o", "--output", default=None)
     args = ap.parse_args()
 
@@ -54,6 +57,7 @@ def main():
         level_label = f", level {lev}"
     else:
         level_label = ""
+    data = data * args.scale
     lat = np.degrees(np.asarray(meta["grid"]["lat"]))
     lon = np.degrees(np.asarray(meta["grid"]["lon"]))
     dt = meta["config"]["dt"]
@@ -65,13 +69,15 @@ def main():
     data_c = np.concatenate([data, data[:, :1]], axis=1)
 
     if args.kind == "map":
-        fig, ax = plt.subplots(figsize=(9, 4.6), constrained_layout=True)
+        tall = args.lat_range is None
+        fig, ax = plt.subplots(figsize=(9, 4.6) if tall else (10, 3.4), constrained_layout=True)
         m = ax.pcolormesh(lon_c, lat, data_c, shading="nearest", cmap=args.cmap)
-        ax.contour(lon_c, lat, data_c, colors="k", linewidths=0.4, levels=12)
+        ax.contour(lon_c, lat, data_c, colors="k", linewidths=0.4, levels=args.levels)
         ax.set_xlabel("longitude [°E]")
         ax.set_ylabel("latitude [°N]")
         ax.set_xlim(0, 360)
-        ax.set_ylim(-90, 90)
+        lo, hi = (-90, 90) if args.lat_range is None else map(float, args.lat_range.split(","))
+        ax.set_ylim(lo, hi)
         ax.set_aspect("equal")
         fig.colorbar(m, ax=ax, shrink=0.8)
     elif args.kind == "polar":

@@ -654,8 +654,8 @@ impl Primitive {
     }
 
     /// Mass \[kg\], total energy ∫(c_p T + Φ_s + E) dm \[J\], axial angular momentum
-    /// \[kg m² s⁻¹\], and max |u| \[m/s\].
-    pub fn conservation(&self) -> [f64; 4] {
+    /// \[kg m² s⁻¹\], max |u| \[m/s\] and kinetic energy ∫E dm \[J\].
+    pub fn conservation(&self) -> [f64; 5] {
         let tr = &self.tr;
         let g = self.grids(&self.curr);
         let n = tr.ngrid();
@@ -670,24 +670,27 @@ impl Primitive {
             vec![0.0 as Real; n],
             vec![0.0 as Real; n],
         );
+        let mut kin_e = vec![0.0 as Real; n];
         let mut umax = 0.0f64;
         for j in 0..tr.nlat() {
             let c2 = 1.0 - tr.grid.mu[j] * tr.grid.mu[j];
             for p in j * nlon..(j + 1) * nlon {
                 let ps = (g.lnps[p] as f64).exp();
                 let dm = ps / grav;
-                let (mut e, mut m) = (self.phis_grid[p] as f64, 0.0);
+                let (mut e, mut m, mut ke) = (self.phis_grid[p] as f64, 0.0, 0.0);
                 for k in 0..self.nlev() {
                     let ds = self.levels.dsigma[k];
                     let (u, v) = (g.u[k][p] as f64, g.v[k][p] as f64);
                     let kin = 0.5 * (u * u + v * v) / c2;
                     e += ds * (cp * (g.t[k][p] as f64 + tref) + kin);
+                    ke += ds * kin;
                     m += ds * (a * u + om * a * a * c2);
                     umax = umax.max(u.abs() / c2.sqrt());
                 }
                 mass[p] = dm as Real;
                 en[p] = (dm * e) as Real;
                 am[p] = (dm * m) as Real;
+                kin_e[p] = (dm * ke) as Real;
             }
         }
         [
@@ -695,6 +698,7 @@ impl Primitive {
             tr.integrate(&en),
             tr.integrate(&am),
             umax,
+            tr.integrate(&kin_e),
         ]
     }
 
@@ -781,8 +785,12 @@ impl Model for Primitive {
 
     fn step(&mut self) {
         let first = self.steps == 0;
-        let prev_state = self.prev.clone();
-        let phys = self.physics_tendencies(&prev_state);
+        let phys = if self.physics.is_empty() {
+            None
+        } else {
+            let prev_state = self.prev.clone();
+            self.physics_tendencies(&prev_state)
+        };
         let (n, courant) = self.tendencies(&self.curr, phys.as_ref());
         self.last_courant = courant;
         let dt = self.settings.dt as Real;
@@ -880,11 +888,12 @@ impl Model for Primitive {
         }
     }
     fn diagnostics(&self) -> Vec<(&'static str, f64)> {
-        let [mass, energy, am, umax] = self.conservation();
+        let [mass, energy, am, umax, ke] = self.conservation();
         vec![
             ("mass", mass),
             ("energy", energy),
             ("angular_momentum", am),
+            ("kinetic_energy", ke),
             ("max_u", umax),
             ("max_courant", self.last_courant),
         ]

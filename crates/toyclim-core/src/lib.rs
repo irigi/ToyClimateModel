@@ -10,6 +10,7 @@
 #![allow(clippy::needless_range_loop)]
 
 pub mod build;
+pub mod climatology;
 pub mod config;
 pub mod grid;
 pub mod io;

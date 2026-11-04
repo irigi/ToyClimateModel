@@ -1,0 +1,29 @@
+# Held & Suarez (1994), BAMS 75, 1825–1830: dry dynamical-core benchmark.
+# T_eq = max{200 K, [315 K − ΔT_y sin²φ − Δθ_z ln(p/p0) cos²φ](p/p0)^κ}, ΔT_y = 60 K,
+# Δθ_z = 10 K; k_a = 1/40 d⁻¹, k_s = 1/4 d⁻¹, k_f = 1 d⁻¹, σ_b = 0.7.
+# Constants from SPEC.md (the GFDL copy of the paper is a scan without text; values are the
+# standard ones). Acceptance: T42 L20, 1200 days, discard 200 → laptop run (see progress.md).
+description = "Held-Suarez quick look: T21 L10, 300 days (cloud smoke test)"
+model = "primitive"
+truncation = 21
+levels = 10
+dt = "30min"
+length = "300day"
+output_every = "10day"
+output_fields = ["u", "v", "t", "ps", "vor"]
+initial_condition = { case = "rest", temperature = 300.0, noise = 0.1, seed = 1 }
+
+[planet]
+preset = "earth"
+
+[forcing]
+type = "held_suarez"
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "100day"
+every = "6h"
+maps = ["ps", "t850", "u250"]

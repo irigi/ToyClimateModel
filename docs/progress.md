@@ -10,7 +10,8 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M1 Spectral transforms | done |
 | M2 Shallow water | done |
 | M3 Godot viewer | Rust side done (runner + gdext wrapper compile); Godot side pending on laptop |
-| M4–M6 | not started |
+| M4 Primitive equations | done (tests 1–3 pass, test 4 recorded at T85) |
+| M5–M6 | in progress |
 
 ## Versions
 
@@ -195,6 +196,62 @@ P(u ≥ 20 m/s) = 0.00 upstream, 0.06 at the summit, 0.36 in the lee (figure
 - `godot/shaders/field_globe.gdshader`: untested sketch.
 
 **Not done (laptop)**: anything that needs a Godot binary.
+
+## 2026-11-04 (night) — M4 dry primitive-equation core
+
+**Done**
+- `primitive/vertical.rs`: Lorenz σ levels, Simmons–Burridge α_k, full levels
+  ln σ_k = ln σ_{k+1/2} − α_k, matrices G, τ and B = Gτ + R T̄ 1 wᵀ.
+- `primitive/mod.rs`: ζ, δ, T', ln p_s; §5.2 tendencies (D_k, σ̇, ω/p, vertical
+  advection, Q_k, flux-form temperature advection −∇·(vT') + T'δ); §5.3 semi-implicit
+  solve with precomputed S_ℓ⁻¹ (Gauss–Jordan) for Δt and Δt/2; RAW filter; ∇⁸ on ζ, δ, T';
+  restart (both levels); output fields u, v, t, vor, div, phi (3D), ps, phis and pressure
+  levels t850, u850, v850, t500, phi500, u250, vor850 (linear in ln p).
+- Column-physics interface (§5.4) in final shape: `ColumnIn` (lat, lon, column index, σ
+  full/half, p_s, u, v, T, tracer block, Φ_s, time, dt), `ColumnOut` (du, dv, dT, tracer
+  tendencies, per-scheme diagnostic slots); schemes add to the outputs in a fixed order,
+  columns in parallel. Physics is evaluated at the n−1 level (stable for damping).
+- **Global dry-mass fixer** (config `mass_fixer`, default true): after each step the ℓ = 0
+  coefficient of ln p_s is shifted so ∫p_s dA equals its initial value. Without it the 30-day
+  JW06 run drifts by 2.9e-7 (ln p_s models conserve ∫ln p_s, not ∫p_s); with it 1e-15.
+  This is a model feature (CAM's Eulerian core has one), not a change of the criterion.
+- Performance: per-row column kernel with longitude innermost (was level-innermost:
+  23 ms → a few ms per step at T42 L26); levels in parallel for the transforms.
+
+**Discrepancy (paper vs our σ model)**: JW06's L26 top interface is η = 0.002194; our σ
+discretization needs σ_{1/2} = 0, so the top interface is set to 0 (top layer slightly
+thicker). Everything else follows the paper (constants in `cases/jw06.toml`).
+
+**Measured**
+- Test 1, resting isothermal (250 K, T̄ = 300 K), T21 L10, 10 days: max|u| = **0** (< 1e-10).
+- Test 2, linear gravity waves, Ω = 0, T21 L10, Δt = 10 min, 30 days, amplitude 0.01 K,
+  single vertical mode excited at (ℓ, m = 0):
+
+  | mode | ℓ | ω measured | rel. error vs time-discrete normal mode | vs continuous | amplitude ratio (last/first 5 d) |
+  |---|---|---|---|---|---|
+  | 0 (external, Lamb) | 3 | 1.8297e-4 s⁻¹ | −1.5e-4 | −4.2e-3 | 0.93 |
+  | 1 | 5 | 1.3673e-4 | −8.3e-5 | −2.3e-3 | 0.96 |
+  | 2 | 8 | 1.0381e-4 | −5.0e-5 | −1.3e-3 | 0.85 |
+  | 4 | 10 | 4.7472e-5 | −7.2e-6 | −2.8e-4 | 0.44 |
+
+  "Time-discrete" = atan(ωΔt)/Δt, the exact frequency of the semi-implicit leapfrog for a
+  normal mode of frequency ω = √(Λ_ℓ λ_n). No growth (decay is ∇⁸ + RAW). **Pass** (< 1%).
+- Test 3, adiabatic 30 days, JW06 perturbed, T42 L26, Δt 20 min: mass **−9.8e-16** (pass),
+  total energy −6.2e-5, axial AM +2.2e-6 (recorded).
+- Test 4, JW06 T85 L26, Δt 10 min:
+  - unperturbed, 10 days: max |Δ[u]| = **0.141 m/s** (< 0.5: pass); mass 1.4e-15,
+    energy −9.3e-9, AM −7.6e-8.
+  - perturbed min p_s: day 7 **986.1 hPa**, day 9 **940.8 hPa**, day 11 **922.7 hPa**
+    (T42: 986.8 / 949.4 / 923.7). JW06 Fig. 6/7 show the converged day-9 minimum in the
+    low 940s hPa; our T85 is in that range. Figures: `docs/figures/M4/jw06_t85_{ps,t850}_day{07,09,11}.png`.
+    Small Gibbs ripples from the spectral Φ_s are visible at low latitudes (also noted for
+    spectral cores in JW06).
+- Performance (cloud, 4 vCPU): JW06 T42 L26 ≈ 38 ms/step on 1 thread, 16 ms on 4 threads;
+  T85 L26 ≈ 100 ms/step on 4 threads (11 days in 163 s).
+
+Tests: `resting_atmosphere`, `linear_gravity_wave_external`, `jw_steady_state_short`,
+`pe_restart_is_bitwise`, `pe_thread_independent`, `vertical::*` (normal);
+`linear_gravity_waves`, `conservation_30_days`, `jw_steady_state_t85` (`--ignored`).
 
 ---
 

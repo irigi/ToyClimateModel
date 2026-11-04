@@ -8,9 +8,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use toyclim_core::build::build_model;
+use toyclim_core::climatology::Climatology;
 use toyclim_core::config::{Config, ModelKind};
 use toyclim_core::grid::GaussianGrid;
-use toyclim_core::io::{meta::RunMeta, npy, restart, stations as station_io};
+use toyclim_core::io::{
+    climatology as clim_io, meta::RunMeta, npy, restart, stations as station_io,
+};
 use toyclim_core::model::Model;
 use toyclim_core::stations::StationRecorder;
 
@@ -274,8 +277,22 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
         StationRecorder::new(model.as_ref(), &config.stations, &config.station_fields);
     let station_every = config.steps_per_station_sample();
     let station_dir = out.join("stations");
+    let clim_dir = out.join("climatology");
+    let mut clim = match &config.climatology {
+        Some(c) => {
+            let every = (c.every.seconds() / config.dt.seconds()).round() as u64;
+            Some(
+                Climatology::new(model.as_ref(), c.start.seconds(), every, &c.maps)
+                    .map_err(anyhow::Error::msg)?,
+            )
+        }
+        None => None,
+    };
     if restart_dir.is_some() {
         station_io::read_into(&mut stations, &station_dir, model.time())?;
+        if let Some(c) = clim.as_mut() {
+            clim_io::read_into(c, &clim_dir)?;
+        }
     }
     if model.step_count() == 0 {
         write_fields(model.as_ref(), &fields, &fields_dir)?;
@@ -307,6 +324,9 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
             write_fields(model.as_ref(), &fields, &fields_dir)?;
             write_diag(model.as_ref(), &mut diag)?;
             station_io::write(&stations, &station_dir)?;
+            if let Some(c) = &clim {
+                clim_io::write(c, &clim_dir, model.grid().nlon)?;
+            }
             let d = model.diagnostics();
             let courant = d
                 .iter()

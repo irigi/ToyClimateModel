@@ -291,6 +291,8 @@ pub struct Config {
     pub diffusion: DiffusionConfig,
     #[serde(default)]
     pub time_filter: TimeFilterConfig,
+    /// Online climatology (time means after a spin-up); see `climatology.rs`.
+    pub climatology: Option<ClimatologyConfig>,
     /// Global dry-mass fixer for the primitive-equation model (default true).
     pub mass_fixer: Option<bool>,
     /// Point time series ("weather stations"), see docs/design-decisions.md.
@@ -301,6 +303,19 @@ pub struct Config {
     /// Fields sampled at stations (default: all 2D fields of the model / lowest level).
     #[serde(default)]
     pub station_fields: Vec<String>,
+}
+
+/// `[climatology]` block.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClimatologyConfig {
+    /// Start accumulating at this model time (spin-up discarded).
+    pub start: Duration,
+    /// Sampling interval (multiple of dt).
+    pub every: Duration,
+    /// Fields whose full time-mean maps are kept.
+    #[serde(default)]
+    pub maps: Vec<String>,
 }
 
 /// A point at which time series are recorded.

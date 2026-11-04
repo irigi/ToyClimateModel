@@ -1,0 +1,31 @@
+# Tidally locked Held–Suarez-like forcing (SPEC.md §8 M5; our definition in the spirit of
+# Merlis & Schneider 2010 and Heng, Menou & Phillipps 2011):
+# T_eq = max{200 K, [T_n + ΔT_d max(0, cos φ cos(λ−λ_ss)) − Δθ_z ln(p/p0)](p/p0)^κ},
+# T_n = 250 K, ΔT_d = 70 K, Δθ_z = 10 K, λ_ss = 180°; HS damping with cos⁴φ replaced by
+# max(0, cos φ cos(λ − λ_ss))⁴. Acceptance-style run: T42 L20, 800 days, Ω/Ω⊕ ∈ {1, 0.1, 0.02}.
+description = "Tidally locked forcing, Omega = 0.02 Omega_E, T42 L20 (800 days)"
+model = "primitive"
+truncation = 42
+levels = 20
+dt = "20min"
+length = "800day"
+output_every = "10day"
+output_fields = ["u", "v", "t", "ps"]
+initial_condition = { case = "rest", temperature = 280.0, noise = 0.1, seed = 2 }
+
+[planet]
+preset = "earth"
+rotation_factor = 0.02
+
+[forcing]
+type = "tidally_locked"
+substellar_lon = 180.0
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "200day"
+every = "6h"
+maps = ["ps", "t850", "u850", "v850", "u250", "t500"]
