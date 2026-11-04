@@ -162,7 +162,10 @@ impl ColumnPhysics for SurfaceFluxes {
         let tv = ta * (1.0 + 0.608 * qa);
         let za = lowest_level_height(planet, col, tv);
         let ps = col.ps as f64;
-        let ts = self.sst.at(col.lat as f64, col.lon as f64);
+        let ts = col
+            .t_surface
+            .map(|t| t as f64)
+            .unwrap_or_else(|| self.sst.at(col.lat as f64, col.lon as f64));
         let qs = self.cond.qsat(planet, ts, ps);
         let dt = col.dt;
         let (ah, ae) = (self.c_h * wind * dt / za, self.c_e * wind * dt / za);
@@ -180,6 +183,8 @@ impl ColumnPhysics for SurfaceFluxes {
         out.diag[0] += evap as Real;
         out.diag[1] += (layer_mass * planet.cp * (t_new - ta) / dt) as Real;
         out.diag[2] += (evap * self.cond.latent_heat) as Real;
+        let shf = layer_mass * planet.cp * (t_new - ta) / dt;
+        *out.surface_heat -= (shf + evap * self.cond.latent_heat) as Real;
     }
 }
 
@@ -342,9 +347,13 @@ mod scheme_tests {
             t,
             tracers: q,
             phis: 0.0,
+            t_surface: None,
+            insolation: 0.0,
+            cos_zenith: 0.0,
             time: 0.0,
             dt: 1800.0,
         };
+        let mut sh = 0.0 as Real;
         let (mut du, mut dv, mut dt, mut dq, mut diag) = (
             z.clone(),
             z.clone(),
@@ -358,6 +367,7 @@ mod scheme_tests {
             dt: &mut dt,
             dtracers: &mut dq,
             diag: &mut diag,
+            surface_heat: &mut sh,
         };
         LargeScaleCondensation {
             cond: Condensable::water(),

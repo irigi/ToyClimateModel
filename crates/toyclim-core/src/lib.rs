@@ -15,6 +15,7 @@ pub mod config;
 pub mod grid;
 pub mod io;
 pub mod model;
+pub mod orbit;
 pub mod physics;
 pub mod planet;
 pub mod primitive;

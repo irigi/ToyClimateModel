@@ -36,6 +36,13 @@ pub struct ColumnIn<'a> {
     pub tracers: &'a [Real],
     /// Surface geopotential \[m² s⁻²\].
     pub phis: Real,
+    /// Prognostic surface temperature \[K\] if the model has a surface model, else None
+    /// (schemes then use their own prescription, e.g. a fixed SST).
+    pub t_surface: Option<Real>,
+    /// Top-of-atmosphere stellar flux on a horizontal surface \[W m⁻²\] (0 without an orbit).
+    pub insolation: Real,
+    /// Cosine of the stellar zenith angle (0 at night).
+    pub cos_zenith: Real,
     /// Model time \[s\].
     pub time: f64,
     /// Length of the step the tendencies are applied over (2Δt for leapfrog) \[s\].
@@ -54,6 +61,9 @@ pub struct ColumnOut<'a> {
     pub dtracers: &'a mut [Real],
     /// This scheme's diagnostic slots (in the order of `diagnostic_names`).
     pub diag: &'a mut [Real],
+    /// Net downward heat flux into the surface \[W m⁻²\], accumulated over schemes
+    /// (radiation adds, turbulent fluxes subtract). Used by the slab surface model.
+    pub surface_heat: &'a mut Real,
 }
 
 /// A column physics scheme.

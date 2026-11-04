@@ -105,6 +105,19 @@ struct PhysTend {
     dt: Vec<Vec<Real>>,
     /// `[tracer][lev][point]`.
     dq: Vec<Vec<Vec<Real>>>,
+    /// Net downward heat flux into the surface per point \[W m⁻²\].
+    surface_heat: Vec<Real>,
+}
+
+/// Slab (mixed-layer) surface: prognostic surface temperature with heat capacity C.
+#[derive(Debug, Clone)]
+pub struct SlabSurface {
+    /// Surface temperature per grid point \[K\].
+    pub ts: Vec<Real>,
+    /// Heat capacity per unit area \[J m⁻² K⁻¹\] (ρ_w c_w h).
+    pub heat_capacity: f64,
+    /// Hold T_s fixed (prescribed SST) instead of integrating it.
+    pub fixed: bool,
 }
 
 /// Vertical constants used by the column kernel.
@@ -253,6 +266,12 @@ pub struct Primitive {
     pub mass_target: f64,
     /// The condensable of tracer 0, if the model is moist.
     pub condensable: Option<crate::physics::moist::Condensable>,
+    /// Orbit and star (insolation); None → no insolation passed to physics.
+    pub orbit: Option<crate::orbit::Orbit>,
+    /// Slab surface model; None → schemes use their own prescribed surface temperature.
+    pub surface: Option<SlabSurface>,
+    /// Latest net surface heat flux \[W m⁻²\] (diagnostic).
+    pub surface_heat: Vec<Real>,
 }
 
 impl Primitive {
@@ -336,6 +355,9 @@ impl Primitive {
             last_courant: 0.0,
             mass_target: 0.0,
             condensable: None,
+            orbit: None,
+            surface: None,
+            surface_heat: Vec::new(),
             levels,
             tr,
             planet,
@@ -488,8 +510,21 @@ impl Primitive {
         };
         let planet = &self.planet;
         let physics = &self.physics;
+        // insolation and cos zenith per grid point
+        let npts0 = nlat * nlon;
+        let (mut insol, mut coszen) = (vec![0.0 as Real; npts0], vec![0.0 as Real; npts0]);
+        if let Some(orbit) = &self.orbit {
+            let sun = orbit.sun(time);
+            for j in 0..nlat {
+                for i in 0..nlon {
+                    let (la, lo) = (tr.grid.lat[j], tr.grid.lon[i]);
+                    insol[j * nlon + i] = orbit.insolation(&sun, la, lo) as Real;
+                    coszen[j * nlon + i] = orbit.cos_zenith(&sun, la, lo) as Real;
+                }
+            }
+        }
         // Per row: [du | dv | dT] for each column, plus diagnostics.
-        let rows: Vec<(Vec<Real>, Vec<Real>)> = (0..nlat)
+        let rows: Vec<(Vec<Real>, Vec<Real>, Vec<Real>)> = (0..nlat)
             .into_par_iter()
             .map(|j| {
                 let coslat = (1.0 - tr.grid.mu[j] * tr.grid.mu[j]).sqrt() as Real;
@@ -497,6 +532,7 @@ impl Primitive {
                 let mut diag = vec![0.0 as Real; nlon * ndiag];
                 let (mut u, mut v, mut t) = (vec![0.0; l], vec![0.0; l], vec![0.0; l]);
                 let mut qc = vec![0.0 as Real; ntr * l];
+                let mut sheat = vec![0.0 as Real; nlon];
                 for i in 0..nlon {
                     let p = j * nlon + i;
                     for k in 0..l {
@@ -521,6 +557,9 @@ impl Primitive {
                         t: &t,
                         tracers: &qc,
                         phis: self.phis_grid[p],
+                        t_surface: self.surface.as_ref().map(|s| s.ts[p]),
+                        insolation: insol[p],
+                        cos_zenith: coszen[p],
                         time,
                         dt: dt2,
                     };
@@ -537,6 +576,7 @@ impl Primitive {
                             dt: &mut *dtt,
                             dtracers: &mut *dqq,
                             diag: &mut diag[i * ndiag + off..i * ndiag + off + nd],
+                            surface_heat: &mut sheat[i],
                         };
                         ph.tendencies(planet, &col, &mut co);
                         off += nd;
@@ -546,7 +586,7 @@ impl Primitive {
                         dv[k] *= coslat;
                     }
                 }
-                (out, diag)
+                (out, diag, sheat)
             })
             .collect();
         let npts = nlat * nlon;
@@ -554,7 +594,9 @@ impl Primitive {
         let mut dv = vec![vec![0.0 as Real; npts]; l];
         let mut dtt = vec![vec![0.0 as Real; npts]; l];
         let mut dq = vec![vec![vec![0.0 as Real; npts]; l]; ntr];
-        for (j, (out, diag)) in rows.iter().enumerate() {
+        let mut surface_heat = vec![0.0 as Real; npts];
+        for (j, (out, diag, sheat)) in rows.iter().enumerate() {
+            surface_heat[j * nlon..(j + 1) * nlon].copy_from_slice(sheat);
             for i in 0..nlon {
                 let p = j * nlon + i;
                 for k in 0..l {
@@ -577,6 +619,7 @@ impl Primitive {
             dv,
             dt: dtt,
             dq,
+            surface_heat,
         })
     }
 
@@ -963,6 +1006,17 @@ impl Model for Primitive {
             let prev_state = self.prev.clone();
             self.physics_tendencies(&prev_state)
         };
+        if let Some(ph) = &phys {
+            self.surface_heat = ph.surface_heat.clone();
+            if let Some(sfc) = self.surface.as_mut() {
+                if !sfc.fixed {
+                    let f = (self.settings.dt / sfc.heat_capacity) as Real;
+                    for (t, h) in sfc.ts.iter_mut().zip(&ph.surface_heat) {
+                        *t += f * h;
+                    }
+                }
+            }
+        }
         let (n, courant) = self.tendencies(&self.curr, phys.as_ref());
         self.last_courant = courant;
         let dt = self.settings.dt as Real;
@@ -1032,6 +1086,9 @@ impl Model for Primitive {
         if !self.curr.tracers.is_empty() {
             v.extend_from_slice(&["q", "rh", "pw"]);
         }
+        if self.surface.is_some() {
+            v.extend_from_slice(&["ts", "surface_heat"]);
+        }
         if self.physics.iter().any(|p| {
             p.diagnostic_names()
                 .iter()
@@ -1056,6 +1113,14 @@ impl Model for Primitive {
             "phis" => Some(GridField {
                 nlev: 1,
                 data: self.phis_grid.clone(),
+            }),
+            "ts" => self.surface.as_ref().map(|sf| GridField {
+                nlev: 1,
+                data: sf.ts.clone(),
+            }),
+            "surface_heat" if !self.surface_heat.is_empty() => Some(GridField {
+                nlev: 1,
+                data: self.surface_heat.clone(),
             }),
             // precipitable water Σ q Δσ p_s / g [kg m⁻² = mm]
             "pw" => {
@@ -1116,14 +1181,28 @@ impl Model for Primitive {
     }
     fn diagnostics(&self) -> Vec<(&'static str, f64)> {
         let [mass, energy, am, umax, ke] = self.conservation();
-        vec![
+        let mut v = vec![
             ("mass", mass),
             ("energy", energy),
             ("angular_momentum", am),
             ("kinetic_energy", ke),
             ("max_u", umax),
             ("max_courant", self.last_courant),
-        ]
+        ];
+        // global means of the physics diagnostics (e.g. olr, asr, precip, evap) and T_s
+        let area = 4.0 * std::f64::consts::PI * self.planet.radius * self.planet.radius;
+        let names: Vec<&'static str> = self
+            .physics
+            .iter()
+            .flat_map(|p| p.diagnostic_names())
+            .collect();
+        for (name, (_, grid)) in names.iter().zip(&self.physics_diag) {
+            v.push((name, self.tr.integrate(grid) / area));
+        }
+        if let Some(sf) = &self.surface {
+            v.push(("ts", self.tr.integrate(&sf.ts) / area));
+        }
+        v
     }
     fn is_finite(&self) -> bool {
         self.curr.is_finite() && self.prev.is_finite()
@@ -1140,6 +1219,14 @@ impl Model for Primitive {
                 }
             }
             a.push((format!("{lvl}_lnps"), s.lnps.clone()));
+        }
+        if let Some(sf) = &self.surface {
+            let packed: Vec<Complex> = sf
+                .ts
+                .chunks(2)
+                .map(|c| Complex::new(c[0], c.get(1).copied().unwrap_or(0.0)))
+                .collect();
+            a.push(("grid_ts".to_string(), packed));
         }
         (
             a,
@@ -1183,6 +1270,18 @@ impl Model for Primitive {
                 self.curr = s;
             }
         }
+        if let Some(sf) = self.surface.as_mut() {
+            let packed = arrays
+                .iter()
+                .find(|(n, _)| n == "grid_ts")
+                .ok_or("restart lacks grid_ts")?;
+            for (i, c) in packed.1.iter().enumerate() {
+                sf.ts[2 * i] = c.re;
+                if 2 * i + 1 < sf.ts.len() {
+                    sf.ts[2 * i + 1] = c.im;
+                }
+            }
+        }
         for (k, v) in scalars {
             match k.as_str() {
                 "steps" => self.steps = *v as u64,
@@ -1192,6 +1291,16 @@ impl Model for Primitive {
         }
         Ok(())
     }
+}
+
+/// The TJ16 SST profile on the grid.
+fn tj16_sst_grid(tr: &Transform) -> Vec<Real> {
+    let sst = crate::physics::moist::SurfaceTemperature::tj16();
+    let mut v = Vec::with_capacity(tr.ngrid());
+    for &lat in &tr.grid.lat {
+        v.extend(std::iter::repeat_n(sst.at(lat, 0.0) as Real, tr.nlon()));
+    }
+    v
 }
 
 /// Build the primitive-equation model from a run configuration.
@@ -1224,7 +1333,31 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
         },
         mass_fixer: cfg.mass_fixer.unwrap_or(true),
     };
+    let orbit = cfg.orbit.as_ref().map(|o| o.resolve(planet.rotation_rate));
+    let surface = match &cfg.surface {
+        None => None,
+        Some(sc) => {
+            let ts: Vec<Real> = match &sc.initial {
+                None => tj16_sst_grid(&tr),
+                Some(toml::Value::String(s)) if s == "tj16" => tj16_sst_grid(&tr),
+                Some(v) => {
+                    let t = v
+                        .as_float()
+                        .or_else(|| v.as_integer().map(|i| i as f64))
+                        .ok_or("surface.initial must be \"tj16\" or a temperature")?;
+                    vec![t as Real; tr.ngrid()]
+                }
+            };
+            Some(SlabSurface {
+                ts,
+                heat_capacity: 1000.0 * 4000.0 * sc.mixed_layer_depth,
+                fixed: sc.fixed,
+            })
+        }
+    };
     let mut m = Primitive::new(tr, planet, settings, levels, init, physics);
+    m.orbit = orbit;
+    m.surface = surface;
     m.mass_target = m.mass_of(&m.curr.lnps);
     m.condensable = moisture;
     Ok(m)

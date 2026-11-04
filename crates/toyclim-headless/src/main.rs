@@ -127,6 +127,7 @@ fn run_dummy(config_path: &Path, out: &Path) -> Result<()> {
         planet: &planet,
         output_interval_s: config.output_every.seconds(),
         config: serde_json::to_value(&config)?,
+        calendar: None,
     };
     meta.write(&out.join("meta.json"))?;
 
@@ -235,6 +236,10 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
         planet: &planet,
         output_interval_s: config.output_every.seconds(),
         config: serde_json::to_value(config)?,
+        calendar: config.orbit.as_ref().map(|o| {
+            let orb = o.resolve(planet.rotation_rate);
+            toyclim_core::orbit::Calendar::new(orb.year, orb.solar_day(), o.months.clone())
+        }),
     };
     meta.write(&out.join("meta.json"))?;
 

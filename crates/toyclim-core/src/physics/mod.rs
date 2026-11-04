@@ -4,6 +4,7 @@ pub mod column;
 pub mod convection;
 pub mod held_suarez;
 pub mod moist;
+pub mod radiation;
 
 pub use column::{ColumnIn, ColumnOut, ColumnPhysics};
 
@@ -14,6 +15,7 @@ use held_suarez::{Damping, HeldSuarez, TidallyLocked};
 use moist::{
     BoundaryLayer, Condensable, LargeScaleCondensation, SurfaceFluxes, SurfaceTemperature,
 };
+use radiation::{GrayRadiation, RayleighFriction};
 
 fn num(t: &toml::Table, key: &str, default: f64) -> Result<f64, String> {
     match t.get(key) {
@@ -80,6 +82,12 @@ const KNOWN: &[&str] = &[
     "convection",
     "tau_convection",
     "rh_convection",
+    "tau_eq",
+    "tau_pole",
+    "f_linear",
+    "tau_q",
+    "tau_sw",
+    "albedo",
 ];
 
 /// Build the column physics named in the `[forcing]` block (none → adiabatic).
@@ -96,6 +104,13 @@ const KNOWN: &[&str] = &[
 /// `sst_width` 26° or `sst_uniform`) and boundary-layer mixing (`p_pbl` 850 hPa,
 /// `p_strato` 100 hPa). Needs a `[moisture]` block. Optional `convection = "sbm"`
 /// (simplified Betts–Miller, `tau_convection` 2 h, `rh_convection` 0.7; not in TJ16).
+///
+/// `type = "gray_aquaplanet"` (Frierson et al. 2006 style, M8): gray radiation (`tau_eq` 6,
+/// `tau_pole` 1.5, `f_linear` 0.1, `tau_q` 0, `tau_sw` 0.22, `albedo` 0.3) driven by the
+/// `[orbit]` insolation, moist physics as above with SBM convection by default
+/// (`convection = "none"` to disable), boundary-layer Rayleigh drag. Use with a
+/// `[surface]` slab ocean; without one the surface is held at `sst_uniform` (288 K) for
+/// radiation and at the TJ16 SST for the surface fluxes.
 pub fn build(
     forcing: Option<&toml::Table>,
     planet: &Planet,
@@ -187,8 +202,53 @@ pub fn build(
             }
             Ok(schemes)
         }
+        "gray_aquaplanet" => {
+            let cond = moisture
+                .ok_or("forcing gray_aquaplanet needs a [moisture] block")?
+                .clone();
+            let c_e = num(f, "c_e", 0.0044)?;
+            let rd = GrayRadiation::default();
+            let mut schemes: Vec<Box<dyn ColumnPhysics>> = vec![
+                Box::new(GrayRadiation {
+                    tau_eq: num(f, "tau_eq", rd.tau_eq)?,
+                    tau_pole: num(f, "tau_pole", rd.tau_pole)?,
+                    f_linear: num(f, "f_linear", rd.f_linear)?,
+                    tau_q: num(f, "tau_q", rd.tau_q)?,
+                    tau_sw: num(f, "tau_sw", rd.tau_sw)?,
+                    albedo: num(f, "albedo", rd.albedo)?,
+                    t_surface_default: num(f, "sst_uniform", rd.t_surface_default)?,
+                }),
+                Box::new(LargeScaleCondensation { cond: cond.clone() }),
+                Box::new(SurfaceFluxes {
+                    cond: cond.clone(),
+                    sst: SurfaceTemperature::tj16(),
+                    c_h: num(f, "c_h", 0.0044)?,
+                    c_e,
+                }),
+                Box::new(BoundaryLayer {
+                    c_e,
+                    p_pbl: num(f, "p_pbl", 85000.0)?,
+                    p_strato: num(f, "p_strato", 10000.0)?,
+                    p0: num(f, "p0", planet.p0)?,
+                }),
+                Box::new(RayleighFriction {
+                    kf: rate(f, "tau_friction", 1.0 / 86400.0)?,
+                    sigma_b: num(f, "sigma_b", 0.7)?,
+                }),
+            ];
+            match f.get("convection").and_then(|v| v.as_str()).unwrap_or("sbm") {
+                "none" => {}
+                "sbm" | "simplified_betts_miller" => schemes.push(Box::new(SimplifiedBettsMiller {
+                    cond,
+                    tau: 1.0 / rate(f, "tau_convection", 1.0 / 7200.0)?,
+                    rh_ref: num(f, "rh_convection", 0.7)?,
+                })),
+                other => return Err(format!("unknown convection {other:?} (none, sbm)")),
+            }
+            Ok(schemes)
+        }
         other => Err(format!(
-            "unknown forcing type {other:?} (none, held_suarez, tidally_locked, moist_held_suarez)"
+            "unknown forcing type {other:?} (none, held_suarez, tidally_locked, moist_held_suarez, gray_aquaplanet)"
         )),
     }
 }

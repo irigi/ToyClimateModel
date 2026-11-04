@@ -291,6 +291,10 @@ pub struct Config {
     pub diffusion: DiffusionConfig,
     #[serde(default)]
     pub time_filter: TimeFilterConfig,
+    /// Orbit and star (M8). Absent → no insolation (forcings that need it fail).
+    pub orbit: Option<OrbitConfig>,
+    /// Surface model (M8/M9): slab ocean. Absent → schemes use prescribed values.
+    pub surface: Option<SurfaceConfig>,
     /// Moisture (M7): a condensable tracer q. Absent → dry model.
     pub moisture: Option<MoistureConfig>,
     /// Online climatology (time means after a spin-up); see `climatology.rs`.
@@ -351,6 +355,90 @@ impl MoistureConfig {
         }
         Ok(c)
     }
+}
+
+/// `[orbit]` block. Angles in degrees.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OrbitConfig {
+    /// Orbital period (default 365.25 days).
+    #[serde(default = "default_year")]
+    pub year: Duration,
+    #[serde(default)]
+    pub eccentricity: f64,
+    #[serde(default = "default_obliquity")]
+    pub obliquity: f64,
+    #[serde(default = "default_perihelion")]
+    pub perihelion_longitude: f64,
+    #[serde(default)]
+    pub start_solar_longitude: f64,
+    /// Stellar flux at the semi-major axis \[W m⁻²\].
+    #[serde(default = "default_instellation")]
+    pub instellation: f64,
+    #[serde(default)]
+    pub tidally_locked: bool,
+    #[serde(default = "default_substellar")]
+    pub substellar_lon: f64,
+    /// Resolve the diurnal cycle (default true).
+    #[serde(default = "default_true")]
+    pub diurnal: bool,
+    /// Calendar month names for statistics (default: 12 Earth months, equal length).
+    #[serde(default)]
+    pub months: Vec<String>,
+}
+
+fn default_year() -> Duration {
+    Duration(365.25 * 86400.0)
+}
+fn default_obliquity() -> f64 {
+    23.44
+}
+fn default_perihelion() -> f64 {
+    282.9
+}
+fn default_instellation() -> f64 {
+    1361.0
+}
+fn default_substellar() -> f64 {
+    180.0
+}
+fn default_true() -> bool {
+    true
+}
+
+impl OrbitConfig {
+    pub fn resolve(&self, rotation_rate: f64) -> crate::orbit::Orbit {
+        crate::orbit::Orbit {
+            year: self.year.0,
+            eccentricity: self.eccentricity,
+            obliquity: self.obliquity.to_radians(),
+            perihelion_longitude: self.perihelion_longitude.to_radians(),
+            start_solar_longitude: self.start_solar_longitude.to_radians(),
+            instellation: self.instellation,
+            tidally_locked: self.tidally_locked,
+            substellar_lon: self.substellar_lon.to_radians(),
+            diurnal: self.diurnal,
+            rotation_rate,
+        }
+    }
+}
+
+/// `[surface]` block: slab ocean (mixed layer).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SurfaceConfig {
+    /// Mixed-layer depth \[m\] (default 20).
+    #[serde(default = "default_mld")]
+    pub mixed_layer_depth: f64,
+    /// Initial surface temperature: "tj16" (default) or a number in K.
+    pub initial: Option<toml::Value>,
+    /// Keep T_s fixed (prescribed SST).
+    #[serde(default)]
+    pub fixed: bool,
+}
+
+fn default_mld() -> f64 {
+    20.0
 }
 
 /// `[climatology]` block.
