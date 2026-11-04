@@ -287,8 +287,23 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
         Some(c) => {
             let every = (c.every.seconds() / config.dt.seconds()).round() as u64;
             Some(
-                Climatology::new(model.as_ref(), c.start.seconds(), every, &c.maps)
-                    .map_err(anyhow::Error::msg)?,
+                {
+                    let mut cl = Climatology::new(model.as_ref(), c.start.seconds(), every, &c.maps)
+                        .map_err(anyhow::Error::msg)?;
+                    if c.monthly {
+                        let o = config
+                            .orbit
+                            .as_ref()
+                            .ok_or_else(|| anyhow::anyhow!("climatology.monthly needs an [orbit]"))?
+                            .resolve(planet.rotation_rate);
+                        cl.enable_monthly(toyclim_core::orbit::Calendar::new(
+                            o.year,
+                            o.solar_day(),
+                            config.orbit.as_ref().unwrap().months.clone(),
+                        ));
+                    }
+                    cl
+                },
             )
         }
         None => None,

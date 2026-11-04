@@ -452,6 +452,9 @@ pub struct ClimatologyConfig {
     /// Fields whose full time-mean maps are kept.
     #[serde(default)]
     pub maps: Vec<String>,
+    /// Also keep per-calendar-month means of the maps (needs an `[orbit]`).
+    #[serde(default)]
+    pub monthly: bool,
 }
 
 /// A point at which time series are recorded.

@@ -31,6 +31,12 @@ pub struct Climatology {
     pub maps: Vec<(String, usize, Vec<f64>)>,
     /// Zonal mean of surface pressure.
     pub ps: Vec<f64>,
+    /// Per-calendar-month map sums `[field][month][...]` and sample counts per month
+    /// (empty unless monthly statistics are enabled).
+    pub monthly: Vec<Vec<Vec<f64>>>,
+    pub monthly_count: Vec<u64>,
+    /// Calendar used for the monthly binning.
+    pub calendar: Option<crate::orbit::Calendar>,
 }
 
 impl Climatology {
@@ -67,7 +73,18 @@ impl Climatology {
             zonal: vec![vec![0.0; nlev * g.nlat]; ZONAL.len()],
             maps,
             ps: vec![0.0; g.nlat],
+            monthly: Vec::new(),
+            monthly_count: Vec::new(),
+            calendar: None,
         })
+    }
+
+    /// Also accumulate the map fields per calendar month.
+    pub fn enable_monthly(&mut self, calendar: crate::orbit::Calendar) {
+        let nm = calendar.months.len();
+        self.monthly = self.maps.iter().map(|(_, _, s)| vec![vec![0.0; s.len()]; nm]).collect();
+        self.monthly_count = vec![0; nm];
+        self.calendar = Some(calendar);
     }
 
     /// Sample if due (time ≥ start and step multiple of `every_steps`).
@@ -134,11 +151,20 @@ impl Climatology {
                 .sum::<f64>()
                 * inv;
         }
-        for (name, _, sums) in &mut self.maps {
+        let month = self.calendar.as_ref().map(|c| c.month(model.time()));
+        for (fi, (name, _, sums)) in self.maps.iter_mut().enumerate() {
             let f = model.field(name).unwrap().data;
-            for (s, x) in sums.iter_mut().zip(f) {
-                *s += x as f64;
+            for (s, x) in sums.iter_mut().zip(&f) {
+                *s += *x as f64;
             }
+            if let Some(m) = month {
+                for (s, x) in self.monthly[fi][m].iter_mut().zip(&f) {
+                    *s += *x as f64;
+                }
+            }
+        }
+        if let Some(m) = month {
+            self.monthly_count[m] += 1;
         }
         self.count += 1;
     }

@@ -1081,7 +1081,7 @@ impl Model for Primitive {
         self.levels.full.clone()
     }
     fn field_names(&self) -> Vec<&'static str> {
-        let mut v = vec!["u", "v", "t", "vor", "div", "phi", "ps", "phis"];
+        let mut v = vec!["u", "v", "t", "vor", "div", "phi", "ps", "phis", "tas"];
         v.extend_from_slice(PRESSURE_FIELDS);
         if !self.curr.tracers.is_empty() {
             v.extend_from_slice(&["q", "rh", "pw"]);
@@ -1113,6 +1113,16 @@ impl Model for Primitive {
             "phis" => Some(GridField {
                 nlev: 1,
                 data: self.phis_grid.clone(),
+            }),
+            // near-surface air temperature: the lowest model level [K]
+            "tas" => Some(GridField {
+                nlev: 1,
+                data: self
+                    .tr
+                    .synthesis(&self.curr.tmp[self.nlev() - 1])
+                    .iter()
+                    .map(|t| t + self.planet.t_ref as Real)
+                    .collect(),
             }),
             "ts" => self.surface.as_ref().map(|sf| GridField {
                 nlev: 1,

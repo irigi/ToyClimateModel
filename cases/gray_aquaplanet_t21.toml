@@ -67,4 +67,5 @@ tau = "2.4h"
 [climatology]
 start = "90day"
 every = "6h"
-maps = ["ts", "precip", "evap", "pw", "olr", "asr", "t850", "u850"]
+maps = ["ts", "tas", "precip", "evap", "pw", "olr", "asr", "t850", "u850"]
+monthly = true
