@@ -122,5 +122,15 @@ files, no process lifetime management.
    step button, labels for time, mass, energy, max Courant, model error.
 7. Later: wind particles (sample `u`, `v` images), cross-section panel, several planets.
 
-Fields per model: shallow water `h, eta, hs, vor, div, u, v, pv`; primitive equations
-(M4+) see `Model::field_names` (3D fields have one level per σ level, level 0 = top).
+Fields per model (`get_available_fields()` lists what a given configuration offers):
+- shallow water: `h, eta, hs, vor, div, u, v, pv`;
+- primitive equations, 3D (one level per σ level, level 0 = top): `u, v, t, vor, div, phi`,
+  and with moisture `q, rh`;
+- primitive equations, 2D: `ps, phis, orog, tas, t850, u850, v850, t500, phi500, u250,
+  vor850`; with moisture `pw, precip` (+ `precip_ls`, `precip_conv`, `cape`, `evap`, `shf`,
+  `lhf`); with gray radiation `olr, asr, sw_sfc_down, lw_sfc_down`; with a surface model
+  `ts, surface_heat, land, bucket`.
+
+Good default layers for a worldbuilding view: `ts` or `tas` (temperature), `precip`
+(×3600 → mm/h), `pw` (moisture), `u850`/`v850` (winds, also for particles), `ps`,
+`orog` + `land` (static overlay).

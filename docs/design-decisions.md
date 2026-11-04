@@ -86,3 +86,16 @@ parameter tweaking or terrain painting.
 
 - Viewer mainly on **Linux**; no Windows build path needed for now.
 - Licence: **MIT**.
+
+## Implementation status (updated 2026-11-04 night)
+
+| Decision | Status |
+|---|---|
+| Stations (hourly series) | done (M2), restart-continuous |
+| Stochastic point-rain downscaling | first uncalibrated version: `tools/point_rain.py` (Python, post-processing of station series) |
+| Custom calendar | done: `[orbit] months`, written to `meta.json`; `station_stats.py --by-month`, monthly climatology maps |
+| Generic condensable | done: `[moisture]` with water preset and overrides |
+| Climate/biome maps | Köppen from monthly climatology (`tools/koppen.py`) and downscaled to the heightmap with a lapse-rate correction (`tools/downscale.py`) |
+| Terrain | heightmap input (`[surface] heightmap`) + simple spectral-noise generator `tools/make_planet.py`; full procedural (plate tectonics) still future |
+| Exported layers | `.npy` fields and climatologies; PNG via tools; GeoTIFF not yet |
+| Live weather view | Rust side ready (`ModelRunner`, `ClimateModel`); Godot side pending |
