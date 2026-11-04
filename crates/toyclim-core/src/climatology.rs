@@ -72,7 +72,8 @@ impl Climatology {
 
     /// Sample if due (time ≥ start and step multiple of `every_steps`).
     pub fn maybe_sample(&mut self, model: &dyn Model) {
-        if model.time() + 1e-6 < self.start || model.step_count() % self.every_steps != 0 {
+        if model.time() + 1e-6 < self.start || !model.step_count().is_multiple_of(self.every_steps)
+        {
             return;
         }
         self.sample(model);
