@@ -1,5 +1,49 @@
 # Progress log
 
+## READ THIS FIRST — night session 2026-11-04/05 summary
+
+Everything is on branch `claude/busy-gauss-sqdo0s`, committed in small steps.
+`scripts/check` runs fmt + clippy + all tests (≈ 1 min in release).
+
+**State**
+- M0–M2 accepted (numbers below). M3: Rust side done (worker thread + snapshots + gdext
+  `ClimateModel`), Godot side not run (your double-precision 4.3 build needs
+  `--features double` with the API JSON, see `docs/godot-integration.md`).
+- M4 accepted (tests 1–3 pass; JW06 recorded at T85). M5/M6 implemented and smoke-tested at
+  T21; the long acceptance runs are in the laptop checklist below.
+- M7 (moisture) implemented per your go-ahead; and, being "bold", first steps of M8
+  (orbit, gray radiation), M9 (slab ocean, heightmap continents, bucket, ice albedo, q-flux)
+  and M11 tools (Köppen, downscaling with lapse rate and Smith–Barstad orographic rain,
+  stochastic point rain, layer export). Please confirm or redirect.
+- Your main deliverables now work end to end on a T21 smoke run of a procedural world
+  (`cases/testworld_t21.toml`): hourly station series → rain/wind/temperature
+  distributions per calendar month (`tools/station_stats.py --by-month`,
+  `tools/point_rain.py`), Köppen maps on the model grid and downscaled to the heightmap
+  (`docs/figures/M9/`), exported 16-bit PNG layers.
+
+**Decisions I made that you may want to revisit** (details in the entries below)
+1. Global dry-mass fixer in the PE model (needed for M4 test 3; standard in spectral models).
+2. JW06 L26 top interface set to σ = 0 (σ model requirement).
+3. TJ16 surface moisture flux: kept their tendency (eq. 8), diagnosed the applied flux
+   (eq. 10 is inconsistent with eq. 8 by a factor ≈ 2).
+4. Physics evaluated at the n−1 leapfrog level; moisture is a passive-ish tracer (no
+   virtual temperature in the dynamics).
+5. Land = cells with ≥ 50% land in the heightmap; simple bucket; ice/snow albedo is a
+   temperature switch (no thermodynamic sea ice yet).
+6. Point-rain generator parameters are uncalibrated placeholders.
+
+**Known limitations / honest caveats**
+- Smoke runs are short (≤ 455 days) and at T21; their climates are plausible, not tuned.
+  The gray model has no clouds (M10), so no cloud feedbacks; grid-point storms appear with
+  large-scale condensation.
+- The original Williamson and Held–Suarez PDFs I could reach were scans; constants were
+  cross-checked against secondary sources (noted per case).
+
+**First things to do on the laptop**: see "Laptop checklist" at the end of this file
+(Godot integration first, then the acceptance runs and the T42 world runs).
+
+---
+
 Format per SPEC.md §10.6. Newest entry at the bottom.
 
 ## Status
