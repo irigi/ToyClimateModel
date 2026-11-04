@@ -1,0 +1,78 @@
+# Tidally locked moist aquaplanet with gray radiation (exoplanet example, M8).
+# Loosely TRAPPIST-1e-like: radius 0.92 R_E, g = 9.12 m/s², orbital period = rotation period
+# 6.1 days (synchronous), instellation 900 W/m², no obliquity/eccentricity; the
+# substellar point is fixed at 180°E. Not a THAI protocol reproduction (that is M12).
+# Radiation: gray two-stream LW (Frierson, Held & Zurita-Gotor 2006: τ_e = 6, τ_p = 1.5,
+# f_l = 0.1) and SW absorption τ_sw = 0.22 σ² (O'Gorman & Schneider 2008), albedo 0.3.
+# Moist physics as in Thatcher & Jablonowski (2016) plus simplified Betts–Miller convection
+# (Frierson 2007). 20 m slab ocean, no ocean heat transport. Earth orbit with obliquity
+# 23.44°, eccentricity 0.0167 and a diurnal cycle.
+description = "Tidally locked aquaplanet (TRAPPIST-1e-like), gray radiation, T42 L26 (3 years)"
+model = "primitive"
+truncation = 42
+sigma_half = [
+  0.0, 0.004895209, 0.009882418, 0.01805201, 0.02983724, 0.04462334,
+  0.06160587, 0.07851243, 0.0923658, 0.10866359, 0.12783708, 0.15039371,
+  0.17693043, 0.20814944, 0.24487709, 0.28808522, 0.33891731, 0.39871865,
+  0.4690718, 0.55183871, 0.64920969, 0.74438289, 0.83102123, 0.90330029,
+  0.95599746, 0.9851122, 1.0
+]
+dt = "15min"
+length = "1095day"
+output_every = "30day"
+output_fields = ["ts", "precip", "pw", "t850", "u850", "ps"]
+initial_condition = { case = "jw06", perturbed = true }
+
+station_every = "1h"
+station_fields = ["precip", "ts", "t850", "u850"]
+
+[[stations]]
+name = "substellar"
+lat = 0.0
+lon = 180.0
+
+[[stations]]
+name = "terminator"
+lat = 0.0
+lon = 90.0
+
+[[stations]]
+name = "antistellar"
+lat = 0.0
+lon = 0.0
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[orbit]
+year = "6.1day"
+eccentricity = 0.0
+obliquity = 0.0
+instellation = 900.0
+tidally_locked = true
+substellar_lon = 180.0
+months = ["all"]
+
+[surface]
+mixed_layer_depth = 20.0
+initial = "tj16"
+
+[planet]
+preset = "earth"
+name = "tl-exo"
+radius = 5.86e6
+gravity = 9.12
+rotation_rate = 1.1922e-5
+
+[forcing]
+type = "gray_aquaplanet"
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "365day"
+every = "6h"
+maps = ["ts", "tas", "precip", "evap", "pw", "olr", "asr", "t850", "u850"]

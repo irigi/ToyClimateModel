@@ -448,6 +448,13 @@ LCL is located by bisection; one RK4 sub-step agrees with 32 to 0.001 K (8× che
 5. Compare HS with SpeedyWeather/Isca output placed in `reference/` (and later PlaSim).
 6. M7: `cases/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
    and without `convection = "sbm"`; `tools/moist_stats.py`, `tools/zonal_mean.py`.
+7. Worlds (overnight runs, the owner's main use):
+   - `cases/gray_aquaplanet.toml` (T42 L26, 10 years) → `moist_stats.py`, `koppen.py`;
+   - `cases/testworld.toml` (T42 L26, 4 years, continents from `worlds/testworld.npy`) →
+     `koppen.py`, `downscale.py out/testworld worlds/testworld.npy --orographic`,
+     `export_layers.py`, `station_stats.py ... --by-month`, `point_rain.py --by-month`;
+   - `cases/tidally_locked_gray.toml` (T42 L26, 3 years) → `tidally_locked.py`-style maps
+     (needs maps t850/u850/v850 in its climatology block if wanted).
 
 ---
 

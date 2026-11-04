@@ -1,0 +1,76 @@
+# Procedural test world (tools/make_planet.py --seed 3 --land 0.3) with land, orography and a
+# bucket model (M9), on top of the gray-radiation moist setup (M8).
+# Radiation: gray two-stream LW (Frierson, Held & Zurita-Gotor 2006: τ_e = 6, τ_p = 1.5,
+# f_l = 0.1) and SW absorption τ_sw = 0.22 σ² (O'Gorman & Schneider 2008), albedo 0.3.
+# Moist physics as in Thatcher & Jablonowski (2016) plus simplified Betts–Miller convection
+# (Frierson 2007). 20 m slab ocean, no ocean heat transport. Earth orbit with obliquity
+# 23.44°, eccentricity 0.0167 and a diurnal cycle.
+description = "Test world with continents, gray radiation, seasons, T42 L26 (4 years)"
+model = "primitive"
+truncation = 42
+sigma_half = [
+  0.0, 0.004895209, 0.009882418, 0.01805201, 0.02983724, 0.04462334,
+  0.06160587, 0.07851243, 0.0923658, 0.10866359, 0.12783708, 0.15039371,
+  0.17693043, 0.20814944, 0.24487709, 0.28808522, 0.33891731, 0.39871865,
+  0.4690718, 0.55183871, 0.64920969, 0.74438289, 0.83102123, 0.90330029,
+  0.95599746, 0.9851122, 1.0
+]
+dt = "15min"
+length = "1461day"
+output_every = "30day"
+output_fields = ["ts", "precip", "pw", "tas", "u850", "ps", "orog", "land", "bucket"]
+initial_condition = { case = "jw06", perturbed = true }
+
+station_every = "1h"
+station_fields = ["precip", "ts", "t850", "u850"]
+
+[[stations]]
+name = "equator"
+lat = 0.0
+lon = 0.0
+
+[[stations]]
+name = "midlat_N"
+lat = 45.0
+lon = 0.0
+
+[[stations]]
+name = "polar_N"
+lat = 70.0
+lon = 0.0
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[orbit]
+year = "365.25day"
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+instellation = 1361.0
+diurnal = true
+
+[surface]
+mixed_layer_depth = 20.0
+initial = "tj16"
+heightmap = "worlds/testworld.npy"
+land_heat_capacity = 2.0e5
+land_albedo = 0.3
+bucket_capacity = 150.0
+
+[planet]
+preset = "earth"
+
+[forcing]
+type = "gray_aquaplanet"
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "365day"
+every = "6h"
+maps = ["ts", "tas", "precip", "evap", "pw", "olr", "asr", "u850", "v850", "bucket"]
+monthly = true
