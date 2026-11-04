@@ -21,6 +21,9 @@ pub struct SimplifiedBettsMiller {
     pub tau: f64,
     /// Reference relative humidity (0.7).
     pub rh_ref: f64,
+    /// RK4 sub-steps per layer for the parcel ascent. With the exact LCL search, one
+    /// sub-step is accurate to ~0.001 K for L26-type layers (see the test).
+    pub substeps: usize,
 }
 
 impl SimplifiedBettsMiller {
@@ -41,35 +44,51 @@ impl SimplifiedBettsMiller {
         let mut t = t0;
         let mut pc = p[l - 1];
         let mut saturated = q0 >= self.cond.qsat(planet, t0, pc);
+        // moist adiabat: dT/dln p = (R T/c_p)(1 + L q_s/(R T)) / (1 + ε L² q_s/(c_p R T²))
+        let f = |tt: f64, pp: f64| {
+            let qs = self.cond.qsat(planet, tt, pp);
+            rd * tt / cp * (1.0 + lv * qs / (rd * tt))
+                / (1.0 + eps * lv * lv * qs / (cp * rd * tt * tt))
+        };
+        let rk4 = |t: f64, p0: f64, h: f64| {
+            let k1 = f(t, p0);
+            let k2 = f(t + 0.5 * h * k1, p0 * (0.5 * h).exp());
+            let k3 = f(t + 0.5 * h * k2, p0 * (0.5 * h).exp());
+            let k4 = f(t + h * k3, p0 * h.exp());
+            t + h * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0
+        };
         for k in (0..l - 1).rev() {
-            // integrate from pc to p[k] in sub-steps of ln p
-            let n = 8;
+            let n = self.substeps.max(1);
             let dlnp = (p[k] / pc).ln() / n as f64;
             for _ in 0..n {
                 let pn = pc * dlnp.exp();
                 if !saturated {
                     let tn = t * (pn / pc).powf(kappa);
                     if q0 >= self.cond.qsat(planet, tn, pn) {
+                        // locate the lifting condensation level within this sub-step
+                        let (mut lo, mut hi) = (0.0, 1.0);
+                        for _ in 0..30 {
+                            let mid = 0.5 * (lo + hi);
+                            let pm = pc * (mid * dlnp).exp();
+                            if q0 >= self.cond.qsat(planet, t * (pm / pc).powf(kappa), pm) {
+                                hi = mid;
+                            } else {
+                                lo = mid;
+                            }
+                        }
+                        let p_lcl = pc * (hi * dlnp).exp();
+                        let t_lcl = t * (p_lcl / pc).powf(kappa);
                         saturated = true;
+                        t = rk4(t_lcl, p_lcl, (1.0 - hi) * dlnp);
+                    } else {
+                        t = tn;
                     }
-                    t = tn;
                 } else {
-                    // moist adiabat: dT/dln p = (R T/c_p)(1 + L q_s/(R T)) / (1 + ε L² q_s/(c_p R T²))
-                    let f = |tt: f64, pp: f64| {
-                        let qs = self.cond.qsat(planet, tt, pp);
-                        rd * tt / cp * (1.0 + lv * qs / (rd * tt))
-                            / (1.0 + eps * lv * lv * qs / (cp * rd * tt * tt))
-                    };
-                    let k1 = f(t, pc);
-                    let k2 = f(t + 0.5 * dlnp * k1, pc * (0.5 * dlnp).exp());
-                    let k3 = f(t + 0.5 * dlnp * k2, pc * (0.5 * dlnp).exp());
-                    let k4 = f(t + dlnp * k3, pn);
-                    t += dlnp * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
+                    t = rk4(t, pc, dlnp);
                 }
                 pc = pn;
             }
             tp[k] = t;
-            let _ = rv;
         }
         tp
     }
@@ -139,5 +158,41 @@ impl ColumnPhysics for SimplifiedBettsMiller {
             precip -= dqk * dp[k] / g;
         }
         out.diag[0] += precip.max(0.0) as Real;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parcel_converges_with_substeps() {
+        let planet = Planet::earth();
+        let p: Vec<f64> = (0..26)
+            .map(|k| 1e5 * (0.02 + 0.98 * (k as f64 + 0.5) / 26.0))
+            .collect();
+        let mk = |n| SimplifiedBettsMiller {
+            cond: Condensable::water(),
+            tau: 7200.0,
+            rh_ref: 0.7,
+            substeps: n,
+        };
+        let b = mk(32).parcel(&planet, &p, 300.0, 0.018);
+        for n in [1, 2, 4, 8, 16] {
+            let a = mk(n).parcel(&planet, &p, 300.0, 0.018);
+            let err = a
+                .iter()
+                .zip(&b)
+                .map(|(x, y)| (x - y).abs())
+                .fold(0.0, f64::max);
+            eprintln!("substeps {n}: max parcel T difference {err:.4} K");
+        }
+        let a = mk(2).parcel(&planet, &p, 300.0, 0.018);
+        let err = a
+            .iter()
+            .zip(&b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0, f64::max);
+        assert!(err < 0.02, "max difference {err} K");
     }
 }

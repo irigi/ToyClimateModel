@@ -196,6 +196,7 @@ pub fn build(
                         cond: moisture.unwrap().clone(),
                         tau: 1.0 / rate(f, "tau_convection", 1.0 / 7200.0)?,
                         rh_ref: num(f, "rh_convection", 0.7)?,
+                    substeps: 1,
                     }))
                 }
                 other => return Err(format!("unknown convection {other:?} (none, sbm)")),
@@ -242,6 +243,7 @@ pub fn build(
                     cond,
                     tau: 1.0 / rate(f, "tau_convection", 1.0 / 7200.0)?,
                     rh_ref: num(f, "rh_convection", 0.7)?,
+                    substeps: 1,
                 })),
                 other => return Err(format!("unknown convection {other:?} (none, sbm)")),
             }
