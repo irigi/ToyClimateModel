@@ -14,6 +14,7 @@ pub mod model;
 pub mod planet;
 pub mod shallow_water;
 pub mod spectral;
+pub mod stations;
 pub mod time;
 pub mod util;
 

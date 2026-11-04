@@ -365,6 +365,14 @@ A `Star`/`Orbit` description provides the substellar point (λ_ss(t), φ_ss(t)).
     git hash)
   - `out/<run>/fields/<field>_<step:06>.npy` (float32 grid fields, Gaussian grid)
   - `out/<run>/diagnostics.csv` (time, mass, energy, enstrophy, AM, max Courant, ...)
+- **Stations** (added 2026-11-04 with the owner's approval, see `docs/design-decisions.md`):
+  `[[stations]]` entries (`name`, `lat`, `lon` in degrees), `station_every` (default: every
+  step) and `station_fields` (default: all fields). Fields are interpolated bilinearly from
+  the Gaussian grid and written to `out/<run>/stations/<field>.npy` (float32,
+  `[time][station]` or `[time][station][lev]`), `time.npy` (float64 s) and `stations.json`.
+  A run continued from a restart into the same directory extends the series bitwise
+  identically to an uninterrupted run. `tools/station_stats.py` plots series and
+  distributions.
 - **Restart:** spectral state (both leapfrog levels) as .npy plus meta.json; loading a
   restart and continuing must be bitwise identical to an uninterrupted run.
 - **Python:**

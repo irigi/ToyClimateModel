@@ -49,8 +49,9 @@ Any distribution can be computed afterwards in Python. No per-cell online histog
   `station_every = "1h"`, `station_fields = ["precip", "u10", "v10", "t2m", "ps"]`.
 - Output: `out/<run>/stations/<name>.npy` (`[time][field]`) plus names in `meta.json`.
 - Interpolation from the Gaussian grid: bilinear (cheap, deterministic).
-- Can be implemented as soon as there is a model to sample (M2), with dynamical
-  fields; precipitation arrives with M7.
+- **Implemented in M2** (SPEC §6 "Stations"). Precipitation arrives with M7.
+  Config keys: `[[stations]]`, `station_every`, `station_fields`; example
+  `cases/williamson5_stations.toml`.
 
 ## Point-scale extremes: stochastic downscaling
 

@@ -285,6 +285,25 @@ pub struct Config {
     pub diffusion: DiffusionConfig,
     #[serde(default)]
     pub time_filter: TimeFilterConfig,
+    /// Point time series ("weather stations"), see docs/design-decisions.md.
+    #[serde(default)]
+    pub stations: Vec<StationConfig>,
+    /// Sampling interval of the station series (default: every step).
+    pub station_every: Option<Duration>,
+    /// Fields sampled at stations (default: all 2D fields of the model / lowest level).
+    #[serde(default)]
+    pub station_fields: Vec<String>,
+}
+
+/// A point at which time series are recorded.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StationConfig {
+    pub name: String,
+    /// Latitude \[degrees north\].
+    pub lat: f64,
+    /// Longitude \[degrees east\].
+    pub lon: f64,
 }
 
 impl Config {
@@ -333,6 +352,20 @@ impl Config {
                 }
             }
         }
+        if let Some(se) = self.station_every {
+            let r = se.0 / self.dt.0;
+            if se.0 <= 0.0 || (r - r.round()).abs() > 1e-9 * r.max(1.0) {
+                return bad("station_every must be a positive whole multiple of dt");
+            }
+        }
+        for st in &self.stations {
+            if !(-90.0..=90.0).contains(&st.lat) || !st.lon.is_finite() {
+                return bad("station latitude must be within ±90°");
+            }
+            if st.name.is_empty() || st.name.contains(['/', '\\']) {
+                return bad("station names must be non-empty and contain no slashes");
+            }
+        }
         if self.model == ModelKind::Primitive && self.levels.is_none() && self.sigma_half.is_none()
         {
             return bad("primitive model needs `levels` or `sigma_half`");
@@ -344,6 +377,14 @@ impl Config {
     /// Number of time steps between outputs.
     pub fn steps_per_output(&self) -> u64 {
         (self.output_every.0 / self.dt.0).round() as u64
+    }
+
+    /// Steps between station samples (1 if not set).
+    pub fn steps_per_station_sample(&self) -> u64 {
+        self.station_every
+            .map(|d| (d.0 / self.dt.0).round() as u64)
+            .unwrap_or(1)
+            .max(1)
     }
 
     /// Total number of time steps (rounded up).

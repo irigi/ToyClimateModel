@@ -32,3 +32,45 @@ fn dummy_run_writes_output() {
     assert!(out.join("fields/analytic_000048.npy").exists());
     std::fs::remove_dir_all(&out).ok();
 }
+
+/// Station series: a run continued from a restart equals an uninterrupted run, bitwise.
+#[test]
+fn stations_and_restart_are_bitwise() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let cfg = root.join("cases/williamson5_stations.toml");
+    let base = std::env::temp_dir().join(format!("toyclim_st_{}", std::process::id()));
+    let (a, b) = (base.join("a"), base.join("b"));
+    let run = |out: &PathBuf, extra: &[&str]| {
+        let st = Command::new(env!("CARGO_BIN_EXE_toyclim"))
+            .env("RUST_LOG", "warn")
+            .args(["run", "--config"])
+            .arg(&cfg)
+            .arg("--out")
+            .arg(out)
+            .args(extra)
+            .status()
+            .unwrap();
+        assert!(st.success());
+    };
+    run(&a, &["--length", "1day"]);
+    let rdir = a.join("restart");
+    run(
+        &a,
+        &["--length", "2day", "--restart", rdir.to_str().unwrap()],
+    );
+    run(&b, &["--length", "2day"]);
+    for f in [
+        "stations/u.npy",
+        "stations/time.npy",
+        "fields/eta_000144.npy",
+        "diagnostics.csv",
+    ] {
+        let x = std::fs::read(a.join(f)).unwrap();
+        let y = std::fs::read(b.join(f)).unwrap();
+        assert!(x == y, "{f} differs");
+    }
+    let (u, shape) = npy::read::<f32>(&b.join("stations/u.npy")).unwrap();
+    assert_eq!(shape, vec![49, 3]);
+    assert!(u.iter().all(|x| x.is_finite()));
+    std::fs::remove_dir_all(&base).ok();
+}

@@ -126,3 +126,125 @@ mod tests {
         assert!((area / exact - 1.0).abs() < 1e-14);
     }
 }
+
+/// Bilinear interpolation weights for one point on a Gaussian grid: linear in latitude
+/// between neighbouring rows (clamped to the outermost rows near the poles) and periodic
+/// linear in longitude.
+#[derive(Debug, Clone, Copy)]
+pub struct PointSampler {
+    j0: usize,
+    j1: usize,
+    wj: f64,
+    k0: usize,
+    k1: usize,
+    wk: f64,
+}
+
+impl PointSampler {
+    /// Sampler for latitude/longitude in radians.
+    pub fn new(grid: &GaussianGrid, lat: f64, lon: f64) -> Self {
+        let n = grid.nlat;
+        let (j0, j1, wj) = if lat >= grid.lat[0] {
+            (0, 0, 0.0)
+        } else if lat <= grid.lat[n - 1] {
+            (n - 1, n - 1, 0.0)
+        } else {
+            // lat[j] ≥ lat > lat[j+1]
+            let j = grid.lat.partition_point(|&x| x >= lat) - 1;
+            let w = (grid.lat[j] - lat) / (grid.lat[j] - grid.lat[j + 1]);
+            (j, j + 1, w)
+        };
+        let dl = 2.0 * std::f64::consts::PI / grid.nlon as f64;
+        let x = lon.rem_euclid(2.0 * std::f64::consts::PI) / dl;
+        let k0 = (x.floor() as usize) % grid.nlon;
+        PointSampler {
+            j0,
+            j1,
+            wj,
+            k0,
+            k1: (k0 + 1) % grid.nlon,
+            wk: x - x.floor(),
+        }
+    }
+
+    /// Interpolated value of a `[lat][lon]` field with `nlon` longitudes.
+    #[inline]
+    pub fn sample(&self, field: &[crate::Real], nlon: usize) -> f64 {
+        let at = |j: usize, k: usize| field[j * nlon + k] as f64;
+        let r0 = at(self.j0, self.k0) * (1.0 - self.wk) + at(self.j0, self.k1) * self.wk;
+        let r1 = at(self.j1, self.k0) * (1.0 - self.wk) + at(self.j1, self.k1) * self.wk;
+        r0 * (1.0 - self.wj) + r1 * self.wj
+    }
+}
+
+/// A regular equirectangular target grid: `height` rows from 90°N to 90°S (cell centres,
+/// linear in latitude) and `width` columns from 0°E eastward.
+#[derive(Debug, Clone)]
+pub struct LatLonRegridder {
+    pub width: usize,
+    pub height: usize,
+    nlon_src: usize,
+    samplers: Vec<PointSampler>,
+}
+
+impl LatLonRegridder {
+    pub fn new(grid: &GaussianGrid, width: usize, height: usize) -> Self {
+        let mut samplers = Vec::with_capacity(width * height);
+        for r in 0..height {
+            let lat = std::f64::consts::FRAC_PI_2
+                - std::f64::consts::PI * (r as f64 + 0.5) / height as f64;
+            for c in 0..width {
+                let lon = 2.0 * std::f64::consts::PI * (c as f64 + 0.5) / width as f64;
+                samplers.push(PointSampler::new(grid, lat, lon));
+            }
+        }
+        LatLonRegridder {
+            width,
+            height,
+            nlon_src: grid.nlon,
+            samplers,
+        }
+    }
+
+    /// The SPEC §7 default: 2·N_lon × N_lon.
+    pub fn default_for(grid: &GaussianGrid) -> Self {
+        Self::new(grid, 2 * grid.nlon, grid.nlon)
+    }
+
+    /// Regrid one `[lat][lon]` field into a row-major `[height][width]` f32 image.
+    pub fn regrid(&self, field: &[crate::Real]) -> Vec<f32> {
+        self.samplers
+            .iter()
+            .map(|s| s.sample(field, self.nlon_src) as f32)
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod sampler_tests {
+    use super::*;
+
+    #[test]
+    fn bilinear_reproduces_linear_fields_and_nodes() {
+        let g = GaussianGrid::new(32, 64);
+        // field = latitude in radians (linear in lat → exact between rows)
+        let mut f = Vec::new();
+        for j in 0..g.nlat {
+            for _ in 0..g.nlon {
+                f.push(g.lat[j]);
+            }
+        }
+        for lat in [-1.2, -0.3, 0.0, 0.77, 1.3] {
+            let s = PointSampler::new(&g, lat, 1.0);
+            assert!((s.sample(&f, g.nlon) - lat).abs() < 1e-12);
+        }
+        // at a node, the node value
+        let s = PointSampler::new(&g, g.lat[5], g.lon[7]);
+        let mut h = vec![0.0; g.len()];
+        h[5 * g.nlon + 7] = 3.0;
+        assert!((s.sample(&h, g.nlon) - 3.0).abs() < 1e-12);
+        // periodic in longitude
+        let s = PointSampler::new(&g, 0.1, 2.0 * std::f64::consts::PI - 1e-9);
+        assert!(s.k1 == 0);
+    }
+}

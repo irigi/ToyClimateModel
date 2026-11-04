@@ -1,0 +1,29 @@
+# Williamson test 5 with weather stations: demonstrates point time series output.
+description = "W5 mountain flow at T42 with three stations (hourly series)"
+model = "shallow_water"
+truncation = 42
+dt = "20min"
+length = "4day"
+output_every = "1day"
+output_fields = ["eta"]
+initial_condition = { case = "williamson5" }
+station_every = "1h"
+station_fields = ["u", "v", "eta"]
+
+[planet]
+preset = "earth"
+
+[[stations]]
+name = "upstream"
+lat = 30.0
+lon = 240.0
+
+[[stations]]
+name = "summit"
+lat = 30.0
+lon = 270.0
+
+[[stations]]
+name = "lee"
+lat = 30.0
+lon = 300.0

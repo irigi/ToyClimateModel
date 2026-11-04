@@ -10,8 +10,9 @@ use std::time::Instant;
 use toyclim_core::build::build_model;
 use toyclim_core::config::{Config, ModelKind};
 use toyclim_core::grid::GaussianGrid;
-use toyclim_core::io::{meta::RunMeta, npy, restart};
+use toyclim_core::io::{meta::RunMeta, npy, restart, stations as station_io};
 use toyclim_core::model::Model;
+use toyclim_core::stations::StationRecorder;
 
 #[derive(Parser)]
 #[command(name = "toyclim", version, about = "Toy spectral climate model")]
@@ -260,15 +261,30 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
 
     let every = config.steps_per_output();
     let total = config.total_steps();
+    let mut stations =
+        StationRecorder::new(model.as_ref(), &config.stations, &config.station_fields);
+    let station_every = config.steps_per_station_sample();
+    let station_dir = out.join("stations");
+    if restart_dir.is_some() {
+        station_io::read_into(&mut stations, &station_dir, model.time())?;
+    }
     if model.step_count() == 0 {
         write_fields(model.as_ref(), &fields, &fields_dir)?;
         write_diag(model.as_ref(), &mut diag)?;
+        stations
+            .record(model.as_ref())
+            .map_err(anyhow::Error::msg)?;
     }
     let t0 = Instant::now();
     let start_step = model.step_count();
     while model.step_count() < total {
         model.step();
         let s = model.step_count();
+        if s % station_every == 0 {
+            stations
+                .record(model.as_ref())
+                .map_err(anyhow::Error::msg)?;
+        }
         if s % every == 0 || s == total {
             if !model.is_finite() {
                 let crash = out.join("restart_crash");
@@ -281,6 +297,7 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
             }
             write_fields(model.as_ref(), &fields, &fields_dir)?;
             write_diag(model.as_ref(), &mut diag)?;
+            station_io::write(&stations, &station_dir)?;
             let d = model.diagnostics();
             let courant = d
                 .iter()
