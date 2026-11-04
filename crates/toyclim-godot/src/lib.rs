@@ -3,6 +3,9 @@
 //! M0 stub: registers a `ClimateModel` node so the Godot project can load the
 //! extension. The worker thread, snapshots and regridding arrive in M3.
 
+// The gdext derive macro expands to `base: base` on newer clippy (1.99+).
+#![allow(clippy::redundant_field_names)]
+
 use godot::prelude::*;
 
 struct ToyclimExtension;
