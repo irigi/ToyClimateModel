@@ -131,6 +131,9 @@ pub struct SlabSurface {
     pub ice_albedo: Real,
     pub ocean_freeze: Real,
     pub land_freeze: Real,
+    /// Prescribed ocean heat-flux convergence per point \[W m⁻²\] (zero over land; global
+    /// ocean mean zero). Added to the surface heat budget.
+    pub qflux: Vec<Real>,
 }
 
 impl SlabSurface {
@@ -1068,7 +1071,7 @@ impl Model for Primitive {
             if let Some(sfc) = self.surface.as_mut() {
                 if !sfc.fixed {
                     for (p, (t, h)) in sfc.ts.iter_mut().zip(&ph.surface_heat).enumerate() {
-                        *t += (dt / sfc.heat_capacity[p]) as Real * h;
+                        *t += (dt / sfc.heat_capacity[p]) as Real * (h + sfc.qflux[p]);
                     }
                 }
                 let cap = sfc.bucket_capacity as Real;
@@ -1473,6 +1476,7 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
                 ice_albedo: sc.ice_albedo as Real,
                 ocean_freeze: sc.ocean_freeze as Real,
                 land_freeze: sc.land_freeze as Real,
+                qflux: vec![0.0; n],
             };
             if let Some(path) = &sc.heightmap {
                 let (h, nlat_h, nlon_h) = crate::io::heightmap::read(std::path::Path::new(path))
@@ -1510,6 +1514,35 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
                         sfc.heat_capacity[p] = sc.land_heat_capacity;
                         sfc.albedo[p] = sc.land_albedo as Real;
                         sfc.bucket[p] = (sc.initial_bucket * sc.bucket_capacity) as Real;
+                    }
+                }
+            }
+            if sc.ocean_heat_transport != 0.0 {
+                // Q(φ) = Q0 (1 − 2φ²/φ0²) exp(−φ²/φ0²) / cos φ over ocean, then re-centred so
+                // that the area mean over the ocean is exactly zero.
+                let phi0 = 16f64.to_radians();
+                let nlon = tr.nlon();
+                for j in 0..tr.nlat() {
+                    let lat = tr.grid.lat[j];
+                    let x = lat * lat / (phi0 * phi0);
+                    let q = sc.ocean_heat_transport * (1.0 - 2.0 * x) * (-x).exp() / lat.cos();
+                    for i in 0..nlon {
+                        let p = j * nlon + i;
+                        if !sfc.is_land(p) {
+                            sfc.qflux[p] = q as Real;
+                        }
+                    }
+                }
+                let ocean: Vec<Real> = (0..n)
+                    .map(|p| if sfc.is_land(p) { 0.0 } else { 1.0 })
+                    .collect();
+                let area = tr.integrate(&ocean);
+                if area > 0.0 {
+                    let mean = tr.integrate(&sfc.qflux) / area;
+                    for p in 0..n {
+                        if !sfc.is_land(p) {
+                            sfc.qflux[p] -= mean as Real;
+                        }
                     }
                 }
             }

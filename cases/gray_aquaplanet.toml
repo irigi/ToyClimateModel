@@ -34,6 +34,7 @@ diurnal = true
 
 [surface]
 mixed_layer_depth = 20.0
+ocean_heat_transport = 50.0
 initial = "tj16"
 
 [planet]

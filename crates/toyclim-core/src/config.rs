@@ -464,6 +464,11 @@ pub struct SurfaceConfig {
     /// Land snow threshold \[K\] (default 273.15).
     #[serde(default = "default_land_freeze")]
     pub land_freeze: f64,
+    /// Amplitude Q0 \[W m⁻²\] of the prescribed ocean heat transport (q-flux)
+    /// Q0 (1 − 2φ²/φ0²) exp(−φ²/φ0²)/cos φ with φ0 = 16° (Merlis et al. 2013). Typical
+    /// Earth-like value 50; default 0 (off).
+    #[serde(default)]
+    pub ocean_heat_transport: f64,
 }
 
 fn default_ice_albedo() -> f64 {
