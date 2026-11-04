@@ -16,6 +16,13 @@ serde_json.workspace = true
 toml.workspace = true
 thiserror.workspace = true
 log.workspace = true
+realfft.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
 approx.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "transforms"
+harness = false

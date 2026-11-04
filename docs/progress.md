@@ -7,7 +7,7 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | Milestone | State |
 |---|---|
 | M0 Skeleton | done (CI to be confirmed on first push) |
-| M1 Spectral transforms | Gaussian quadrature (test 1) done; rest not started |
+| M1 Spectral transforms | done |
 | M2–M6 | not started |
 
 ## Versions
@@ -62,6 +62,42 @@ None.
 
 **Next step**: M1 — Legendre functions (§4.2), packing, FFT wrapper, transforms and
 operators, tests 2–6, criterion benchmarks.
+
+## 2026-11-04 (night) — M1 spectral transforms
+
+**Done**: `spectral/{packing,legendre,fft,transform,ops}.rs` per §4.1–4.4.
+- Triangular m-major packing (`Layout::idx`), P̄ and H tables in f64 cast to `Real`,
+  stored per m as `[j][ℓ−m]` for the northern half only (equatorial symmetry).
+- `Transform`: synthesis/analysis, generic Legendre kernels with P̄ and H terms (so U/V,
+  div/curl and gradients share one code path), `grad`, `uv_from_psi_chi`,
+  `uv_from_vort_div`, `div_curl`, global integral. Parallel over m (Legendre) and rows
+  (FFT); fixed summation order → bitwise identical across thread counts (tested).
+- `realfft` 3.5 (allowed), `rayon` (allowed), `criterion` 0.5 dev-dependency (allowed).
+- `util::SplitMix64`: deterministic RNG for tests and perturbations (no `rand` dependency).
+- Clippy `unnecessary_cast` is allowed crate-wide in core: with the `Real` alias, `as f64`
+  is a no-op in f64 builds but required in f32 builds.
+
+**Measured** (f64, max relative errors):
+
+| Test | Result | Criterion |
+|---|---|---|
+| 1 Σw − 2, μⁿ | < 1e-14 / < 1e-13 | 1e-14 / 1e-13 |
+| 2 orthonormality T170 (m = 0,1,2,17,85,120,169,170) | ≤ 2.4e-14 | 1e-13 |
+| 3 round trip T21/T42/T85/T170 | 2.1e-15 / 9.4e-15 / 2.9e-14 / 7.6e-14 | 1e-12 |
+| 4 Laplacian via grad+div (6 (ℓ,m) at T42) | ≤ 7.7e-15 | 1e-10 |
+| 5 wind round trip T21/T42/T85 (div, curl) | 3.2e-15 / 6.8e-15 / 3.3e-14 | 1e-10 |
+| 6 solid-body rotation T42 | 2.3e-16 | 1e-12 |
+
+Benchmarks (`cargo bench -p toyclim-core --bench transforms`, cloud VM, 4 vCPU):
+
+| | 1 thread | 4 threads |
+|---|---|---|
+| synthesis T42 | 94 µs | 103 µs |
+| analysis T42 | 132 µs | 107 µs |
+| synthesis T85 | 343 µs | 183 µs |
+| analysis T85 | 664 µs | 237 µs |
+
+**Next**: M2 shallow water.
 
 ---
 
