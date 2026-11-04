@@ -1,0 +1,183 @@
+{
+  "projection": "equirectangular, row 0 = north edge, column 0 = 0\u00b0E",
+  "shape": [
+    180,
+    360
+  ],
+  "temp_annual": {
+    "min": -60.0,
+    "max": 50.0,
+    "unit": "degC",
+    "encoding": "uint16 linear"
+  },
+  "temp_warmest": {
+    "min": -60.0,
+    "max": 50.0,
+    "unit": "degC",
+    "encoding": "uint16 linear"
+  },
+  "temp_coldest": {
+    "min": -60.0,
+    "max": 50.0,
+    "unit": "degC",
+    "encoding": "uint16 linear"
+  },
+  "precip_annual": {
+    "min": 0.0,
+    "max": 6000.0,
+    "unit": "mm/year",
+    "encoding": "uint16 linear"
+  },
+  "koppen": [
+    {
+      "code": 0,
+      "name": "Af",
+      "color": "#0000ff"
+    },
+    {
+      "code": 1,
+      "name": "Am",
+      "color": "#0078ff"
+    },
+    {
+      "code": 2,
+      "name": "Aw",
+      "color": "#46aafa"
+    },
+    {
+      "code": 3,
+      "name": "BWh",
+      "color": "#ff0000"
+    },
+    {
+      "code": 4,
+      "name": "BWk",
+      "color": "#ff9696"
+    },
+    {
+      "code": 5,
+      "name": "BSh",
+      "color": "#f5a500"
+    },
+    {
+      "code": 6,
+      "name": "BSk",
+      "color": "#ffdc64"
+    },
+    {
+      "code": 7,
+      "name": "Csa",
+      "color": "#ffff00"
+    },
+    {
+      "code": 8,
+      "name": "Csb",
+      "color": "#c8c800"
+    },
+    {
+      "code": 9,
+      "name": "Csc",
+      "color": "#969600"
+    },
+    {
+      "code": 10,
+      "name": "Cwa",
+      "color": "#96ff96"
+    },
+    {
+      "code": 11,
+      "name": "Cwb",
+      "color": "#64c864"
+    },
+    {
+      "code": 12,
+      "name": "Cwc",
+      "color": "#329632"
+    },
+    {
+      "code": 13,
+      "name": "Cfa",
+      "color": "#c8ff50"
+    },
+    {
+      "code": 14,
+      "name": "Cfb",
+      "color": "#64ff50"
+    },
+    {
+      "code": 15,
+      "name": "Cfc",
+      "color": "#32c800"
+    },
+    {
+      "code": 16,
+      "name": "Dsa",
+      "color": "#ff00ff"
+    },
+    {
+      "code": 17,
+      "name": "Dsb",
+      "color": "#c800c8"
+    },
+    {
+      "code": 18,
+      "name": "Dsc",
+      "color": "#963296"
+    },
+    {
+      "code": 19,
+      "name": "Dsd",
+      "color": "#966496"
+    },
+    {
+      "code": 20,
+      "name": "Dwa",
+      "color": "#aaafff"
+    },
+    {
+      "code": 21,
+      "name": "Dwb",
+      "color": "#5a78dc"
+    },
+    {
+      "code": 22,
+      "name": "Dwc",
+      "color": "#4b50b4"
+    },
+    {
+      "code": 23,
+      "name": "Dwd",
+      "color": "#320087"
+    },
+    {
+      "code": 24,
+      "name": "Dfa",
+      "color": "#00ffff"
+    },
+    {
+      "code": 25,
+      "name": "Dfb",
+      "color": "#37c8ff"
+    },
+    {
+      "code": 26,
+      "name": "Dfc",
+      "color": "#007d7d"
+    },
+    {
+      "code": 27,
+      "name": "Dfd",
+      "color": "#00465f"
+    },
+    {
+      "code": 28,
+      "name": "ET",
+      "color": "#b2b2b2"
+    },
+    {
+      "code": 29,
+      "name": "EF",
+      "color": "#666666"
+    }
+  ]
+}
