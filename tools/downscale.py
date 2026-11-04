@@ -130,6 +130,8 @@ def main():
     lat = np.pi / 2 - np.pi * (np.arange(nlat) + 0.5) / nlat
     lon = 2 * np.pi * (np.arange(nlon) + 0.5) / nlon
     tas = np.load(c / "monthly_tas.npy").astype(float)
+    if np.isnan(tas).any():
+        raise SystemExit("monthly climatology incomplete; run at least one full year after the climatology start")
     pr = np.load(c / "monthly_precip.npy").astype(float) * cal["year"] / len(cal["months"])
     orog = np.load(run / "fields" / "orog_000000.npy").astype(float)
     t_f = bilinear(tas, glat, glon, lat, lon)

@@ -110,6 +110,11 @@ def main():
     month_s = cal["year"] / len(cal["months"])
     P = np.load(c / f"monthly_{a.precip}.npy") * month_s  # kg m-2 = mm per month
     nm, nlat, nlon = T.shape
+    info = json.loads((c / "sums.json").read_text())
+    counts = info.get("monthly_count") or []
+    empty = [m for m, n in zip(cal["months"], counts) if n == 0]
+    if empty or np.isnan(T).any():
+        raise SystemExit(f"monthly climatology incomplete (no samples in {empty}); run at least one full year after the climatology start")
     codes = np.zeros((nlat, nlon), int)
     for j in range(nlat):
         for i in range(nlon):

@@ -5,7 +5,7 @@
 # Moist physics as in Thatcher & Jablonowski (2016) plus simplified Betts–Miller convection
 # (Frierson 2007). 20 m slab ocean, no ocean heat transport. Earth orbit with obliquity
 # 23.44°, eccentricity 0.0167 and a diurnal cycle.
-description = "Test world with continents (worlds/testworld.npy), gray radiation, seasons, T21 L26 (1 year)"
+description = "Test world with continents (worlds/testworld.npy), gray radiation, seasons, T21 L26 (90 days spin-up + 1 year)"
 model = "primitive"
 truncation = 21
 sigma_half = [
@@ -16,7 +16,7 @@ sigma_half = [
   0.95599746, 0.9851122, 1.0
 ]
 dt = "20min"
-length = "365day"
+length = "455day"
 output_every = "15day"
 output_fields = ["ts", "precip", "pw", "tas", "u850", "ps", "orog", "land", "bucket"]
 initial_condition = { case = "jw06", perturbed = true }

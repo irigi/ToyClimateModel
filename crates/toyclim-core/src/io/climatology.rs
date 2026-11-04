@@ -43,8 +43,9 @@ pub fn write(c: &Climatology, dir: &Path, nlon: usize) -> std::io::Result<()> {
             let per = c.monthly[fi][0].len();
             let mut mean = Vec::with_capacity(nm * per);
             for m in 0..nm {
-                let n = c.monthly_count[m].max(1) as f64;
-                mean.extend(c.monthly[fi][m].iter().map(|s| (s / n) as f32));
+                // months without samples are NaN, so incomplete years are visible
+                let n = c.monthly_count[m] as f64;
+                mean.extend(c.monthly[fi][m].iter().map(|s| if n > 0.0 { (s / n) as f32 } else { f32::NAN }));
             }
             let shape: Vec<usize> = if *nlev == 1 {
                 vec![nm, c.nlat, nlon]
