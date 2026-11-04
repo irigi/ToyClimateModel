@@ -314,16 +314,18 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
         if let Some(c) = clim.as_mut() {
             c.maybe_sample(model.as_ref());
         }
+        // Checking every step is cheap (a scan of the spectral state) and stops a blow-up
+        // before it pollutes outputs and statistics.
+        if !model.is_finite() {
+            let crash = out.join("restart_crash");
+            dump_restart(model.as_ref(), config, &crash)?;
+            bail!(
+                "non-finite state at step {s} (t = {:.3} d); state dumped to {}",
+                model.time() / 86400.0,
+                crash.display()
+            );
+        }
         if s % every == 0 || s == total {
-            if !model.is_finite() {
-                let crash = out.join("restart_crash");
-                dump_restart(model.as_ref(), config, &crash)?;
-                bail!(
-                    "non-finite state at step {s} (t = {:.3} d); state dumped to {}",
-                    model.time() / 86400.0,
-                    crash.display()
-                );
-            }
             write_fields(model.as_ref(), &fields, &fields_dir)?;
             write_diag(model.as_ref(), &mut diag)?;
             station_io::write(&stations, &station_dir)?;
