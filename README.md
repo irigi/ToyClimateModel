@@ -68,6 +68,34 @@ python tools/plot_field.py out/dummy analytic --kind map
 
 `--kind` is `map`, `polar` or `zonal`; `--step N` picks an output step (default: last).
 
+## Make a world (current state)
+
+```bash
+python tools/make_planet.py worlds/myworld.npy --seed 7 --land 0.35
+```
+
+Copy `cases/testworld_t21.toml`, point `[surface] heightmap` at your file, adjust
+`[planet]` and `[orbit]` (year, obliquity, eccentricity, instellation, `tidally_locked`), add
+`[[stations]]` where you want weather statistics, then:
+
+```bash
+cargo run --release --bin toyclim -- run --config cases/myworld.toml --out out/myworld
+```
+
+```bash
+python tools/station_stats.py out/myworld precip --scale 3600 --unit mm/h --thresholds 0.1,2,20 --by-month
+```
+
+```bash
+python tools/koppen.py out/myworld
+```
+
+`tools/moist_stats.py` (precipitation/evaporation), `tools/zonal_mean.py` (circulation),
+`tools/tidally_locked.py` and `tools/plot_field.py` give more views. Physics available so
+far: dry Held–Suarez-type forcings, moist physics (large-scale condensation, simplified
+Betts–Miller convection, surface fluxes, boundary layer), gray radiation, slab ocean, land
+with a bucket model. See `docs/progress.md` for what is validated and what is not.
+
 ## Viewer
 
 Install Godot 4.5 or newer, then:
