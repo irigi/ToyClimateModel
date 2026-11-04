@@ -32,12 +32,7 @@ impl SimplifiedBettsMiller {
     fn parcel(&self, planet: &Planet, p: &[f64], t0: f64, q0: f64) -> Vec<f64> {
         let l = p.len();
         let kappa = planet.kappa();
-        let (lv, rv, cp, rd) = (
-            self.cond.latent_heat,
-            self.cond.r_vapor,
-            planet.cp,
-            planet.gas_constant,
-        );
+        let (lv, cp, rd) = (self.cond.latent_heat, planet.cp, planet.gas_constant);
         let eps = self.cond.epsilon(planet);
         let mut tp = vec![0.0; l];
         tp[l - 1] = t0;
