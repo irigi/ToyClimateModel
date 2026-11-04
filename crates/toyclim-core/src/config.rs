@@ -383,6 +383,8 @@ pub struct OrbitConfig {
     #[serde(default = "default_true")]
     pub diurnal: bool,
     /// Calendar month names for statistics (default: 12 Earth months, equal length).
+    /// Months start at t = 0, which is the vernal equinox unless `start_solar_longitude`
+    /// is set (Earth's 1 January is ≈ 280°).
     #[serde(default)]
     pub months: Vec<String>,
 }

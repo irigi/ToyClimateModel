@@ -48,6 +48,8 @@ year = "365.25day"
 eccentricity = 0.0167
 obliquity = 23.44
 perihelion_longitude = 282.9
+# t = 0 on 1 January (solar longitude ≈ 280°), so calendar months match Earth months
+start_solar_longitude = 280.0
 instellation = 1361.0
 diurnal = true
 
