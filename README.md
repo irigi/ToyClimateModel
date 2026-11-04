@@ -3,7 +3,8 @@
 A laptop-scale, qualitatively plausible spectral general circulation model for
 worldbuilding, including exoplanets (tidally locked, slow and fast rotators).
 Rust core, Godot viewer. See [`SPEC.md`](SPEC.md) for the design and milestones and
-[`docs/progress.md`](docs/progress.md) for the current state.
+[`docs/progress.md`](docs/progress.md) for the current state, and
+[`docs/design-decisions.md`](docs/design-decisions.md) for the owner's scoping decisions.
 
 ## Layout
 

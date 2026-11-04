@@ -1,6 +1,7 @@
 # Instructions for Claude sessions
 
-- Read `SPEC.md` in full, then `docs/progress.md`, before changing anything.
+- Read `SPEC.md` in full, then `docs/progress.md` and `docs/design-decisions.md`, before
+  changing anything.
 - Continue at the lowest milestone whose acceptance criteria are not all met. Do not start
   M7 or later without the owner's go-ahead.
 - Follow the session protocol in SPEC.md §10:

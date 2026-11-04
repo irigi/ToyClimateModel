@@ -67,4 +67,7 @@ operators, tests 2–6, criterion benchmarks.
 
 ## Open questions for the owner
 
-1. License: `Cargo.toml` says MIT as a placeholder. Confirm or replace.
+1. ~~License~~ — resolved: MIT (LICENSE added).
+2. Owner scoping answers are in `docs/design-decisions.md`. Two of them extend the SPEC and
+   need a go-ahead before implementation: station time-series output (proposed for M2,
+   SPEC §6 addition) and a procedural terrain milestone (after M9).
