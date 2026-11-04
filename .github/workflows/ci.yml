@@ -22,6 +22,10 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: test
         run: cargo test --workspace
+      - name: f32 build and smoke run
+        run: |
+          cargo build --release -p toyclim-headless --features f32 --target-dir target/f32
+          RUST_LOG=warn target/f32/release/toyclim run --config cases/williamson6.toml --out out/ci-f32 --length 2day
       - name: smoke run
         run: cargo run --release --bin toyclim -- run --config cases/dummy.toml --out out/ci-dummy
       - uses: actions/setup-python@v5

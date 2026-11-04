@@ -228,19 +228,24 @@ mod sampler_tests {
     fn bilinear_reproduces_linear_fields_and_nodes() {
         let g = GaussianGrid::new(32, 64);
         // field = latitude in radians (linear in lat → exact between rows)
-        let mut f = Vec::new();
+        let mut f: Vec<crate::Real> = Vec::new();
         for j in 0..g.nlat {
             for _ in 0..g.nlon {
-                f.push(g.lat[j]);
+                f.push(g.lat[j] as crate::Real);
             }
         }
+        let tol = if std::mem::size_of::<crate::Real>() == 4 {
+            1e-6
+        } else {
+            1e-12
+        };
         for lat in [-1.2, -0.3, 0.0, 0.77, 1.3] {
             let s = PointSampler::new(&g, lat, 1.0);
-            assert!((s.sample(&f, g.nlon) - lat).abs() < 1e-12);
+            assert!((s.sample(&f, g.nlon) - lat).abs() < tol);
         }
         // at a node, the node value
         let s = PointSampler::new(&g, g.lat[5], g.lon[7]);
-        let mut h = vec![0.0; g.len()];
+        let mut h: Vec<crate::Real> = vec![0.0; g.len()];
         h[5 * g.nlon + 7] = 3.0;
         assert!((s.sample(&h, g.nlon) - 3.0).abs() < 1e-12);
         // periodic in longitude

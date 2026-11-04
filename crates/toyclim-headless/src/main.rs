@@ -311,6 +311,9 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
                 .record(model.as_ref())
                 .map_err(anyhow::Error::msg)?;
         }
+        if let Some(c) = clim.as_mut() {
+            c.maybe_sample(model.as_ref());
+        }
         if s % every == 0 || s == total {
             if !model.is_finite() {
                 let crash = out.join("restart_crash");
