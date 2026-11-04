@@ -260,12 +260,13 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
     if !append {
         writeln!(diag, "step,time_s,{}", header.join(","))?;
     }
+    let header_names: Vec<String> = header.iter().map(|s| s.to_string()).collect();
     let write_diag = |model: &dyn Model, diag: &mut fs::File| -> Result<()> {
-        let vals: Vec<String> = model
-            .diagnostics()
-            .iter()
-            .map(|(_, v)| format!("{v:.17e}"))
-            .collect();
+        let d = model.diagnostics();
+        if d.len() != header_names.len() || d.iter().zip(&header_names).any(|((n, _), h)| n != h) {
+            bail!("internal error: the set of diagnostics changed during the run");
+        }
+        let vals: Vec<String> = d.iter().map(|(_, v)| format!("{v:.17e}")).collect();
         writeln!(
             diag,
             "{},{},{}",

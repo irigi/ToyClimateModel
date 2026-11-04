@@ -205,3 +205,67 @@ type = "gray_aquaplanet"
     }
     std::fs::remove_file(&cfg).ok();
 }
+
+/// Global energy budget of the coupled moist/radiative model: the change of atmospheric
+/// energy (c_p T + Φ_s + E + L q) over 30 days equals the time integral of
+/// (absorbed solar − OLR − net flux into the surface) within a few W m⁻². Catches sign and
+/// accounting errors between radiation, surface fluxes, condensation and the slab.
+#[test]
+fn coupled_energy_budget_closes() {
+    let cfg_text = r#"
+model = "primitive"
+truncation = 21
+levels = 10
+dt = "30min"
+length = "30day"
+output_every = "30min"
+output_fields = []
+initial_condition = { case = "rest", temperature = 270.0, noise = 0.1 }
+[moisture]
+condensable = "water"
+[orbit]
+diurnal = true
+[surface]
+mixed_layer_depth = 20.0
+[planet]
+preset = "earth"
+[forcing]
+type = "gray_aquaplanet"
+"#;
+    let cfg = tmp("energy.toml");
+    std::fs::write(
+        &cfg,
+        cfg_text.replace("output_fields = []", "output_fields = [\"ts\"]"),
+    )
+    .unwrap();
+    let out = tmp("energy");
+    run(&cfg, &out, "4", &[]);
+    let text = std::fs::read_to_string(out.join("diagnostics.csv")).unwrap();
+    let mut lines = text.lines();
+    let header: Vec<&str> = lines.next().unwrap().split(',').collect();
+    let col = |n: &str| header.iter().position(|h| *h == n).unwrap();
+    let rows: Vec<Vec<f64>> = lines
+        .map(|l| l.split(',').map(|x| x.parse().unwrap()).collect())
+        .collect();
+    let (it, ie, il) = (col("time_s"), col("energy"), col("latent_energy"));
+    let (ia, io, is) = (col("asr"), col("olr"), col("surface_heat"));
+    let area = 4.0 * std::f64::consts::PI * 6.37122e6f64.powi(2);
+    // skip the first 5 days (adjustment from rest; physics diagnostics lag one step)
+    let start = rows.iter().position(|r| r[it] >= 5.0 * 86400.0).unwrap();
+    let (r0, r1) = (&rows[start], rows.last().unwrap());
+    let dt = r1[it] - r0[it];
+    let de = ((r1[ie] + r1[il]) - (r0[ie] + r0[il])) / dt / area; // W m⁻²
+    let forcing: f64 = rows[start + 1..]
+        .iter()
+        .map(|r| r[ia] - r[io] - r[is])
+        .sum::<f64>()
+        / (rows.len() - start - 1) as f64;
+    eprintln!("atmospheric energy tendency {de:.2} W/m², net forcing {forcing:.2} W/m²");
+    assert!(
+        (de - forcing).abs() < 3.0,
+        "energy budget residual {:.2} W/m²",
+        de - forcing
+    );
+    std::fs::remove_dir_all(&out).ok();
+    std::fs::remove_file(&cfg).ok();
+}

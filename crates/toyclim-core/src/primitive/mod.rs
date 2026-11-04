@@ -1297,6 +1297,33 @@ impl Model for Primitive {
         if let Some(sf) = &self.surface {
             v.push(("ts", self.tr.integrate(&sf.ts) / area));
         }
+        // fixed set of names for the whole run (the CSV header is written at step 0)
+        if self.surface.is_some() || !self.physics.is_empty() {
+            let sh = if self.surface_heat.is_empty() {
+                0.0
+            } else {
+                self.tr.integrate(&self.surface_heat) / area
+            };
+            v.push(("surface_heat", sh));
+        }
+        // latent energy ∫ L q dm [J]
+        if let (Some(cond), Some(tq)) = (&self.condensable, self.curr.tracers.first()) {
+            let tr = &self.tr;
+            let ps: Vec<Real> = tr
+                .synthesis(&self.curr.lnps)
+                .iter()
+                .map(|x| x.exp())
+                .collect();
+            let mut w = vec![0.0 as Real; tr.ngrid()];
+            for k in 0..self.nlev() {
+                let q = tr.synthesis(&tq[k]);
+                let ds = self.levels.dsigma[k] as Real;
+                for p in 0..w.len() {
+                    w[p] += q[p] * ds * ps[p] / self.planet.gravity as Real;
+                }
+            }
+            v.push(("latent_energy", cond.latent_heat * tr.integrate(&w)));
+        }
         v
     }
     fn is_finite(&self) -> bool {
