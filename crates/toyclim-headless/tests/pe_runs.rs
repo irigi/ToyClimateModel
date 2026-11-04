@@ -99,3 +99,56 @@ fn pe_bitwise_across_threads_and_restart() {
     }
     std::fs::remove_file(&cfg).ok();
 }
+
+const MOIST: &str = r#"
+model = "primitive"
+truncation = 21
+levels = 12
+dt = "30min"
+length = "6day"
+output_every = "2day"
+output_fields = ["q", "t", "precip", "pw"]
+initial_condition = { case = "jw06", perturbed = true }
+station_every = "1h"
+station_fields = ["precip", "pw"]
+[[stations]]
+name = "eq"
+lat = 0.0
+lon = 30.0
+[moisture]
+condensable = "water"
+[planet]
+preset = "earth"
+[forcing]
+type = "moist_held_suarez"
+convection = "sbm"
+[climatology]
+start = "2day"
+every = "6h"
+maps = ["precip", "evap"]
+"#;
+
+/// Moist model (tracer, fixer, SBM): bitwise across thread counts and restarts; physical
+/// sanity (it rains, precipitable water stays finite and positive).
+#[test]
+fn moist_bitwise_and_sane() {
+    let cfg = tmp("moist.toml");
+    std::fs::write(&cfg, MOIST).unwrap();
+    let (a, b, c) = (tmp("ma"), tmp("mb"), tmp("mc"));
+    run(&cfg, &a, "1", &[]);
+    run(&cfg, &b, "4", &[]);
+    assert_same(&a, &b);
+    run(&cfg, &c, "2", &["--length", "4day"]);
+    let r = c.join("restart");
+    run(&cfg, &c, "3", &["--restart", r.to_str().unwrap()]);
+    assert_same(&a, &c);
+    let (p, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/precip_000288.npy")).unwrap();
+    let (pw, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/pw_000288.npy")).unwrap();
+    assert!(p.iter().all(|x| x.is_finite() && *x >= 0.0));
+    assert!(p.iter().any(|x| *x > 0.0), "no precipitation at all");
+    assert!(pw.iter().all(|x| x.is_finite() && *x > 0.0 && *x < 200.0));
+    for d in [&a, &b, &c] {
+        std::fs::remove_dir_all(d).ok();
+    }
+    std::fs::remove_file(&cfg).ok();
+}

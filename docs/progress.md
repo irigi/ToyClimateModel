@@ -13,7 +13,7 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M4 Primitive equations | done (tests 1–3 pass, test 4 recorded at T85) |
 | M5 Held–Suarez / tidally locked | implemented; cloud smoke runs at T21 L10 qualitatively right; acceptance runs (T42 L20, 800–1200 days) pending on laptop |
 | M6 Performance/robustness | determinism + restart tests pass; f32 builds; budget met in cloud; viewer PE level selection in Rust API; f32 HS jet check pending (laptop) |
-| M7 Moisture | in progress (owner go-ahead given 2026-11-04) |
+| M7 Moisture | implemented (tracer, fixers, TJ16 moist HS physics, SBM convection); cloud smoke runs OK; T42 runs pending on laptop |
 
 ## Versions
 
@@ -300,6 +300,62 @@ Tests: `resting_atmosphere`, `linear_gravity_wave_external`, `jw_steady_state_sh
   model year ≈ 9 min. The SPEC target is ≤ 10 min on 8 threads of the i7-11850H.
 - Viewer: `ModelRunner` snapshots carry all levels of 3D fields; `get_field_image(name, level)`.
 
+## 2026-11-04 (night) — M7 moisture (owner go-ahead: "Start M7, let's be bold")
+
+**Done**
+- Tracers in the PE core: `PeState.tracers[tracer][lev]` (spectral), flux-form advection
+  −∇·(v q) + q δ − σ̇ ∂q/∂σ (same vertical scheme as T), explicit leapfrog, ∇⁸, RAW;
+  tracer columns/tendencies through the column-physics interface; restart arrays
+  `{prev,curr}_tracer{i}_{k}`.
+- **Negative-value fixer** (after every step): negative grid values set to 0 and positive
+  values rescaled so the global tracer mass ∫Σq Δσ p_s/g dA is unchanged, then re-analysed.
+- **Condensable as data** (`physics/moist.rs::Condensable`; water preset; `[moisture]`
+  overrides L, R_v, e₀, T₀) — interface ready for other species (design decision).
+- `moist_held_suarez` forcing = Thatcher & Jablonowski (2016) "MITC": HS relaxation with
+  T_eq(equator) = 294 K, ΔT_y = 65 K; large-scale condensation (no re-evaporation, rain
+  out immediately); time-implicit bulk surface fluxes over the TJ16 SST; boundary-layer
+  diffusion of θ and q (implicit tridiagonal, K_E profile with p_pbl = 850 hPa,
+  p_strato = 100 hPa); HS Rayleigh friction for momentum. Constants transcribed from the
+  paper into `cases/moist_held_suarez.toml`.
+- Optional **simplified Betts–Miller convection** (Frierson 2007; `convection = "sbm"`,
+  τ = 2 h, RH_ref = 0.7, energy-conserving ΔT closure; shallow-convection variants not
+  implemented). Parcel ascent: dry adiabat to saturation, then RK4 moist adiabat.
+- Fields: `q`, `rh` (3D), `pw` (precipitable water), physics diagnostics `precip_ls`,
+  `precip_conv`, `cape`, `evap`, `shf`, `lhf`; `precip` = sum of `precip_*`. All usable at
+  stations (rain statistics) and in the climatology.
+- Tools: `tools/moist_stats.py` (zonal P, E, P−E, global budget), `station_stats.py --scale
+  3600 --unit mm/h` for rain rates.
+
+**Discrepancy found in TJ16**: eq. (8) adds moisture C_E|v_a|(q_s − q_a)/z_a to the lowest
+layer, where z_a is the height of the lowest *full* level (≈ half the layer depth), while
+eq. (10) diagnoses E = ρ_a C_E |v_a| (q_s − q_a). The two differ by ρ_a z_a g/Δp ≈ 1/2. We
+keep eq. (8) (paper wins for the tendencies) and diagnose the flux actually applied
+(Δp/g · Δq/Δt). Before this fix P/E was 2.01; after it **1.006**.
+
+**Deviations**: no virtual-temperature effects in the dynamics; σ = η L26 (JW06) levels.
+
+**Measured** (cloud smoke runs, T21 L26, Δt 20 min, 120 days, statistics days 40–120):
+
+| | TJ16 (LSC only) | + SBM convection |
+|---|---|---|
+| global precipitation | 1.66 mm/day | 2.01 mm/day |
+| global evaporation | 1.65 mm/day | 2.00 mm/day |
+| P/E | 1.006 | 1.004 |
+| equatorial zonal-mean precipitation | 6.2 mm/day | 6.7 mm/day |
+| precipitable water | 20.9 mm | 20.8 mm |
+| jets | 51–52 m/s at 30°, σ 0.19 | 54 m/s at 30°, σ 0.16–0.19 |
+
+TJ16 report 2.10 mm/day global-mean precipitation for their MITC and jets of ≈ 65 m/s at
+150 hPa (CAM5-SE, higher resolution), so the T21 numbers are plausible.
+Station rain statistics (hourly, 80 days), equator / 25°N / 45°N, with SBM:
+P(≥ 0.1 mm/h) = 0.39 / 0.06 / 0.38, P(≥ 1 mm/h) = 0.049 / 0.001 / 0.000,
+P(≥ 2 mm/h) = 0.011 / 0 / 0, max 4.0 / 1.6 / 1.0 mm/h. These are grid-cell (≈ 600 km at T21)
+area means; point statistics need the stochastic downscaling planned for M11.
+
+Tests: `moist::*` (q_sat, implicit diffusion conservation, condensation conserves
+c_p T + L q), integration test `moist_bitwise_and_sane` (1 vs 4 threads, restart, rain > 0).
+Figures: `docs/figures/M7/`.
+
 ---
 
 ## Laptop checklist (things the cloud session could not do)
@@ -330,6 +386,8 @@ Tests: `resting_atmosphere`, `linear_gravity_wave_external`, `jw_steady_state_sh
 4. M6 f32 check: build with `--features f32` (`cargo build --release -p toyclim-headless
    --features f32 --target-dir target/f32`), rerun HS, compare jets and record the speedup.
 5. Compare HS with SpeedyWeather/Isca output placed in `reference/` (and later PlaSim).
+6. M7: `cases/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
+   and without `convection = "sbm"`; `tools/moist_stats.py`, `tools/zonal_mean.py`.
 
 ---
 
