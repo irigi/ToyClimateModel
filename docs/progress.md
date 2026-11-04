@@ -8,7 +8,8 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 |---|---|
 | M0 Skeleton | done (CI to be confirmed on first push) |
 | M1 Spectral transforms | done |
-| M2–M6 | not started |
+| M2 Shallow water | done |
+| M3–M6 | not started |
 
 ## Versions
 
@@ -98,6 +99,72 @@ Benchmarks (`cargo bench -p toyclim-core --bench transforms`, cloud VM, 4 vCPU):
 | analysis T85 | 664 µs | 237 µs |
 
 **Next**: M2 shallow water.
+
+## 2026-11-04 (night) — M2 shallow-water model
+
+**Done**
+- `shallow_water/`: ζ, δ, φ' spectral state; semi-implicit leapfrog per §5.1, RAW filter
+  (skipped on the forward first step), implicit ∇⁸ hyperdiffusion after each step
+  (first step uses the Δt factor, leapfrog steps 2Δt); conservation diagnostics (mass,
+  energy, potential enstrophy, axial AM); restart state (both levels) and bitwise restart test.
+- `cases.rs`: Williamson 2 (both α), 5, 6, Galewsky (perturbed/unperturbed), rest.
+  Configs in `cases/` with citations.
+- `model.rs`: `Model` trait shared by the runner and (later) the viewer.
+  `build.rs`: model from config. `io/restart.rs`: restart dirs (`.npy` re/im + JSON).
+- `toyclim run` now runs real models: fields + `diagnostics.csv` at every output step, CFL in
+  the log, NaN/Inf → `restart_crash/` dump and error exit, final `restart/`;
+  `--restart DIR` continues a run, `--length` overrides the run length;
+  `toyclim bench` reports model days per wall second.
+- Performance: serial fast path for FFT and Legendre on grids below 128×256 (rayon overhead
+  dominated at T42); even/odd paired kernels without bounds checks.
+
+**Discrepancy with SPEC.md (paper wins)**: Williamson test 2 with α ≠ 0 rotates the Coriolis
+parameter with the flow, f = 2Ω(−cos λ cos φ sin α + sin φ cos α); with the unrotated f the
+state is not steady (l2 = 0.23 at day 5). Implemented as in the paper via an optional
+Coriolis field in `SwInitial`.
+
+**Papers**: the Williamson report on OSTI is a scanned PDF without a text layer and the Galewsky
+PDF host returned 503. Test 2 and 5 constants were checked against the restatement in
+Shipton et al. (arXiv:1707.00855); test 6 and Galewsky use the SPEC.md values (the standard
+ones). To re-check against the originals on the laptop.
+
+**Measured** (f64, Earth constants)
+
+Williamson 2, 5 days, Δt = 30 min (normalized h errors; α = 0 / α = π/2 − 0.05 identical to 3 digits):
+
+| T | l1 | l2 | l∞ | mass drift |
+|---|---|---|---|---|
+| 21 | 2.2e-7 | 2.6e-7 | 5.6e-7 | 7e-16 |
+| 42 | 9.4e-10 | 1.1e-9 | 2.4e-9 | 7e-16 |
+| 85 | 3.5e-12 | 4.1e-12 | 8.9e-12 | 9e-16 |
+
+(The error is the hyperdiffusion acting on ℓ = 2; it shrinks with M because the damping is
+scaled by [ℓ(ℓ+1)/M(M+1)]⁴.) Criterion l2 < 1e-5: **pass**.
+
+Williamson 5, 15 days: T42 (Δt 20 min) mass 4e-16, energy 2.1e-6, enstrophy 1.1e-4;
+T85 (Δt 10 min) mass 0, energy **3.1e-7** (< 1%: pass), enstrophy 1.3e-5. Axial AM changes
+by 0.79% (mountain torque, expected). Stable: pass.
+
+Williamson 6, T42, Δt 20 min, 14 days: balance cross-check 9.6e-14 (< 1e-8: pass); wave 4
+retained (|ζ_5^4| is 8× the largest other non-zonal coefficient); energy drift 1.3e-5,
+enstrophy drift 2.0e-3 (< 1%: pass); **phase speed 11.28 °/day** vs nondivergent 12.20
+(−7.5%, within 15%: pass; divergent RH waves are known to be slower than the
+nondivergent formula).
+
+Galewsky T85, Δt 8 min: unperturbed max|Δζ|/max|ζ| at day 6 = **8.1e-3** (< 1%: pass);
+perturbed: rolled up into vortices by day 6 (figure), 4–5 vortices between 0 and 360°E,
+qualitatively as Galewsky Fig. 4.
+
+Performance (`toyclim bench`, cloud VM, 4 vCPU): T42 SW Δt 20 min: **14.0 model days/s**
+single-threaded (≈ 21 at Δt 30 min; criterion ≥ 10: pass), 13.7 with 4 threads (too
+small to parallelize). T85 Δt 8 min: 1.05 (1 thread), 1.29 (4 threads) model days/s.
+
+Tests: `williamson2_t42`, `williamson5_t42`, `williamson6_t42`, `rossby_haurwitz_balance`,
+`rest_stays_at_rest`, `restart_is_bitwise` (normal); `williamson2_convergence`,
+`williamson5_t85`, `galewsky_unperturbed_t85` (`--ignored`, each < 10 s in release).
+
+**Figures** (`docs/figures/M2/`): `w5_t85_eta_day{05,10,15}.png`, `w6_t42_h_day{0,14}.png`,
+`galewsky_t85_vor_day6.png`.
 
 ---
 
