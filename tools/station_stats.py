@@ -27,6 +27,8 @@ def main():
     ap.add_argument("--level", type=int, default=None)
     ap.add_argument("--bins", type=int, default=30)
     ap.add_argument("--thresholds", default=None, help="comma-separated thresholds")
+    ap.add_argument("--scale", type=float, default=1.0, help="multiply data, e.g. 3600 for precip kg/m2/s -> mm/h")
+    ap.add_argument("--unit", default="", help="unit label after scaling")
     ap.add_argument("-o", "--output", default=None)
     a = ap.parse_args()
 
@@ -36,6 +38,7 @@ def main():
     x = np.load(d / f"{a.field}.npy")
     if x.ndim == 3:
         x = x[:, :, -1 if a.level is None else a.level]
+    x = x * a.scale
     names = [s["name"] for s in meta["stations"]]
     idx = range(len(names)) if a.station is None else [names.index(a.station)]
 
@@ -50,9 +53,9 @@ def main():
                 line += f"  P(>={th:g})={np.mean(s >= th):.3f}"
         print(line)
     ax1.set_xlabel("time [days]")
-    ax1.set_ylabel(a.field)
+    ax1.set_ylabel(f"{a.field} {a.unit}")
     ax1.legend(fontsize=8)
-    ax2.set_xlabel(a.field)
+    ax2.set_xlabel(f"{a.field} {a.unit}")
     ax2.set_ylabel("probability density")
     out = a.output or str(pathlib.Path(a.run) / f"stations_{a.field}.png")
     fig.savefig(out, dpi=110)

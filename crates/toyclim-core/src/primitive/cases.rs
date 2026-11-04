@@ -169,6 +169,42 @@ pub fn gravity_wave(
     Ok(init)
 }
 
+/// Initial specific humidity per level, spectral. `"tj16"`: Thatcher & Jablonowski
+/// (2016) eq. (A1), q = q₀ exp(−(φ/φ_hw)⁴) exp(−((σ−1) p₀/p_hw)²) for p ≥ 100 hPa (else
+/// 1e-12), with q₀ = 18 g/kg, φ_hw = 2π/9, p_hw = 300 hPa. `"dry"`: q = 0.
+pub fn initial_humidity(
+    tr: &Transform,
+    planet: &Planet,
+    lev: &SigmaLevels,
+    kind: &str,
+) -> Result<Vec<Vec<Complex>>, String> {
+    let (q0, phw_lat, phw) = (0.018, 2.0 * PI / 9.0, 3.0e4);
+    let mut out = Vec::with_capacity(lev.nlev);
+    for k in 0..lev.nlev {
+        let s = lev.full[k];
+        let g: Vec<Real> = match kind {
+            "dry" => tr.grid_zeros(),
+            "tj16" => {
+                let mut v = Vec::with_capacity(tr.ngrid());
+                for &lat in &tr.grid.lat {
+                    let p = s * planet.p0;
+                    let q = if p >= 1.0e4 {
+                        q0 * (-(lat / phw_lat).powi(4)).exp()
+                            * (-((s - 1.0) * planet.p0 / phw).powi(2)).exp()
+                    } else {
+                        1e-12
+                    };
+                    v.extend(std::iter::repeat_n(q as Real, tr.nlon()));
+                }
+                v
+            }
+            other => return Err(format!("unknown initial humidity {other:?} (tj16, dry)")),
+        };
+        out.push(tr.analysis(&g));
+    }
+    Ok(out)
+}
+
 /// Jablonowski & Williamson (2006) constants (QJRMS 132, 2943–2975, §2).
 pub mod jw {
     pub const ETA0: f64 = 0.252;

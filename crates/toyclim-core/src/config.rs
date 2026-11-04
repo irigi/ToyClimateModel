@@ -291,6 +291,8 @@ pub struct Config {
     pub diffusion: DiffusionConfig,
     #[serde(default)]
     pub time_filter: TimeFilterConfig,
+    /// Moisture (M7): a condensable tracer q. Absent → dry model.
+    pub moisture: Option<MoistureConfig>,
     /// Online climatology (time means after a spin-up); see `climatology.rs`.
     pub climatology: Option<ClimatologyConfig>,
     /// Global dry-mass fixer for the primitive-equation model (default true).
@@ -303,6 +305,52 @@ pub struct Config {
     /// Fields sampled at stations (default: all 2D fields of the model / lowest level).
     #[serde(default)]
     pub station_fields: Vec<String>,
+}
+
+/// `[moisture]` block: the condensing species (preset plus optional overrides) and the
+/// initial humidity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MoistureConfig {
+    /// Preset name ("water").
+    #[serde(default = "default_condensable")]
+    pub condensable: String,
+    pub latent_heat: Option<f64>,
+    pub r_vapor: Option<f64>,
+    pub e0: Option<f64>,
+    pub t0: Option<f64>,
+    /// Initial humidity: "tj16" (Thatcher & Jablonowski 2016 eq. A1, default), "dry".
+    #[serde(default = "default_initial_q")]
+    pub initial: String,
+}
+
+fn default_condensable() -> String {
+    "water".into()
+}
+fn default_initial_q() -> String {
+    "tj16".into()
+}
+
+impl MoistureConfig {
+    pub fn resolve(&self) -> Result<crate::physics::moist::Condensable, ConfigError> {
+        let mut c =
+            crate::physics::moist::Condensable::preset(&self.condensable).ok_or_else(|| {
+                ConfigError::Invalid(format!("unknown condensable {:?}", self.condensable))
+            })?;
+        if let Some(v) = self.latent_heat {
+            c.latent_heat = v;
+        }
+        if let Some(v) = self.r_vapor {
+            c.r_vapor = v;
+        }
+        if let Some(v) = self.e0 {
+            c.e0 = v;
+        }
+        if let Some(v) = self.t0 {
+            c.t0 = v;
+        }
+        Ok(c)
+    }
 }
 
 /// `[climatology]` block.

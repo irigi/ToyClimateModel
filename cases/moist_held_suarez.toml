@@ -1,0 +1,47 @@
+# Moist idealized test (moist Held–Suarez) of Thatcher & Jablonowski (2016),
+# Geosci. Model Dev. 9, 1263–1292 ("TJ16"); constants transcribed from the paper:
+# - large-scale condensation, eqs. (1)–(5): ε = 0.622 (we use R_d/R_v), T0 = 273.16 K,
+#   e0 = 610.78 Pa, L = 2.5e6 J/kg, R_v = 461.5 J/(kg K); no re-evaporation;
+# - SST eq. (6): ΔT = 29 K, T_min = 271 K, Δφ = 26°;
+# - surface fluxes eqs. (7)–(12): C_H = C_E = 0.0044, time-implicit;
+# - boundary-layer mixing eqs. (15)–(17): K_E = C_E |v_a| z_a, p_pbl = 850 hPa,
+#   p_strato = 100 hPa; HS Rayleigh friction for momentum (eq. 14);
+# - Newtonian relaxation eqs. (18)–(20): T_Equator = 294 K, ΔT_y = 65 K, Δθ_z = 10 K,
+#   HS k_a, k_s, σ_b.
+# Initial state: JW06 balanced flow (TJ16 used the similar Ullrich et al. 2014 state) with
+# TJ16 eq. (A1) humidity. TJ16 recommend 6 months spin-up and 30 months of analysis.
+# Deviations: no virtual-temperature effects in the dynamics; σ = η levels (L26 as JW06).
+description = "Moist Held-Suarez (Thatcher & Jablonowski 2016), T42 L26"
+model = "primitive"
+truncation = 42
+sigma_half = [
+  0.0, 0.004895209, 0.009882418, 0.01805201, 0.02983724, 0.04462334,
+  0.06160587, 0.07851243, 0.0923658, 0.10866359, 0.12783708, 0.15039371,
+  0.17693043, 0.20814944, 0.24487709, 0.28808522, 0.33891731, 0.39871865,
+  0.4690718, 0.55183871, 0.64920969, 0.74438289, 0.83102123, 0.90330029,
+  0.95599746, 0.9851122, 1.0
+]
+dt = "15min"
+length = "1080day"
+output_every = "10day"
+output_fields = ["u", "t", "q", "ps", "precip", "evap", "pw"]
+initial_condition = { case = "jw06", perturbed = true }
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[planet]
+preset = "earth"
+
+[forcing]
+type = "moist_held_suarez"
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "180day"
+every = "6h"
+maps = ["ps", "precip", "evap", "pw", "t850", "u850"]

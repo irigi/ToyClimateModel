@@ -34,15 +34,21 @@ pub struct PeState {
     pub tmp: Vec<Vec<Complex>>,
     /// ln(p_s / 1 Pa).
     pub lnps: Vec<Complex>,
+    /// Tracers `[tracer][lev]` (e.g. specific humidity q \[kg/kg\]).
+    pub tracers: Vec<Vec<Vec<Complex>>>,
 }
 
 impl PeState {
     pub fn zeros(nlev: usize, nspec: usize) -> Self {
+        Self::zeros_with_tracers(nlev, nspec, 0)
+    }
+    pub fn zeros_with_tracers(nlev: usize, nspec: usize, ntracers: usize) -> Self {
         let z = vec![CZERO; nspec];
         PeState {
             vor: vec![z.clone(); nlev],
             div: vec![z.clone(); nlev],
             tmp: vec![z.clone(); nlev],
+            tracers: vec![vec![z.clone(); nlev]; ntracers],
             lnps: z,
         }
     }
@@ -51,6 +57,7 @@ impl PeState {
         self.vor.iter().all(|v| ok(v))
             && self.div.iter().all(|v| ok(v))
             && self.tmp.iter().all(|v| ok(v))
+            && self.tracers.iter().flatten().all(|v| ok(v))
             && ok(&self.lnps)
     }
 }
@@ -87,10 +94,18 @@ struct Grids {
     /// cos φ-weighted gradient of ln p_s.
     px: Vec<Real>,
     py: Vec<Real>,
+    /// Tracers `[tracer][lev]`.
+    q: Vec<Vec<Vec<Real>>>,
 }
 
-/// Physics tendencies per level: cos φ-weighted (du, dv) and dT.
-type PhysTend = (Vec<Vec<Real>>, Vec<Vec<Real>>, Vec<Vec<Real>>);
+/// Physics tendencies per level: cos φ-weighted (du, dv), dT and tracer tendencies.
+struct PhysTend {
+    du: Vec<Vec<Real>>,
+    dv: Vec<Vec<Real>>,
+    dt: Vec<Vec<Real>>,
+    /// `[tracer][lev][point]`.
+    dq: Vec<Vec<Vec<Real>>>,
+}
 
 /// Vertical constants used by the column kernel.
 struct ColumnConsts {
@@ -103,10 +118,10 @@ struct ColumnConsts {
     tref: Real,
 }
 
-/// Mutable per-row output slices: [qu, qv, ke, tu, tv, trest] × levels, and N_p.
+/// Mutable per-row output slices: [qu, qv, ke, tu, tv, trest, σ̇_{k+1/2}] × levels, and N_p.
 #[derive(Default)]
 struct RowOut<'a> {
-    fields: [Vec<&'a mut [Real]>; 6],
+    fields: [Vec<&'a mut [Real]>; 7],
     np: Option<&'a mut [Real]>,
 }
 
@@ -179,7 +194,10 @@ fn column_row(
         (below + above) / (2.0 * c.ds[k])
     };
     let mut umax: Real = 0.0;
-    let [qu, qv, ke, tu, tv, trest] = &mut row.fields;
+    let [qu, qv, ke, tu, tv, trest, sdl] = &mut row.fields;
+    for k in 0..l {
+        sdl[k].copy_from_slice(&sdot[(k + 1) * nlon..(k + 2) * nlon]);
+    }
     for k in 0..l {
         let (u, v, t, z, dv) = (
             &g.u[k][rng.clone()],
@@ -233,6 +251,8 @@ pub struct Primitive {
     pub last_courant: f64,
     /// Target global mass for the mass fixer \[kg\] (set from the initial state).
     pub mass_target: f64,
+    /// The condensable of tracer 0, if the model is moist.
+    pub condensable: Option<crate::physics::moist::Condensable>,
 }
 
 impl Primitive {
@@ -315,6 +335,7 @@ impl Primitive {
             steps: 0,
             last_courant: 0.0,
             mass_target: 0.0,
+            condensable: None,
             levels,
             tr,
             planet,
@@ -330,6 +351,60 @@ impl Primitive {
     pub fn mass_of(&self, lnps: &[Complex]) -> f64 {
         let ps: Vec<Real> = self.tr.synthesis(lnps).iter().map(|x| x.exp()).collect();
         self.tr.integrate(&ps) / self.planet.gravity
+    }
+
+    /// Negative-value fixer for tracers: in grid space, set negative values to zero and
+    /// scale the positive values so that the global tracer mass ∫Σ_k q Δσ_k p_s/g dA is
+    /// unchanged; then transform back. Applied to the new time level after each step.
+    fn fix_tracers(&mut self) {
+        if self.curr.tracers.is_empty() {
+            return;
+        }
+        let tr = &self.tr;
+        let l = self.nlev();
+        let ps: Vec<Real> = tr
+            .synthesis(&self.curr.lnps)
+            .iter()
+            .map(|x| x.exp())
+            .collect();
+        let ds = self.levels.dsigma.clone();
+        for it in 0..self.curr.tracers.len() {
+            let mut grids: Vec<Vec<Real>> =
+                self.map_levels(|k| tr.synthesis(&self.curr.tracers[it][k]));
+            if !grids.iter().flatten().any(|&x| x < 0.0) {
+                continue;
+            }
+            let column_mass = |g: &Vec<Vec<Real>>| -> f64 {
+                let mut w = vec![0.0 as Real; tr.ngrid()];
+                for k in 0..l {
+                    for (p, x) in w.iter_mut().enumerate() {
+                        *x += g[k][p] * ds[k] as Real * ps[p];
+                    }
+                }
+                tr.integrate(&w)
+            };
+            let before = column_mass(&grids);
+            for g in grids.iter_mut() {
+                for x in g.iter_mut() {
+                    if *x < 0.0 {
+                        *x = 0.0;
+                    }
+                }
+            }
+            let after = column_mass(&grids);
+            let scale = if after > 0.0 && before > 0.0 {
+                (before / after) as Real
+            } else {
+                0.0
+            };
+            for g in grids.iter_mut() {
+                for x in g.iter_mut() {
+                    *x *= scale;
+                }
+            }
+            let spec: Vec<Vec<Complex>> = self.map_levels(|k| tr.analysis(&grids[k]));
+            self.curr.tracers[it] = spec;
+        }
     }
 
     /// Shift ln p_s by a constant so the global mass equals `mass_target`.
@@ -365,7 +440,13 @@ impl Primitive {
             )
         });
         let (px, py) = tr.grad(&s.lnps);
+        let q: Vec<Vec<Vec<Real>>> = s
+            .tracers
+            .iter()
+            .map(|tq| self.map_levels(|k| tr.synthesis(&tq[k])))
+            .collect();
         let mut g = Grids {
+            q,
             u: Vec::new(),
             v: Vec::new(),
             vor: Vec::new(),
@@ -396,6 +477,8 @@ impl Primitive {
         let sigma: Vec<Real> = self.levels.full.iter().map(|&x| x as Real).collect();
         let sigma_half: Vec<Real> = self.levels.half.iter().map(|&x| x as Real).collect();
         let ndiag: usize = self.physics_diag.len();
+        let ntr = s.tracers.len();
+        let w = (3 + ntr) * l;
         let tref = self.planet.t_ref as Real;
         let time = self.time();
         let dt2 = if self.steps == 0 {
@@ -410,15 +493,21 @@ impl Primitive {
             .into_par_iter()
             .map(|j| {
                 let coslat = (1.0 - tr.grid.mu[j] * tr.grid.mu[j]).sqrt() as Real;
-                let mut out = vec![0.0 as Real; nlon * 3 * l];
+                let mut out = vec![0.0 as Real; nlon * w];
                 let mut diag = vec![0.0 as Real; nlon * ndiag];
                 let (mut u, mut v, mut t) = (vec![0.0; l], vec![0.0; l], vec![0.0; l]);
+                let mut qc = vec![0.0 as Real; ntr * l];
                 for i in 0..nlon {
                     let p = j * nlon + i;
                     for k in 0..l {
                         u[k] = g.u[k][p] / coslat;
                         v[k] = g.v[k][p] / coslat;
                         t[k] = g.t[k][p] + tref;
+                    }
+                    for (it, tq) in g.q.iter().enumerate() {
+                        for k in 0..l {
+                            qc[it * l + k] = tq[k][p];
+                        }
                     }
                     let col = ColumnIn {
                         lat: tr.grid.lat[j] as Real,
@@ -430,14 +519,15 @@ impl Primitive {
                         u: &u,
                         v: &v,
                         t: &t,
-                        tracers: &[],
+                        tracers: &qc,
                         phis: self.phis_grid[p],
                         time,
                         dt: dt2,
                     };
-                    let o = &mut out[i * 3 * l..(i + 1) * 3 * l];
+                    let o = &mut out[i * w..(i + 1) * w];
                     let (du, rest) = o.split_at_mut(l);
-                    let (dv, dtt) = rest.split_at_mut(l);
+                    let (dv, rest) = rest.split_at_mut(l);
+                    let (dtt, dqq) = rest.split_at_mut(l);
                     let mut off = 0;
                     for ph in physics.iter() {
                         let nd = ph.diagnostic_names().len();
@@ -445,7 +535,7 @@ impl Primitive {
                             du: &mut *du,
                             dv: &mut *dv,
                             dt: &mut *dtt,
-                            dtracers: &mut [],
+                            dtracers: &mut *dqq,
                             diag: &mut diag[i * ndiag + off..i * ndiag + off + nd],
                         };
                         ph.tendencies(planet, &col, &mut co);
@@ -463,20 +553,31 @@ impl Primitive {
         let mut du = vec![vec![0.0 as Real; npts]; l];
         let mut dv = vec![vec![0.0 as Real; npts]; l];
         let mut dtt = vec![vec![0.0 as Real; npts]; l];
+        let mut dq = vec![vec![vec![0.0 as Real; npts]; l]; ntr];
         for (j, (out, diag)) in rows.iter().enumerate() {
             for i in 0..nlon {
                 let p = j * nlon + i;
                 for k in 0..l {
-                    du[k][p] = out[i * 3 * l + k];
-                    dv[k][p] = out[i * 3 * l + l + k];
-                    dtt[k][p] = out[i * 3 * l + 2 * l + k];
+                    du[k][p] = out[i * w + k];
+                    dv[k][p] = out[i * w + l + k];
+                    dtt[k][p] = out[i * w + 2 * l + k];
+                }
+                for (it, dqt) in dq.iter_mut().enumerate() {
+                    for k in 0..l {
+                        dqt[k][p] = out[i * w + (3 + it) * l + k];
+                    }
                 }
                 for (d, (_, grid)) in self.physics_diag.iter_mut().enumerate() {
                     grid[p] = diag[i * ndiag + d];
                 }
             }
         }
-        Some((du, dv, dtt))
+        Some(PhysTend {
+            du,
+            dv,
+            dt: dtt,
+            dq,
+        })
     }
 
     /// Explicit tendencies N at the current level (and max Courant number).
@@ -498,6 +599,7 @@ impl Primitive {
         let mut tv = vec![vec![0.0 as Real; n]; l];
         let mut trest = vec![vec![0.0 as Real; n]; l];
         let mut np = vec![0.0 as Real; n];
+        let mut sdl = vec![vec![0.0 as Real; n]; l];
         let consts = ColumnConsts {
             ds: lev.dsigma.iter().map(|&x| x as Real).collect(),
             sh: lev.half.iter().map(|&x| x as Real).collect(),
@@ -517,6 +619,7 @@ impl Primitive {
             (3, &mut tu),
             (4, &mut tv),
             (5, &mut trest),
+            (6, &mut sdl),
         ] {
             for lvl in src.iter_mut() {
                 for (j, chunk) in lvl.chunks_mut(nlon).enumerate() {
@@ -550,15 +653,54 @@ impl Primitive {
                 .map(row_kernel)
                 .fold(0.0, f64::max)
         };
-        if let Some((du, dv, dtt)) = phys {
+        if let Some(ph) = phys {
             for k in 0..l {
                 for p in 0..n {
-                    qu[k][p] -= du[k][p];
-                    qv[k][p] -= dv[k][p];
-                    trest[k][p] += dtt[k][p];
+                    qu[k][p] -= ph.du[k][p];
+                    qv[k][p] -= ph.dv[k][p];
+                    trest[k][p] += ph.dt[k][p];
                 }
             }
         }
+        // Tracers: −∇·(v q) + q δ − σ̇ ∂q/∂σ + physics.
+        let ds: Vec<Real> = lev.dsigma.iter().map(|&x| x as Real).collect();
+        let tracer_tend: Vec<Vec<Vec<Complex>>> =
+            g.q.iter()
+                .enumerate()
+                .map(|(it, q)| {
+                    self.map_levels(|k| {
+                        let (mut fu, mut fv, mut rest) = (
+                            vec![0.0 as Real; n],
+                            vec![0.0 as Real; n],
+                            vec![0.0 as Real; n],
+                        );
+                        for p in 0..n {
+                            fu[p] = g.u[k][p] * q[k][p];
+                            fv[p] = g.v[k][p] * q[k][p];
+                            let below = if k + 1 < l {
+                                sdl[k][p] * (q[k + 1][p] - q[k][p])
+                            } else {
+                                0.0
+                            };
+                            let above = if k > 0 {
+                                sdl[k - 1][p] * (q[k][p] - q[k - 1][p])
+                            } else {
+                                0.0
+                            };
+                            rest[p] = q[k][p] * g.div[k][p] - (below + above) / (2.0 * ds[k]);
+                            if let Some(ph) = phys {
+                                rest[p] += ph.dq[it][k][p];
+                            }
+                        }
+                        let fl = tr.div(&fu, &fv);
+                        tr.analysis(&rest)
+                            .iter()
+                            .zip(&fl)
+                            .map(|(a, b)| a - b)
+                            .collect()
+                    })
+                })
+                .collect();
         let per: Vec<_> = self.map_levels(|k| {
             let (dq, cq) = tr.div_curl(&qu[k], &qv[k]);
             let mut kes = tr.analysis(&ke[k]);
@@ -587,6 +729,7 @@ impl Primitive {
             div: Vec::with_capacity(l),
             tmp: Vec::with_capacity(l),
             lnps: tr.analysis(&np),
+            tracers: tracer_tend,
         };
         for (a, b, c) in per {
             out.vor.push(a);
@@ -609,7 +752,14 @@ impl Primitive {
         let a2 = self.tr.radius * self.tr.radius;
         let rt = (self.planet.gas_constant * self.planet.t_ref) as Real;
         let w: Vec<Real> = self.levels.dsigma.iter().map(|&x| x as Real).collect();
-        let mut out = PeState::zeros(l, lay.len());
+        let mut out = PeState::zeros_with_tracers(l, lay.len(), minus.tracers.len());
+        for (it, tq) in out.tracers.iter_mut().enumerate() {
+            for k in 0..l {
+                for (idx, x) in tq[k].iter_mut().enumerate() {
+                    *x = minus.tracers[it][k][idx] + n.tracers[it][k][idx] * (2.0 * dt);
+                }
+            }
+        }
         let mut tt = vec![CZERO; l];
         let mut rhs = vec![CZERO; l];
         let mut x = vec![CZERO; l];
@@ -752,6 +902,28 @@ impl Primitive {
             "div" => (0..l).for_each(|k| out.extend(tr.synthesis(&self.curr.div[k]))),
             "t" => (0..l)
                 .for_each(|k| out.extend(tr.synthesis(&self.curr.tmp[k]).iter().map(|t| t + tref))),
+            "q" => {
+                let tq = self.curr.tracers.first()?;
+                (0..l).for_each(|k| out.extend(tr.synthesis(&tq[k])));
+            }
+            "rh" => {
+                let cond = self.condensable.as_ref()?;
+                let tq = self.curr.tracers.first()?;
+                let ps: Vec<Real> = tr
+                    .synthesis(&self.curr.lnps)
+                    .iter()
+                    .map(|x| x.exp())
+                    .collect();
+                for k in 0..l {
+                    let q = tr.synthesis(&tq[k]);
+                    let t = tr.synthesis(&self.curr.tmp[k]);
+                    for p in 0..n {
+                        let pr = self.levels.full[k] * ps[p] as f64;
+                        let qs = cond.qsat(&self.planet, (t[p] + tref) as f64, pr);
+                        out.push((q[p] as f64 / qs) as Real);
+                    }
+                }
+            }
             "phi" => {
                 // geopotential Φ_k = Φ_s + Σ_j G_kj T_j (full T)
                 let t: Vec<Vec<Real>> = (0..l)
@@ -808,6 +980,9 @@ impl Model for Primitive {
             scale_by(&mut next.vor[k], diff);
             scale_by(&mut next.div[k], diff);
             scale_by(&mut next.tmp[k], diff);
+            for tq in next.tracers.iter_mut() {
+                scale_by(&mut tq[k], diff);
+            }
         }
         let mut curr = std::mem::replace(&mut self.curr, next);
         if !first {
@@ -818,11 +993,21 @@ impl Model for Primitive {
                 f.apply(&self.prev.tmp[k], &mut curr.tmp[k], &mut self.curr.tmp[k]);
             }
             f.apply(&self.prev.lnps, &mut curr.lnps, &mut self.curr.lnps);
+            for it in 0..curr.tracers.len() {
+                for k in 0..self.nlev() {
+                    f.apply(
+                        &self.prev.tracers[it][k],
+                        &mut curr.tracers[it][k],
+                        &mut self.curr.tracers[it][k],
+                    );
+                }
+            }
         }
         self.prev = curr;
         if self.settings.mass_fixer {
             self.fix_mass();
         }
+        self.fix_tracers();
         self.steps += 1;
     }
 
@@ -844,6 +1029,16 @@ impl Model for Primitive {
     fn field_names(&self) -> Vec<&'static str> {
         let mut v = vec!["u", "v", "t", "vor", "div", "phi", "ps", "phis"];
         v.extend_from_slice(PRESSURE_FIELDS);
+        if !self.curr.tracers.is_empty() {
+            v.extend_from_slice(&["q", "rh", "pw"]);
+        }
+        if self.physics.iter().any(|p| {
+            p.diagnostic_names()
+                .iter()
+                .any(|n| n.starts_with("precip_"))
+        }) {
+            v.push("precip");
+        }
         v.extend(self.physics.iter().flat_map(|p| p.diagnostic_names()));
         v
     }
@@ -862,6 +1057,25 @@ impl Model for Primitive {
                 nlev: 1,
                 data: self.phis_grid.clone(),
             }),
+            // precipitable water Σ q Δσ p_s / g [kg m⁻² = mm]
+            "pw" => {
+                let tq = self.curr.tracers.first()?;
+                let tr = &self.tr;
+                let ps: Vec<Real> = tr
+                    .synthesis(&self.curr.lnps)
+                    .iter()
+                    .map(|x| x.exp())
+                    .collect();
+                let mut w = vec![0.0 as Real; tr.ngrid()];
+                for k in 0..self.nlev() {
+                    let q = tr.synthesis(&tq[k]);
+                    let ds = self.levels.dsigma[k] as Real;
+                    for p in 0..w.len() {
+                        w[p] += q[p] * ds * ps[p] / self.planet.gravity as Real;
+                    }
+                }
+                Some(GridField { nlev: 1, data: w })
+            }
             // Pressure-level fields: <name><hPa>, e.g. t850, u850, v250, phi500.
             _ if PRESSURE_FIELDS.contains(&name) => {
                 let split = name.find(|c: char| c.is_ascii_digit())?;
@@ -872,6 +1086,19 @@ impl Model for Primitive {
                     nlev: 1,
                     data: self.to_pressure(&f3, hpa * 100.0),
                 })
+            }
+            // total precipitation = sum of all precip_* diagnostics
+            "precip" if !self.physics_diag.iter().any(|(n, _)| n == "precip") => {
+                let mut acc: Option<Vec<Real>> = None;
+                for (n, g) in &self.physics_diag {
+                    if n.starts_with("precip_") {
+                        match acc.as_mut() {
+                            None => acc = Some(g.clone()),
+                            Some(a) => a.iter_mut().zip(g).for_each(|(x, y)| *x += *y),
+                        }
+                    }
+                }
+                acc.map(|data| GridField { nlev: 1, data })
             }
             _ => {
                 if let Some((_, g)) = self.physics_diag.iter().find(|(n, _)| n == name) {
@@ -908,6 +1135,9 @@ impl Model for Primitive {
                 a.push((format!("{lvl}_vor_{k:03}"), s.vor[k].clone()));
                 a.push((format!("{lvl}_div_{k:03}"), s.div[k].clone()));
                 a.push((format!("{lvl}_tmp_{k:03}"), s.tmp[k].clone()));
+                for (it, tq) in s.tracers.iter().enumerate() {
+                    a.push((format!("{lvl}_tracer{it}_{k:03}"), tq[k].clone()));
+                }
             }
             a.push((format!("{lvl}_lnps"), s.lnps.clone()));
         }
@@ -936,11 +1166,15 @@ impl Model for Primitive {
             Ok(a.1.clone())
         };
         for lvl in ["prev", "curr"] {
-            let mut s = PeState::zeros(self.nlev(), len);
+            let ntr = self.curr.tracers.len();
+            let mut s = PeState::zeros_with_tracers(self.nlev(), len, ntr);
             for k in 0..self.nlev() {
                 s.vor[k] = get(&format!("{lvl}_vor_{k:03}"))?;
                 s.div[k] = get(&format!("{lvl}_div_{k:03}"))?;
                 s.tmp[k] = get(&format!("{lvl}_tmp_{k:03}"))?;
+                for it in 0..ntr {
+                    s.tracers[it][k] = get(&format!("{lvl}_tracer{it}_{k:03}"))?;
+                }
             }
             s.lnps = get(&format!("{lvl}_lnps"))?;
             if lvl == "prev" {
@@ -970,7 +1204,16 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
     };
     let tr = Transform::new(cfg.truncation, planet.radius);
     let init = cases::build(&tr, &planet, &levels, &cfg.initial_condition)?;
-    let physics = crate::physics::build(cfg.forcing.as_ref(), &planet)?;
+    let moisture = match &cfg.moisture {
+        Some(m) => Some(m.resolve().map_err(|e| e.to_string())?),
+        None => None,
+    };
+    let physics = crate::physics::build(cfg.forcing.as_ref(), &planet, moisture.as_ref())?;
+    let mut init = init;
+    if let Some(m) = &cfg.moisture {
+        let q = cases::initial_humidity(&tr, &planet, &levels, &m.initial)?;
+        init.state.tracers = vec![q];
+    }
     let settings = PeSettings {
         dt: cfg.dt.seconds(),
         diffusion_order: cfg.diffusion.order,
@@ -983,6 +1226,7 @@ pub fn from_config(cfg: &crate::config::Config) -> Result<Primitive, String> {
     };
     let mut m = Primitive::new(tr, planet, settings, levels, init, physics);
     m.mass_target = m.mass_of(&m.curr.lnps);
+    m.condensable = moisture;
     Ok(m)
 }
 

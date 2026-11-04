@@ -1,13 +1,19 @@
 //! Grid-point (column) physics (SPEC.md §5.4).
 
 pub mod column;
+pub mod convection;
 pub mod held_suarez;
+pub mod moist;
 
 pub use column::{ColumnIn, ColumnOut, ColumnPhysics};
 
 use crate::config::Duration;
 use crate::planet::Planet;
+use convection::SimplifiedBettsMiller;
 use held_suarez::{Damping, HeldSuarez, TidallyLocked};
+use moist::{
+    BoundaryLayer, Condensable, LargeScaleCondensation, SurfaceFluxes, SurfaceTemperature,
+};
 
 fn num(t: &toml::Table, key: &str, default: f64) -> Result<f64, String> {
     match t.get(key) {
@@ -63,6 +69,17 @@ const KNOWN: &[&str] = &[
     "t_night",
     "delta_td",
     "substellar_lon",
+    "c_h",
+    "c_e",
+    "sst_delta",
+    "sst_min",
+    "sst_width",
+    "sst_uniform",
+    "p_pbl",
+    "p_strato",
+    "convection",
+    "tau_convection",
+    "rh_convection",
 ];
 
 /// Build the column physics named in the `[forcing]` block (none → adiabatic).
@@ -72,9 +89,17 @@ const KNOWN: &[&str] = &[
 /// (4 days), `sigma_b` (0.7).
 /// `type = "tidally_locked"`: as above plus `t_night` (250 K), `delta_td` (70 K),
 /// `substellar_lon` (degrees, default 180).
+///
+/// `type = "moist_held_suarez"` (Thatcher & Jablonowski 2016): Held–Suarez with
+/// `t_surface` = 294 K and `delta_ty` = 65 K by default, plus large-scale condensation,
+/// surface fluxes (`c_h`, `c_e` = 0.0044; SST `sst_delta` 29 K, `sst_min` 271 K,
+/// `sst_width` 26° or `sst_uniform`) and boundary-layer mixing (`p_pbl` 850 hPa,
+/// `p_strato` 100 hPa). Needs a `[moisture]` block. Optional `convection = "sbm"`
+/// (simplified Betts–Miller, `tau_convection` 2 h, `rh_convection` 0.7; not in TJ16).
 pub fn build(
     forcing: Option<&toml::Table>,
     planet: &Planet,
+    moisture: Option<&Condensable>,
 ) -> Result<Vec<Box<dyn ColumnPhysics>>, String> {
     let Some(f) = forcing else {
         return Ok(Vec::new());
@@ -108,8 +133,62 @@ pub fn build(
                 substellar_lon: num(f, "substellar_lon", 180.0)?.to_radians(),
             })])
         }
+        "moist_held_suarez" => {
+            let cond = moisture
+                .ok_or("forcing moist_held_suarez needs a [moisture] block")?
+                .clone();
+            let d = HeldSuarez::default();
+            let c_e = num(f, "c_e", 0.0044)?;
+            let sst = match f.get("sst_uniform") {
+                Some(_) => SurfaceTemperature::Uniform(num(f, "sst_uniform", 300.0)?),
+                None => SurfaceTemperature::Gaussian {
+                    delta_t: num(f, "sst_delta", 29.0)?,
+                    t_min: num(f, "sst_min", 271.0)?,
+                    width: num(f, "sst_width", 26.0)?.to_radians(),
+                },
+            };
+            let convection = f
+                .get("convection")
+                .and_then(|v| v.as_str())
+                .unwrap_or("none");
+            let mut schemes: Vec<Box<dyn ColumnPhysics>> = vec![
+                Box::new(HeldSuarez {
+                    damping: damping(f)?,
+                    delta_ty: num(f, "delta_ty", 65.0)?,
+                    delta_theta_z: num(f, "delta_theta_z", d.delta_theta_z)?,
+                    t_surface: num(f, "t_surface", 294.0)?,
+                    t_min: num(f, "t_min", d.t_min)?,
+                    p0: num(f, "p0", planet.p0)?,
+                }),
+                Box::new(LargeScaleCondensation { cond: cond.clone() }),
+                Box::new(SurfaceFluxes {
+                    cond,
+                    sst,
+                    c_h: num(f, "c_h", 0.0044)?,
+                    c_e,
+                }),
+                Box::new(BoundaryLayer {
+                    c_e,
+                    p_pbl: num(f, "p_pbl", 85000.0)?,
+                    p_strato: num(f, "p_strato", 10000.0)?,
+                    p0: num(f, "p0", planet.p0)?,
+                }),
+            ];
+            match convection {
+                "none" => {}
+                "sbm" | "simplified_betts_miller" => {
+                    schemes.push(Box::new(SimplifiedBettsMiller {
+                        cond: moisture.unwrap().clone(),
+                        tau: 1.0 / rate(f, "tau_convection", 1.0 / 7200.0)?,
+                        rh_ref: num(f, "rh_convection", 0.7)?,
+                    }))
+                }
+                other => return Err(format!("unknown convection {other:?} (none, sbm)")),
+            }
+            Ok(schemes)
+        }
         other => Err(format!(
-            "unknown forcing type {other:?} (none, held_suarez, tidally_locked)"
+            "unknown forcing type {other:?} (none, held_suarez, tidally_locked, moist_held_suarez)"
         )),
     }
 }
