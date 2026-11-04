@@ -15,6 +15,44 @@ use rayon::prelude::*;
 
 const ZERO: Complex = Complex { re: 0.0, im: 0.0 };
 
+/// (Σ_{i even} a_i t_i, Σ_{i odd} a_i t_i).
+#[inline]
+fn pair_dot(a: &[Complex], t: &[Real]) -> (Complex, Complex) {
+    let (mut er, mut ei, mut or, mut oi) = (0.0, 0.0, 0.0, 0.0);
+    let ac = a.chunks_exact(2);
+    let tc = t.chunks_exact(2);
+    let (ar, tr) = (ac.remainder(), tc.remainder());
+    for (x, y) in ac.zip(tc) {
+        er += x[0].re * y[0];
+        ei += x[0].im * y[0];
+        or += x[1].re * y[1];
+        oi += x[1].im * y[1];
+    }
+    if let (Some(x), Some(y)) = (ar.first(), tr.first()) {
+        er += x.re * y;
+        ei += x.im * y;
+    }
+    (Complex::new(er, ei), Complex::new(or, oi))
+}
+
+/// out_i += (i even ? e : o) · t_i.
+#[inline]
+fn pair_axpy(out: &mut [Complex], e: Complex, o: Complex, t: &[Real]) {
+    let mut oc = out.chunks_exact_mut(2);
+    let tc = t.chunks_exact(2);
+    let tr = tc.remainder();
+    for (x, y) in (&mut oc).zip(tc) {
+        x[0].re += e.re * y[0];
+        x[0].im += e.im * y[0];
+        x[1].re += o.re * y[1];
+        x[1].im += o.im * y[1];
+    }
+    if let (Some(x), Some(y)) = (oc.into_remainder().first_mut(), tr.first()) {
+        x.re += e.re * y;
+        x.im += e.im * y;
+    }
+}
+
 /// Precomputed tables and plans for one truncation, grid and planet radius.
 pub struct Transform {
     pub layout: Layout,
@@ -111,52 +149,50 @@ impl Transform {
 
     // ---------------------------------------------------------------- Legendre
 
+    /// Map over m = 0..=M, in parallel only for grids large enough to profit. Each m is
+    /// computed identically either way, so results do not depend on the thread count.
+    fn map_m<T: Send>(&self, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+        let m = self.mmax();
+        if self.ngrid() >= super::fft::PARALLEL_MIN_POINTS && rayon::current_num_threads() > 1 {
+            (0..=m).into_par_iter().map(f).collect()
+        } else {
+            (0..=m).map(f).collect()
+        }
+    }
+
     /// F_m(μ_j) = Σ_ℓ (a_ℓ^m P̄_ℓ^m(μ_j) + b_ℓ^m H_ℓ^m(μ_j)).
     fn legendre_synthesis(&self, a: Option<&[Complex]>, b: Option<&[Complex]>) -> Fourier {
         let mmax = self.mmax();
         let nm = mmax + 1;
         let nlat = self.nlat();
         let nhalf = self.nhalf;
-        let cols: Vec<Vec<Complex>> = (0..=mmax)
-            .into_par_iter()
-            .map(|m| {
-                let r = self.layout.m_range(m);
-                let nl = r.len();
-                let am = a.map(|x| &x[r.clone()]);
-                let bm = b.map(|x| &x[r.clone()]);
-                let (pm, hm) = (&self.p[m], &self.h[m]);
-                let mut col = vec![ZERO; nlat];
-                for j in 0..nhalf {
-                    let pj = &pm[j * nl..(j + 1) * nl];
-                    let hj = &hm[j * nl..(j + 1) * nl];
-                    // sym: even part about the equator; anti: odd part.
-                    let (mut sym, mut anti) = (ZERO, ZERO);
-                    if let Some(am) = am {
-                        for i in 0..nl {
-                            let t = am[i] * pj[i];
-                            if i % 2 == 0 {
-                                sym += t;
-                            } else {
-                                anti += t;
-                            }
-                        }
-                    }
-                    if let Some(bm) = bm {
-                        for i in 0..nl {
-                            let t = bm[i] * hj[i];
-                            if i % 2 == 0 {
-                                anti += t;
-                            } else {
-                                sym += t;
-                            }
-                        }
-                    }
-                    col[j] = sym + anti;
-                    col[nlat - 1 - j] = sym - anti;
+        let cols: Vec<Vec<Complex>> = self.map_m(|m| {
+            let r = self.layout.m_range(m);
+            let nl = r.len();
+            let am = a.map(|x| &x[r.clone()]);
+            let bm = b.map(|x| &x[r.clone()]);
+            let (pm, hm) = (&self.p[m], &self.h[m]);
+            let mut col = vec![ZERO; nlat];
+            for j in 0..nhalf {
+                let pj = &pm[j * nl..(j + 1) * nl];
+                let hj = &hm[j * nl..(j + 1) * nl];
+                // sym: even part about the equator; anti: odd part.
+                let (mut sym, mut anti) = (ZERO, ZERO);
+                if let Some(am) = am {
+                    let (e, o) = pair_dot(am, pj);
+                    sym += e;
+                    anti += o;
                 }
-                col
-            })
-            .collect();
+                if let Some(bm) = bm {
+                    let (e, o) = pair_dot(bm, hj);
+                    anti += e;
+                    sym += o;
+                }
+                col[j] = sym + anti;
+                col[nlat - 1 - j] = sym - anti;
+            }
+            col
+        });
         let mut f = vec![ZERO; nlat * nm];
         for (m, col) in cols.iter().enumerate() {
             for j in 0..nlat {
@@ -177,35 +213,26 @@ impl Transform {
         let nm = mmax + 1;
         let nlat = self.nlat();
         let nhalf = self.nhalf;
-        let blocks: Vec<Vec<Complex>> = (0..=mmax)
-            .into_par_iter()
-            .map(|m| {
-                let nl = mmax + 1 - m;
-                let (pm, hm) = (&self.p[m], &self.h[m]);
-                let mut out = vec![ZERO; nl];
-                for j in 0..nhalf {
-                    let s = nlat - 1 - j;
-                    let pj = &pm[j * nl..(j + 1) * nl];
-                    let hj = &hm[j * nl..(j + 1) * nl];
-                    let sc = scale[j];
-                    if let Some(x) = x {
-                        let (xn, xs) = (x[j * nm + m], x[s * nm + m]);
-                        let (e, o) = ((xn + xs) * sc, (xn - xs) * sc);
-                        for i in 0..nl {
-                            out[i] += if i % 2 == 0 { e } else { o } * pj[i];
-                        }
-                    }
-                    if let Some(y) = y {
-                        let (yn, ys) = (y[j * nm + m], y[s * nm + m]);
-                        let (e, o) = ((yn + ys) * sc, (yn - ys) * sc);
-                        for i in 0..nl {
-                            out[i] += if i % 2 == 0 { o } else { e } * hj[i];
-                        }
-                    }
+        let blocks: Vec<Vec<Complex>> = self.map_m(|m| {
+            let nl = mmax + 1 - m;
+            let (pm, hm) = (&self.p[m], &self.h[m]);
+            let mut out = vec![ZERO; nl];
+            for j in 0..nhalf {
+                let s = nlat - 1 - j;
+                let pj = &pm[j * nl..(j + 1) * nl];
+                let hj = &hm[j * nl..(j + 1) * nl];
+                let sc = scale[j];
+                if let Some(x) = x {
+                    let (xn, xs) = (x[j * nm + m], x[s * nm + m]);
+                    pair_axpy(&mut out, (xn + xs) * sc, (xn - xs) * sc, pj);
                 }
-                out
-            })
-            .collect();
+                if let Some(y) = y {
+                    let (yn, ys) = (y[j * nm + m], y[s * nm + m]);
+                    pair_axpy(&mut out, (yn - ys) * sc, (yn + ys) * sc, hj);
+                }
+            }
+            out
+        });
         blocks.concat()
     }
 

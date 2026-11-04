@@ -1,0 +1,16 @@
+# Williamson et al. (1992), test case 6: Rossby–Haurwitz wave, R = 4,
+# ω = K = 7.848e-6 s⁻¹, h0 = 8000 m. Unstable on long runs (Thuburn & Li 2000):
+# do not run beyond 14 days for acceptance.
+# Constants from SPEC.md (standard values); the original paper could not be fetched as
+# text in the 2026-11-04 session.
+description = "Williamson 1992 test 6: Rossby-Haurwitz wave R=4"
+model = "shallow_water"
+truncation = 42
+dt = "20min"
+length = "14day"
+output_every = "1day"
+output_fields = ["h", "vor", "u", "v"]
+initial_condition = { case = "williamson6" }
+
+[planet]
+preset = "earth"

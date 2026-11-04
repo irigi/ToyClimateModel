@@ -6,11 +6,15 @@
 // Casts like `x as f64` are no-ops in the default build but needed with `--features f32`.
 #![allow(clippy::unnecessary_cast)]
 
+pub mod build;
 pub mod config;
 pub mod grid;
 pub mod io;
+pub mod model;
 pub mod planet;
+pub mod shallow_water;
 pub mod spectral;
+pub mod time;
 pub mod util;
 
 pub use spectral::{Complex, Layout, Transform};

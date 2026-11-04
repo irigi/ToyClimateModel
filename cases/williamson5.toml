@@ -1,0 +1,16 @@
+# Williamson et al. (1992), test case 5: zonal flow over an isolated mountain.
+# u0 = 20 m/s, α = 0, h0 = 5960 m; mountain h_s = 2000 m (1 − r/R), R = π/9,
+# centre (λc, φc) = (3π/2, π/6) [= (−π/2, π/6)];
+# g(h + h_s) = g h0 − (aΩu0 + u0²/2) sin²φ.
+# Checked against Shipton et al. (2018), arXiv:1707.00855, §3.2.
+description = "Williamson 1992 test 5: flow over an isolated mountain"
+model = "shallow_water"
+truncation = 42
+dt = "20min"
+length = "15day"
+output_every = "1day"
+output_fields = ["eta", "h", "vor", "u", "v"]
+initial_condition = { case = "williamson5" }
+
+[planet]
+preset = "earth"

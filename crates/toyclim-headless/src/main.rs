@@ -6,9 +6,12 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+use toyclim_core::build::build_model;
 use toyclim_core::config::{Config, ModelKind};
 use toyclim_core::grid::GaussianGrid;
-use toyclim_core::io::{meta::RunMeta, npy};
+use toyclim_core::io::{meta::RunMeta, npy, restart};
+use toyclim_core::model::Model;
 
 #[derive(Parser)]
 #[command(name = "toyclim", version, about = "Toy spectral climate model")]
@@ -25,8 +28,14 @@ enum Cmd {
         config: PathBuf,
         #[arg(long)]
         out: PathBuf,
+        /// Continue from a restart directory (written as <out>/restart by a previous run).
+        #[arg(long)]
+        restart: Option<PathBuf>,
+        /// Override the run length (e.g. "2day").
+        #[arg(long)]
+        length: Option<String>,
     },
-    /// Benchmark a case (from M2).
+    /// Benchmark a case: steps without output, reports model days per wall second.
     Bench {
         #[arg(long)]
         config: PathBuf,
@@ -41,14 +50,23 @@ enum Cmd {
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     match Cli::parse().cmd {
-        Cmd::Run { config, out } => run(&config, &out),
-        Cmd::Bench { config } => {
-            let c = Config::from_file(&config)?;
-            bail!(
-                "bench is not implemented yet for model {:?}",
-                c.model.as_str()
-            )
+        Cmd::Run {
+            config,
+            out,
+            restart,
+            length,
+        } => {
+            let mut c = Config::from_file(&config)?;
+            if let Some(l) = length {
+                c.length = l.parse()?;
+            }
+            if c.model == ModelKind::Dummy {
+                run_dummy(&config, &out)
+            } else {
+                run_model(&c, &out, restart.as_deref())
+            }
         }
+        Cmd::Bench { config } => bench(&Config::from_file(&config)?),
         Cmd::ListCases { dir } => list_cases(&dir),
     }
 }
@@ -70,13 +88,9 @@ fn list_cases(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn run(config_path: &Path, out: &Path) -> Result<()> {
+fn run_dummy(config_path: &Path, out: &Path) -> Result<()> {
     let config = Config::from_file(config_path)?;
     let planet = config.planet.resolve()?;
-    match config.model {
-        ModelKind::Dummy => {}
-        other => bail!("model {:?} is not implemented yet", other.as_str()),
-    }
     let grid = GaussianGrid::for_truncation(config.truncation);
     log::info!(
         "{}: T{} grid {}x{}, planet {}",
@@ -151,4 +165,167 @@ fn dummy_field(name: &str, grid: &GaussianGrid, omega: f64, t: f64) -> Result<Ve
         }
     }
     Ok(out)
+}
+
+fn write_fields(model: &dyn Model, fields: &[String], dir: &Path) -> Result<()> {
+    let g = model.grid();
+    for f in fields {
+        let field = model
+            .field(f)
+            .with_context(|| format!("model {} has no field {f:?}", model.kind()))?;
+        let data32: Vec<f32> = field.data.iter().map(|&x| x as f32).collect();
+        let shape: Vec<usize> = if field.nlev == 1 {
+            vec![g.nlat, g.nlon]
+        } else {
+            vec![field.nlev, g.nlat, g.nlon]
+        };
+        npy::write(
+            &dir.join(format!("{f}_{:06}.npy", model.step_count())),
+            &data32,
+            &shape,
+        )?;
+    }
+    Ok(())
+}
+
+fn dump_restart(model: &dyn Model, config: &Config, dir: &Path) -> Result<()> {
+    let (arrays, scalars) = model.restart_state();
+    restart::write(dir, &arrays, &scalars, serde_json::to_value(config)?)?;
+    Ok(())
+}
+
+fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<()> {
+    let planet = config.planet.resolve()?;
+    let mut model = build_model(config).map_err(anyhow::Error::msg)?;
+    if let Some(dir) = restart_dir {
+        let r = restart::read(dir).with_context(|| format!("reading restart {}", dir.display()))?;
+        model
+            .load_restart_state(&r.arrays, &r.scalars)
+            .map_err(anyhow::Error::msg)?;
+        log::info!(
+            "restarted from {} at step {}",
+            dir.display(),
+            model.step_count()
+        );
+    }
+    let fields_dir = out.join("fields");
+    fs::create_dir_all(&fields_dir).with_context(|| format!("creating {}", out.display()))?;
+    let sigma = model.sigma();
+    let meta = RunMeta {
+        toyclim_version: env!("CARGO_PKG_VERSION"),
+        git_hash: env!("TOYCLIM_GIT_HASH"),
+        precision: RunMeta::precision(),
+        model: config.model.as_str(),
+        truncation: config.truncation,
+        grid: model.grid(),
+        sigma: &sigma,
+        planet: &planet,
+        output_interval_s: config.output_every.seconds(),
+        config: serde_json::to_value(config)?,
+    };
+    meta.write(&out.join("meta.json"))?;
+
+    let fields: Vec<String> = if config.output_fields.is_empty() {
+        model.field_names().iter().map(|s| s.to_string()).collect()
+    } else {
+        config.output_fields.clone()
+    };
+    let diag_path = out.join("diagnostics.csv");
+    let append = restart_dir.is_some() && diag_path.exists();
+    let mut diag = fs::OpenOptions::new()
+        .create(true)
+        .append(append)
+        .write(true)
+        .truncate(!append)
+        .open(&diag_path)?;
+    let header: Vec<&str> = model.diagnostics().iter().map(|(n, _)| *n).collect();
+    if !append {
+        writeln!(diag, "step,time_s,{}", header.join(","))?;
+    }
+    let write_diag = |model: &dyn Model, diag: &mut fs::File| -> Result<()> {
+        let vals: Vec<String> = model
+            .diagnostics()
+            .iter()
+            .map(|(_, v)| format!("{v:.17e}"))
+            .collect();
+        writeln!(
+            diag,
+            "{},{},{}",
+            model.step_count(),
+            model.time(),
+            vals.join(",")
+        )?;
+        Ok(())
+    };
+
+    let every = config.steps_per_output();
+    let total = config.total_steps();
+    if model.step_count() == 0 {
+        write_fields(model.as_ref(), &fields, &fields_dir)?;
+        write_diag(model.as_ref(), &mut diag)?;
+    }
+    let t0 = Instant::now();
+    let start_step = model.step_count();
+    while model.step_count() < total {
+        model.step();
+        let s = model.step_count();
+        if s % every == 0 || s == total {
+            if !model.is_finite() {
+                let crash = out.join("restart_crash");
+                dump_restart(model.as_ref(), config, &crash)?;
+                bail!(
+                    "non-finite state at step {s} (t = {:.3} d); state dumped to {}",
+                    model.time() / 86400.0,
+                    crash.display()
+                );
+            }
+            write_fields(model.as_ref(), &fields, &fields_dir)?;
+            write_diag(model.as_ref(), &mut diag)?;
+            let d = model.diagnostics();
+            let courant = d
+                .iter()
+                .find(|(n, _)| *n == "max_courant")
+                .map(|x| x.1)
+                .unwrap_or(f64::NAN);
+            log::info!(
+                "step {s:>7}  day {:>9.3}  max Courant {courant:.3}",
+                model.time() / 86400.0
+            );
+        }
+    }
+    let wall = t0.elapsed().as_secs_f64();
+    let days = (model.step_count() - start_step) as f64 * model.dt() / 86400.0;
+    log::info!(
+        "done: {days:.2} model days in {wall:.2} s wall ({:.2} model days / s)",
+        days / wall.max(1e-9)
+    );
+    dump_restart(model.as_ref(), config, &out.join("restart"))?;
+    Ok(())
+}
+
+fn bench(config: &Config) -> Result<()> {
+    let mut model = build_model(config).map_err(anyhow::Error::msg)?;
+    let total = config.total_steps();
+    let t0 = Instant::now();
+    for _ in 0..total {
+        model.step();
+    }
+    let wall = t0.elapsed().as_secs_f64();
+    let days = total as f64 * model.dt() / 86400.0;
+    println!(
+        "{} T{}: {total} steps, {days:.3} model days in {wall:.3} s -> {:.2} model days/s, {:.3} ms/step (threads: {})",
+        model.kind(),
+        config.truncation,
+        days / wall,
+        wall * 1e3 / total as f64,
+        rayon_threads()
+    );
+    if !model.is_finite() {
+        bail!("state became non-finite");
+    }
+    Ok(())
+}
+
+fn rayon_threads() -> String {
+    std::env::var("RAYON_NUM_THREADS").unwrap_or_else(|_| "default".into())
 }

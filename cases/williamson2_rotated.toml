@@ -1,0 +1,16 @@
+# Williamson, Drake, Hack, Jakob & Swarztrauber (1992), J. Comput. Phys. 102, 211–224,
+# test case 2: global steady-state nonlinear zonal geostrophic flow.
+# α = π/2 − 0.05; f = 2Ω(−cos λ cos φ sin α + sin φ cos α) as in the paper.
+# Constants checked against the restatement in Shipton, McRae, Cotter & Cotter (2018)
+# (arXiv:1707.00855); the original report on OSTI is a scan without text.
+description = "Williamson 1992 test 2: steady geostrophic flow, alpha = pi/2 - 0.05 (Coriolis rotated with the flow)"
+model = "shallow_water"
+truncation = 42
+dt = "30min"
+length = "5day"
+output_every = "1day"
+output_fields = ["h", "vor", "u", "v"]
+initial_condition = { case = "williamson2", alpha = 1.5207963267948966 }
+
+[planet]
+preset = "earth"
