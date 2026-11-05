@@ -22,7 +22,7 @@ output_fields = ["ts", "precip", "pw", "tas", "u850", "ps", "orog", "land", "buc
 initial_condition = { case = "jw06", perturbed = true }
 
 station_every = "1h"
-station_fields = ["precip", "ts", "t850", "u850"]
+station_fields = ["precip", "tas", "sfcwind", "uas", "vas", "ts", "ps"]
 
 [[stations]]
 name = "equator"

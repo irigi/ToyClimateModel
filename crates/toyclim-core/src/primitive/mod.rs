@@ -1148,7 +1148,8 @@ impl Model for Primitive {
     }
     fn field_names(&self) -> Vec<&'static str> {
         let mut v = vec![
-            "u", "v", "t", "vor", "div", "phi", "ps", "phis", "orog", "tas",
+            "u", "v", "t", "vor", "div", "phi", "ps", "phis", "orog", "tas", "uas", "vas",
+            "sfcwind",
         ];
         v.extend_from_slice(PRESSURE_FIELDS);
         if !self.curr.tracers.is_empty() {
@@ -1182,6 +1183,27 @@ impl Model for Primitive {
                 nlev: 1,
                 data: self.phis_grid.clone(),
             }),
+            // near-surface wind: the lowest model level [m/s] (≈ 60 m above the surface for
+            // the L26 levels; no reduction to 10 m)
+            "uas" | "vas" | "sfcwind" => {
+                let tr = &self.tr;
+                let k = self.nlev() - 1;
+                let (u, v) = tr.uv_from_vort_div(&self.curr.vor[k], &self.curr.div[k]);
+                let nlon = tr.nlon();
+                let mut out = Vec::with_capacity(tr.ngrid());
+                for j in 0..tr.nlat() {
+                    let c = (1.0 / (1.0 - tr.grid.mu[j] * tr.grid.mu[j]).sqrt()) as Real;
+                    for i in 0..nlon {
+                        let (uu, vv) = (u[j * nlon + i] * c, v[j * nlon + i] * c);
+                        out.push(match name {
+                            "uas" => uu,
+                            "vas" => vv,
+                            _ => (uu * uu + vv * vv).sqrt(),
+                        });
+                    }
+                }
+                Some(GridField { nlev: 1, data: out })
+            }
             // near-surface air temperature: the lowest model level [K]
             "tas" => Some(GridField {
                 nlev: 1,
