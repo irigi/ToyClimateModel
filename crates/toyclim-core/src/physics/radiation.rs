@@ -32,6 +32,38 @@ pub struct GrayRadiation {
     pub albedo: f64,
     /// Surface temperature used when the model has no prognostic surface \[K\].
     pub t_surface_default: f64,
+    /// Diagnostic clouds (M10, experimental): None = off.
+    pub clouds: Option<Clouds>,
+}
+
+/// Diagnostic relative-humidity clouds for the gray scheme (experimental, untuned):
+/// fraction c = clamp((RH − RH_c)/(1 − RH_c), 0, 1)² per level; a cloudy layer reflects a
+/// fraction `sw_reflect`·c of the downward shortwave to space and adds `lw_tau`·c to the
+/// layer's longwave optical depth. Diagnostic `cloud_cover` (random overlap).
+#[derive(Debug, Clone)]
+pub struct Clouds {
+    pub cond: super::moist::Condensable,
+    pub rh_crit: f64,
+    pub sw_reflect: f64,
+    pub lw_tau: f64,
+}
+
+impl Clouds {
+    fn fractions(&self, planet: &Planet, col: &ColumnIn) -> Vec<f64> {
+        let l = col.t.len();
+        if col.tracers.len() < l {
+            return vec![0.0; l];
+        }
+        (0..l)
+            .map(|k| {
+                let p = col.sigma[k] as f64 * col.ps as f64;
+                let rh = col.tracers[k] as f64 / self.cond.qsat(planet, col.t[k] as f64, p);
+                ((rh - self.rh_crit) / (1.0 - self.rh_crit))
+                    .clamp(0.0, 1.0)
+                    .powi(2)
+            })
+            .collect()
+    }
 }
 
 impl Default for GrayRadiation {
@@ -44,6 +76,7 @@ impl Default for GrayRadiation {
             tau_sw: 0.22,
             albedo: 0.3,
             t_surface_default: 288.0,
+            clouds: None,
         }
     }
 }
@@ -53,7 +86,11 @@ impl ColumnPhysics for GrayRadiation {
         "gray_radiation"
     }
     fn diagnostic_names(&self) -> Vec<&'static str> {
-        vec!["olr", "asr", "sw_sfc_down", "lw_sfc_down"]
+        let mut v = vec!["olr", "asr", "sw_sfc_down", "lw_sfc_down"];
+        if self.clouds.is_some() {
+            v.push("cloud_cover");
+        }
+        v
     }
     fn tendencies(&self, planet: &Planet, col: &ColumnIn, out: &mut ColumnOut) {
         let l = col.t.len();
@@ -62,8 +99,15 @@ impl ColumnPhysics for GrayRadiation {
         let lat = col.lat as f64;
         let tau0 = self.tau_eq + (self.tau_pole - self.tau_eq) * lat.sin().powi(2);
         // LW optical depth at half levels (0 at the top)
+        let cf = match &self.clouds {
+            Some(c) => c.fractions(planet, col),
+            None => vec![0.0; l],
+        };
+        let lw_cloud = self.clouds.as_ref().map_or(0.0, |c| c.lw_tau);
+        let sw_reflect = self.clouds.as_ref().map_or(0.0, |c| c.sw_reflect);
         let mut tau = vec![0.0; l + 1];
         let mut vapour_above = 0.0;
+        let mut cloud_tau_above = 0.0;
         for k in 0..=l {
             let s = col.sigma_half[k] as f64;
             if k > 0 && self.tau_q > 0.0 && col.tracers.len() >= l {
@@ -72,8 +116,12 @@ impl ColumnPhysics for GrayRadiation {
                     * ps
                     / g;
             }
+            if k > 0 {
+                cloud_tau_above += lw_cloud * cf[k - 1];
+            }
             tau[k] = tau0 * (self.f_linear * s + (1.0 - self.f_linear) * s.powi(4))
-                + self.tau_q * vapour_above;
+                + self.tau_q * vapour_above
+                + cloud_tau_above;
         }
         let ts = col
             .t_surface
@@ -100,24 +148,34 @@ impl ColumnPhysics for GrayRadiation {
         // shortwave: downward beam along the slant path
         let s0 = col.insolation as f64;
         let mu = (col.cos_zenith as f64).max(0.05);
+        // downward beam: absorption (heats the layer) then cloud reflection (leaves to space)
         let mut sw = vec![0.0; l + 1];
-        for k in 0..=l {
-            let s = col.sigma_half[k] as f64;
-            sw[k] = s0 * (-(self.tau_sw * s * s) / mu).exp();
+        let mut sw_abs = vec![0.0; l];
+        let mut reflected = 0.0;
+        sw[0] = s0;
+        for k in 0..l {
+            let (s1, s2) = (col.sigma_half[k] as f64, col.sigma_half[k + 1] as f64);
+            let after = sw[k] * (-(self.tau_sw * (s2 * s2 - s1 * s1)) / mu).exp();
+            sw_abs[k] = sw[k] - after;
+            let r = sw_reflect * cf[k] * after;
+            reflected += r;
+            sw[k + 1] = after - r;
         }
         let sw_sfc = sw[l];
         let albedo = col.surface_albedo.map(|a| a as f64).unwrap_or(self.albedo);
         let sw_sfc_abs = sw_sfc * (1.0 - albedo);
         // heating: net downward flux F = SW_down − (U − D); layer gains F(top) − F(bottom)
         for k in 0..l {
-            let f_top = sw[k] - (up[k] - down[k]);
-            let f_bot = sw[k + 1] - (up[k + 1] - down[k + 1]);
+            let lw_net = (up[k + 1] - down[k + 1]) - (up[k] - down[k]);
             let dp = (col.sigma_half[k + 1] - col.sigma_half[k]) as f64 * ps;
-            out.dt[k] += (g / (planet.cp * dp) * (f_top - f_bot)) as Real;
+            out.dt[k] += (g / (planet.cp * dp) * (sw_abs[k] + lw_net)) as Real;
         }
         *out.surface_heat += (sw_sfc_abs + down[l] - up[l]) as Real;
         out.diag[0] += up[0] as Real;
-        out.diag[1] += (s0 - albedo * sw_sfc) as Real;
+        out.diag[1] += (s0 - albedo * sw_sfc - reflected) as Real;
+        if self.clouds.is_some() {
+            out.diag[4] += (1.0 - cf.iter().map(|c| 1.0 - c).product::<f64>()) as Real;
+        }
         out.diag[2] += sw_sfc as Real;
         out.diag[3] += down[l] as Real;
     }

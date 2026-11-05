@@ -88,6 +88,10 @@ const KNOWN: &[&str] = &[
     "tau_q",
     "tau_sw",
     "albedo",
+    "clouds",
+    "cloud_rh_crit",
+    "cloud_sw_reflect",
+    "cloud_lw_tau",
 ];
 
 /// Build the column physics named in the `[forcing]` block (none → adiabatic).
@@ -110,7 +114,9 @@ const KNOWN: &[&str] = &[
 /// `[orbit]` insolation, moist physics as above with SBM convection by default
 /// (`convection = "none"` to disable), boundary-layer Rayleigh drag. Use with a
 /// `[surface]` slab ocean; without one the surface is held at `sst_uniform` (288 K) for
-/// radiation and at the TJ16 SST for the surface fluxes.
+/// radiation and at the TJ16 SST for the surface fluxes. Experimental diagnostic clouds:
+/// `clouds = true` (`cloud_rh_crit` 0.8, `cloud_sw_reflect` 0.25, `cloud_lw_tau` 3); then
+/// use an ocean-like `albedo` (≈ 0.1) since clouds provide the planetary albedo.
 pub fn build(
     forcing: Option<&toml::Table>,
     planet: &Planet,
@@ -218,6 +224,15 @@ pub fn build(
                     tau_sw: num(f, "tau_sw", rd.tau_sw)?,
                     albedo: num(f, "albedo", rd.albedo)?,
                     t_surface_default: num(f, "sst_uniform", rd.t_surface_default)?,
+                    clouds: match f.get("clouds").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        false => None,
+                        true => Some(radiation::Clouds {
+                            cond: cond.clone(),
+                            rh_crit: num(f, "cloud_rh_crit", 0.8)?,
+                            sw_reflect: num(f, "cloud_sw_reflect", 0.25)?,
+                            lw_tau: num(f, "cloud_lw_tau", 3.0)?,
+                        }),
+                    },
                 }),
                 Box::new(LargeScaleCondensation { cond: cond.clone() }),
                 Box::new(SurfaceFluxes {

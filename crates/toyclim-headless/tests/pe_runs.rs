@@ -212,6 +212,16 @@ type = "gray_aquaplanet"
 /// accounting errors between radiation, surface fluxes, condensation and the slab.
 #[test]
 fn coupled_energy_budget_closes() {
+    energy_budget("", "plain");
+}
+
+/// Same with the experimental diagnostic clouds.
+#[test]
+fn coupled_energy_budget_closes_with_clouds() {
+    energy_budget("clouds = true\nalbedo = 0.1\n", "clouds");
+}
+
+fn energy_budget(extra_forcing: &str, tag: &str) {
     let cfg_text = r#"
 model = "primitive"
 truncation = 21
@@ -232,13 +242,10 @@ preset = "earth"
 [forcing]
 type = "gray_aquaplanet"
 "#;
-    let cfg = tmp("energy.toml");
-    std::fs::write(
-        &cfg,
-        cfg_text.replace("output_fields = []", "output_fields = [\"ts\"]"),
-    )
-    .unwrap();
-    let out = tmp("energy");
+    let cfg = tmp(&format!("energy_{tag}.toml"));
+    let text = cfg_text.replace("output_fields = []", "output_fields = [\"ts\"]") + extra_forcing;
+    std::fs::write(&cfg, text).unwrap();
+    let out = tmp(&format!("energy_{tag}"));
     run(&cfg, &out, "4", &[]);
     let text = std::fs::read_to_string(out.join("diagnostics.csv")).unwrap();
     let mut lines = text.lines();
@@ -260,7 +267,7 @@ type = "gray_aquaplanet"
         .map(|r| r[ia] - r[io] - r[is])
         .sum::<f64>()
         / (rows.len() - start - 1) as f64;
-    eprintln!("atmospheric energy tendency {de:.2} W/m², net forcing {forcing:.2} W/m²");
+    eprintln!("[{tag}] atmospheric energy tendency {de:.2} W/m², net forcing {forcing:.2} W/m²");
     assert!(
         (de - forcing).abs() < 3.0,
         "energy budget residual {:.2} W/m²",
