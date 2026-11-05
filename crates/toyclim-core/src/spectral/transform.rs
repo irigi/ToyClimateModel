@@ -18,16 +18,15 @@ const ZERO: Complex = Complex { re: 0.0, im: 0.0 };
 /// out_i += (i even ? e : o) · t_i.
 #[inline]
 fn pair_axpy(out: &mut [Complex], e: Complex, o: Complex, t: &[Real]) {
-    let mut oc = out.chunks_exact_mut(2);
-    let tc = t.chunks_exact(2);
-    let tr = tc.remainder();
-    for (x, y) in (&mut oc).zip(tc) {
+    let (oc, orem) = out.as_chunks_mut::<2>();
+    let (tc, trem) = t.as_chunks::<2>();
+    for (x, y) in oc.iter_mut().zip(tc) {
         x[0].re += e.re * y[0];
         x[0].im += e.im * y[0];
         x[1].re += o.re * y[1];
         x[1].im += o.im * y[1];
     }
-    if let (Some(x), Some(y)) = (oc.into_remainder().first_mut(), tr.first()) {
+    if let (Some(x), Some(y)) = (orem.first_mut(), trem.first()) {
         x.re += e.re * y;
         x.im += e.im * y;
     }

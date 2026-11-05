@@ -4,5 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 cargo fmt --all --check
 cargo clippy -q --workspace --all-targets -- -D warnings
+# CI uses the latest stable toolchain, whose clippy may have newer lints.
+for tc in $(rustup toolchain list 2>/dev/null | awk '{print $1}' | grep -E '^1\.(9[8-9]|[1-9][0-9]{2})' || true); do
+  echo "clippy with $tc"
+  cargo "+$tc" clippy -q --workspace --all-targets -- -D warnings
+done
 cargo test -q --release --workspace
 echo "check: OK"

@@ -58,7 +58,9 @@ pub fn read(dir: &Path) -> std::io::Result<Restart> {
             return Err(bad("restart array shape"));
         }
         let data = flat
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| Complex::new(c[0] as Real, c[1] as Real))
             .collect();
         arrays.push((name.to_string(), data));
