@@ -15,6 +15,8 @@ Everything is on branch `claude/busy-gauss-sqdo0s`, committed in small steps.
   (orbit, gray radiation), M9 (slab ocean, heightmap continents, bucket, ice albedo, q-flux)
   and M11 tools (Köppen, downscaling with lapse rate and Smith–Barstad orographic rain,
   stochastic point rain, layer export). Please confirm or redirect.
+- Also: global energy-budget test of the coupled model (closes to 1.1 W/m²), experimental
+  diagnostic clouds (opt-in), slab-ocean heat transport.
 - Your main deliverables now work end to end on a T21 smoke run of a procedural world
   (`cases/testworld_t21.toml`): hourly station series → rain/wind/temperature
   distributions per calendar month (`tools/station_stats.py --by-month`,
@@ -60,7 +62,7 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M7 Moisture | implemented (tracer, fixers, TJ16 moist HS physics, SBM convection); cloud smoke runs OK; T42 runs pending on laptop |
 | M8 Radiation/insolation | first step: orbit (Kepler, obliquity, diurnal/daily mean, tidal locking), gray two-stream radiation, calendar |
 | M9 Surface | first step: slab ocean, heightmap orography (filtered), land with bucket hydrology, ice/snow albedo switch |
-| M10 Clouds | not started |
+| M10 Clouds | experimental diagnostic RH clouds in the gray scheme (opt-in, untuned) |
 | M11 Downscaling/biomes | first step (Python): Köppen, lapse-rate downscaling, Smith–Barstad orographic rain, point-rain generator, layer export |
 | M12 Validation | not started |
 
@@ -459,6 +461,29 @@ redirect.**
 **Bug fixed on the way**: SBM parcel ascent detected the lifting condensation level only at
 sub-step ends, so the parcel profile depended on the sub-step count by up to 0.35 K. Now the
 LCL is located by bisection; one RK4 sub-step agrees with 32 to 0.001 K (8× cheaper too).
+
+## 2026-11-05 (night, cont.) — energy budget check, M10 experimental clouds, q-flux
+
+- **Global energy-budget integration test** (`coupled_energy_budget_closes`, T21 L10, gray
+  aquaplanet with slab, 30 days, diagnostics every step): d/dt ∫(c_p T + Φ_s + E + L q) dm
+  matches ⟨ASR − OLR − F_sfc⟩ within **1.1 W m⁻²** (−22.2 vs −23.3 W m⁻²); with clouds
+  −14.5 vs −15.6 W m⁻². The residual is the frictional/diffusive dissipation not returned
+  as heat. This validates the signs and bookkeeping of radiation, surface fluxes,
+  condensation and the slab together.
+- Found and fixed while writing it: the diagnostics set grew after step 0 (`surface_heat`
+  appeared only after the first physics call), which would have written rows with more
+  columns than the CSV header. Names are now fixed for the whole run and the runner
+  refuses a changing set. New diagnostics: `latent_energy` (∫ L q dm), `surface_heat`.
+- **M10 (experimental, opt-in)**: diagnostic RH clouds in the gray scheme
+  (`clouds = true`; fraction ((RH − 0.8)/0.2)², SW reflection 0.25·c per layer, LW optical
+  depth 3·c per layer, `cloud_cover` diagnostic). Untuned: with clouds, set an ocean-like
+  `albedo` (≈ 0.1) and expect to tune.
+- **Ocean heat transport** for the slab (`ocean_heat_transport = Q0`, Merlis et al. 2013 form,
+  φ0 = 16°, zero ocean mean); Q0 = 50 W m⁻² in the T42 world cases.
+- Calendar alignment: Earth-like T42 cases start on 1 January (`start_solar_longitude = 280`).
+- Note: the T21 smoke runs `gray_t21` and `testworld_t21` were continued from restarts with
+  a newer binary (ice–albedo switch and the SBM LCL fix took effect from day 365); their
+  numbers are illustrative only.
 
 ---
 
