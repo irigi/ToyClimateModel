@@ -485,6 +485,19 @@ LCL is located by bisection; one RK4 sub-step agrees with 32 to 0.001 K (8× che
   a newer binary (ice–albedo switch and the SBM LCL fix took effect from day 365); their
   numbers are illustrative only.
 
+## 2026-11-05 (night, cont.) — f32 smoke check, winds, CI lint fix
+
+- **f32 vs f64**, HS T21 L10 300 days (stats days 100–300), cloud VM 4 vCPU:
+  jets 29.75/29.72 m/s (f32) vs 30.01/29.13 m/s (f64), all at 41–53° (f64 NH maximum at the
+  top level σ = 0.05 again, see M5 note); lowest-level [u] tropics −4.11 vs −4.01 m/s,
+  midlatitudes 4.02 vs 4.10 m/s; asymmetry 2.67 vs 3.03 m/s. Wall time 26.9 s vs 31.4 s
+  (**speedup 1.17×**). The formal M6 check (T42 L20 jets in f32) stays on the laptop list.
+- Near-surface wind fields `uas`, `vas`, `sfcwind` (lowest model level ≈ 60 m for L26, not
+  reduced to 10 m); the world cases record precip, tas, sfcwind, uas, vas, ts, ps at stations.
+- CI uses the latest stable Rust (1.99), whose clippy flags `chunks_exact(2)`; replaced by
+  `as_chunks::<2>()` (stable since 1.88). `scripts/check` also runs clippy with any newer
+  installed toolchain.
+
 ---
 
 ## Laptop checklist (things the cloud session could not do)
