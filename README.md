@@ -98,11 +98,17 @@ with a bucket model. See `docs/progress.md` for what is validated and what is no
 
 ## Viewer
 
-Install Godot 4.5 or newer, then:
+Needs Godot 4.3 or newer. By default `./run` targets a **double-precision** Godot build
+(the owner's): it dumps that binary's API once, builds `toyclim-godot` against it, copies
+the library to `godot/bin/` and opens the viewer. For a stock Godot download use
+`./run --single`. The binary is `$GODOT4_BINARY`, else `~/.local/bin/godot4`, else
+`godot4`/`godot` on `PATH`.
 
 ```bash
-./run
+./run -- --case=galewsky --field=vor --run
 ```
 
-This builds `toyclim-godot` in release mode and opens `godot/`. Set `GODOT=/path/to/godot`
-if the binary is not on `PATH`. (Until M3 the viewer only checks that the extension loads.)
+Viewer options after `--`: `--case=<name in cases/ or path>`, `--field=`, `--level=`,
+`--run`, `--sps=<steps per second>`, `--map`, `--screenshot=<png> --after=<seconds>`.
+Keys: space run/pause, M map/globe; drag rotates, wheel zooms. Headless check:
+`godot4 --headless --path godot --quit-after 600` (after `./run --build-only`).

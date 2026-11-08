@@ -5,7 +5,13 @@ config_version=5
 
 config/name="toyclim viewer"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.5")
+config/features=PackedStringArray("4.3")
+run/max_fps=60
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
 
 [rendering]
 
