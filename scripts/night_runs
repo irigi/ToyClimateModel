@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Overnight acceptance/world runs on the laptop (progress.md "Laptop checklist" items 3, 4, 6, 7).
+# Three lanes of 4 threads each (12 of 16 threads; the rest stays free for the owner).
+# Each step logs to out/night/<lane>.log; a failing step does not stop its lane.
+# Usage: scripts/night_runs            (results in out/, figures in docs/figures/)
+set -u
+cd "$(dirname "$0")/.."
+export RAYON_NUM_THREADS=4
+B=target/release/toyclim
+F32=target/f32/release/toyclim
+L=out/night; mkdir -p "$L" docs/figures/M5 docs/figures/M7 docs/figures/M9
+PY="python3"
+
+step() { # lane name cmd...
+  local lane=$1 name=$2; shift 2
+  local t0=$(date +%s)
+  echo "[$(date +%F' '%T)] START $name" >> "$L/$lane.log"
+  "$@" >> "$L/$lane.$name.out" 2>&1; local rc=$?
+  echo "[$(date +%F' '%T)] END   $name rc=$rc wall=$(( $(date +%s)-t0 ))s" >> "$L/$lane.log"
+}
+run() { step "$1" "run_$2" $B run --config cases/$3.toml --out out/$2 "${@:4}"; }
+
+laneA() { # ~4 h: 10-year gray aquaplanet
+  run A gray_aquaplanet gray_aquaplanet
+  step A an_gray_aquaplanet bash -c "$PY tools/moist_stats.py out/gray_aquaplanet -o docs/figures/M9/gray_aquaplanet_moist.png; \
+    $PY tools/koppen.py out/gray_aquaplanet -o docs/figures/M9/gray_aquaplanet_koppen.png; \
+    $PY tools/zonal_mean.py out/gray_aquaplanet -o docs/figures/M9/gray_aquaplanet_zonal_mean.png"
+}
+laneB() { # ~5.5 h: worlds
+  run B testworld testworld
+  step B an_testworld bash -c "$PY tools/koppen.py out/testworld -o docs/figures/M9/testworld_t42_koppen.png; \
+    $PY tools/moist_stats.py out/testworld -o docs/figures/M9/testworld_t42_moist.png; \
+    $PY tools/downscale.py out/testworld worlds/testworld.npy --orographic -o docs/figures/M9/testworld_t42_downscaled.png; \
+    $PY tools/export_layers.py out/testworld --outdir out/testworld/layers; \
+    $PY tools/station_stats.py out/testworld precip --by-month -o docs/figures/M9/testworld_t42_precip_stations.png; \
+    $PY tools/station_stats.py out/testworld sfcwind --by-month -o docs/figures/M9/testworld_t42_wind_stations.png; \
+    $PY tools/station_stats.py out/testworld tas --by-month -o docs/figures/M9/testworld_t42_tas_stations.png; \
+    $PY tools/point_rain.py out/testworld --by-month"
+  run B tidally_locked_gray tidally_locked_gray
+  step B an_tidally_locked_gray bash -c "$PY tools/moist_stats.py out/tidally_locked_gray -o docs/figures/M9/tidally_locked_gray_moist.png; \
+    $PY tools/tidally_locked.py out/tidally_locked_gray -o docs/figures/M9/tidally_locked_gray.png"
+  run B moist_held_suarez_sbm moist_held_suarez_sbm
+  step B an_mhs_sbm bash -c "$PY tools/moist_stats.py out/moist_held_suarez_sbm -o docs/figures/M7/mhs_sbm_t42_moist.png; \
+    $PY tools/zonal_mean.py out/moist_held_suarez_sbm -o docs/figures/M7/mhs_sbm_t42_zonal_mean.png"
+}
+laneC() { # ~4 h: dry acceptance (M5/M6) and moist HS
+  run C hs held_suarez
+  step C an_hs $PY tools/zonal_mean.py out/hs -o docs/figures/M5/hs_t42l20_zonal_mean.png
+  for c in tidally_locked tidally_locked_omega01 tidally_locked_omega002; do
+    run C $c $c; step C an_$c $PY tools/tidally_locked.py out/$c -o docs/figures/M5/$c.png
+  done
+  for c in held_suarez_omega025 held_suarez_omega2; do
+    run C $c $c; step C an_$c $PY tools/zonal_mean.py out/$c -o docs/figures/M5/$c.png
+  done
+  run C moist_held_suarez moist_held_suarez
+  step C an_mhs bash -c "$PY tools/moist_stats.py out/moist_held_suarez -o docs/figures/M7/mhs_t42_moist.png; \
+    $PY tools/zonal_mean.py out/moist_held_suarez -o docs/figures/M7/mhs_t42_zonal_mean.png"
+  step C build_f32 cargo build --release -p toyclim-headless --features f32 --target-dir target/f32
+  step C run_hs_f32 $F32 run --config cases/held_suarez.toml --out out/hs_f32
+  step C an_hs_f32 $PY tools/zonal_mean.py out/hs_f32 -o docs/figures/M5/hs_t42l20_f32_zonal_mean.png
+}
+laneD() { # after A and C: timing and long tests on a quieter machine
+  step D bench8_f64 env RAYON_NUM_THREADS=8 $B bench --config cases/held_suarez.toml --length 365day
+  step D bench8_f32 env RAYON_NUM_THREADS=8 $F32 bench --config cases/held_suarez.toml --length 365day
+  step D tests_ignored env RAYON_NUM_THREADS=8 cargo test --release -- --ignored
+}
+
+echo "[$(date +%F' '%T)] night_runs start, $(git rev-parse --short HEAD)" > "$L/summary.log"
+laneA & a=$!; laneB & b=$!; laneC & c=$!
+wait $a $c; laneD
+wait $b
+grep -h 'END' "$L"/?.log >> "$L/summary.log"
+echo "[$(date +%F' '%T)] night_runs done" >> "$L/summary.log"
