@@ -57,9 +57,9 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M2 Shallow water | done |
 | M3 Godot viewer | done 2026-11-08 on the laptop: headless check passes in the owner's double-precision Godot 4.3; globe/map/UI viewer |
 | M4 Primitive equations | done (tests 1–3 pass, test 4 recorded at T85) |
-| M5 Held–Suarez / tidally locked | implemented; cloud smoke runs at T21 L10 qualitatively right; acceptance runs (T42 L20, 800–1200 days) pending on laptop |
-| M6 Performance/robustness | determinism + restart tests pass; f32 builds; budget met in cloud; viewer PE level selection in Rust API; f32 HS jet check pending (laptop) |
-| M7 Moisture | implemented (tracer, fixers, TJ16 moist HS physics, SBM convection); cloud smoke runs OK; T42 runs pending on laptop |
+| M5 Held–Suarez / tidally locked | done 2026-11-12: HS T42 L20 1200 d meets all jet criteria; tidally locked and rotation sweeps recorded |
+| M6 Performance/robustness | budget met on the laptop (1 model year in 290 s on 8 threads); f32 HS: jets OK, hemispheric asymmetry 3.19 m/s > 3 (open question 3) |
+| M7 Moisture | implemented; T42 L26 1080-d moist HS runs with and without SBM done 2026-11-12 (P = E to 0.1%) |
 | M8 Radiation/insolation | first step: orbit (Kepler, obliquity, diurnal/daily mean, tidal locking), gray two-stream radiation, calendar |
 | M9 Surface | first step: slab ocean, heightmap orography (filtered), land with bucket hydrology, ice/snow albedo switch |
 | M10 Clouds | experimental diagnostic RH clouds in the gray scheme (opt-in, untuned) |
@@ -546,11 +546,90 @@ viewer extras (wind particles, σ value of the selected level) later.
 
 ---
 
+## 2026-11-12 — Overnight acceptance and world runs on the laptop (branch `m5-laptop-long-runs`)
+
+Laptop checklist items 3, 4, 6 and 7 run unattended with `scripts/night_runs` (new): three
+lanes × 4 threads (12 of 16), analysis tools run after each case, then timing and the
+`--ignored` tests. Started 2026-11-11 20:29, finished 02:54; 27 of 28 steps rc = 0. Logs in
+`out/night/` (not committed). New case `cases/moist_held_suarez_sbm.toml` (T42 L26 moist HS +
+SBM convection, otherwise identical to `moist_held_suarez.toml`). Commit b7d4e0a for all runs.
+
+**M5 acceptance — HS T42 L20, 1200 days** (`zonal_mean.py`, samples from day 200)
+
+| quantity | measured | criterion |
+|---|---|---|
+| NH / SH jet | 33.72 m/s at 43.3°, σ 0.225 / 32.20 m/s at −43.3°, σ 0.225 | 26–34 m/s, 38–50°, σ 0.15–0.35 ✅ |
+| lowest-level [u] | tropics −5.66, midlatitudes +4.31 m/s | easterlies / westerlies ✅ |
+| hemispheric asymmetry | 2.13 m/s | < 3 m/s ✅ |
+| KE trend | −1.52 % (mean 6.80e20 J) | < 5 % ✅ |
+
+Hadley cells 9.85e10 / 9.75e10 kg/s at ±12.6°, edge ≈ 29°. Wall 1737 s (4 threads, machine shared).
+
+**Rotation sweep (HS, 800 days)**: Ω/Ω⊕ = 0.25 (T42): jets 51.9 / 52.8 m/s at ±54.4°, Hadley
+1.71e11 kg/s, edge 38–40°. Ω/Ω⊕ = 2 (T85, Δt 10 min, 11887 s wall): jets 25.7 / 24.5 m/s at
+27.3° / −24.5°, Hadley 5.1e10 / 4.7e10 kg/s, edge 19–20°. One jet per hemisphere in all
+three runs; jets move poleward and the Hadley cell widens as Ω decreases, as expected. (KE
+trends 10.3 % / 6.6 % over the 600-day window; the < 5 % criterion is for the 1200-day HS run.)
+
+**Tidally locked, T42 L20, 800 days** (`tidally_locked.py`)
+
+| Ω/Ω⊕ | equatorial [u] above σ 0.5 (mean) | t850 day−night | t500 day−night |
+|---|---|---|---|
+| 1 | +22.2 m/s, max 36.7 at σ 0.32 (superrotating ✅) | 9.1 K | 6.0 K |
+| 0.1 | +17.4 m/s | 6.1 K | 2.3 K |
+| 0.02 | +7.5 m/s | 3.7 K | 0.3 K |
+
+At slow rotation the free-troposphere contrast is much weaker than near the surface (weak
+temperature gradient regime) ✅.
+
+**M6**: `toyclim bench --config cases/held_suarez.toml --length 365day` on 8 threads:
+f64 289.6 s (1.26 model days/s, 11.0 ms/step) ✅ budget ≤ 10 min; f32 220.9 s (8.4 ms/step,
+speedup 1.31×). f32 HS 1200 d: jets 32.64 m/s at 43.3° σ 0.225 / 32.20 m/s at −43.3°, surface
+−5.65 / +4.55 m/s, KE trend +1.06 % — but hemispheric asymmetry **3.19 m/s > 3 m/s** ❌
+(open question 3).
+`cargo test --release -- --ignored` (8 threads): 6/6 pass in 79 s (williamson2 convergence,
+Galewsky unperturbed T85, Williamson 5 T85, PE conservation 30 d, linear gravity waves,
+JW steady state T85).
+
+**M7 — moist HS T42 L26, 1080 days** (samples from day 180)
+
+| | P = E (mm/day) | max zonal P | PW | jets | asymmetry | KE trend |
+|---|---|---|---|---|---|---|
+| TJ16 large-scale only | 1.909 | 10.07 at 1.4° | 19.72 mm | 58.3 / 57.9 m/s at ~30°, σ 0.19 | 1.77 | 0.50 % |
+| + SBM convection | 2.168 | 12.07 at 1.4° | 20.05 mm | 60.2 / 61.1 m/s at 29.3°, σ 0.16 | 1.08 | 0.88 % |
+
+Wall 3162 s / 5690 s.
+
+**Worlds (M8/M9 first steps)**
+- Gray aquaplanet, 10 years (19372 s wall): P = E = 3.45 mm/day, PW 27.6 mm, zonal P max
+  7.77 mm/day at 9.8° (seasonal ITCZ). Köppen: Aw 20 %, Cfa 18 %, Cfb 17 %, Am 12 %, BSh 5 %, D 7 %.
+- Testworld, 4 years (7790 s): P = E = 3.10 mm/day, PW 25.9 mm, zonal P max 7.06 mm/day at
+  12.6°. Köppen (grid): Aw 15 %, BWh 10 %, BSh 9 %, Cfa 8 %, Csa 7 %, Cfb 7 %, Am 7 %, Dsa 5 %.
+  Downscaled map, exported layers (`out/testworld/layers`), monthly station distributions of
+  precip/sfcwind/tas and point-rain statistics all produced.
+- Tidally locked gray, 3 years (6008 s): run OK, `moist_stats.py` OK; `tidally_locked.py`
+  fails because the case's climatology has no `t500` map (as the checklist warned).
+
+**Figures**: `docs/figures/M5/` (hs_t42l20_zonal_mean, hs_t42l20_f32_zonal_mean,
+held_suarez_omega025/2, tidally_locked, _omega01, _omega002), `docs/figures/M7/`
+(mhs_t42_*, mhs_sbm_t42_*), `docs/figures/M9/` (gray_aquaplanet_*, testworld_t42_*,
+tidally_locked_gray_moist).
+
+**Not done / next**
+- The figures were produced by the tools but not inspected in this session (token budget);
+  look at them before reading too much into the world climates.
+- Add t500/t850/u850/v850 maps to `cases/tidally_locked_gray.toml` and rerun (~1.7 h).
+- Laptop checklist items 2 (paper constants) and 5 (SpeedyWeather/Isca reference) remain.
+
+**Open questions**: 3 (new, below).
+
+---
+
 ## Laptop checklist (things the cloud session could not do)
 
 1. ~~**Godot integration**~~ — done 2026-11-08 (M3 entry below).
 2. Re-check Williamson test 6 and Galewsky constants against the original papers.
-3. **Acceptance runs** (each in the background, `--release`; analyse with the tools):
+3. ~~**Acceptance runs**~~ — done 2026-11-12 (entry above). (each in the background, `--release`; analyse with the tools):
 
    ```bash
    cargo build --release
@@ -568,12 +647,12 @@ viewer extras (wind particles, σ value of the selected level) later.
    asymmetry < 3 m/s; KE trend < 5% over the last 1000 days) are printed by
    `zonal_mean.py`. Also time one model year (`toyclim bench --config cases/held_suarez.toml
    --length 365day`) on 8 threads → M6 budget.
-4. M6 f32 check: build with `--features f32` (`cargo build --release -p toyclim-headless
+4. ~~M6 f32 check~~ — done 2026-11-12 (asymmetry 3.19 m/s, open question 3): build with `--features f32` (`cargo build --release -p toyclim-headless
    --features f32 --target-dir target/f32`), rerun HS, compare jets and record the speedup.
 5. Compare HS with SpeedyWeather/Isca output placed in `reference/` (and later PlaSim).
-6. M7: `cases/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
+6. ~~M7~~ (done 2026-11-12): `cases/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
    and without `convection = "sbm"`; `tools/moist_stats.py`, `tools/zonal_mean.py`.
-7. Worlds (overnight runs, the owner's main use):
+7. Worlds (overnight runs, the owner's main use) — done 2026-11-12 except the tidally locked gray maps:
    - `cases/gray_aquaplanet.toml` (T42 L26, 10 years) → `moist_stats.py`, `koppen.py`;
    - `cases/testworld.toml` (T42 L26, 4 years, continents from `worlds/testworld.npy`) →
      `koppen.py`, `downscale.py out/testworld worlds/testworld.npy --orographic`,
@@ -589,3 +668,8 @@ viewer extras (wind particles, σ value of the selected level) later.
 2. Owner scoping answers are in `docs/design-decisions.md`. Two of them extend the SPEC and
    need a go-ahead before implementation: station time-series output (proposed for M2,
    SPEC §6 addition) and a procedural terrain milestone (after M9).
+3. **f32 Held–Suarez asymmetry** (2026-11-12): in f32 the jets and surface winds meet the M5
+   criteria, but the max hemispheric asymmetry of [u] is 3.19 m/s (f64: 2.13 m/s) against
+   < 3 m/s. With a 1000-day window this is plausibly sampling variability rather than a
+   precision bug. Criterion not weakened. Options: (a) accept as recorded, (b) rerun f32
+   longer (e.g. 2200 days, ~30 min) or with another perturbation seed and report both.
