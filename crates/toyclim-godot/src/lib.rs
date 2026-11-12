@@ -2,9 +2,8 @@
 //!
 //! `ClimateModel` is a `Node` that owns a [`ModelRunner`] (model on a worker thread). All
 //! methods return immediately; field data come from the latest snapshot. Targets the
-//! owner's Godot 4.3 double-precision build (features `api-4-3`, `double-precision`).
-//!
-//! Status: compiles, not yet run inside Godot (first task on the laptop).
+//! owner's Godot 4.3 double-precision build (feature `double`); the default features build
+//! for the stock single-precision 4.3 API (CI).
 
 // The gdext derive macro expands to `base: base` on newer clippy (1.99+).
 #![allow(clippy::redundant_field_names)]
@@ -49,9 +48,11 @@ impl ClimateModel {
     fn load_config(&mut self, path: GString, image_width: i64, image_height: i64) -> bool {
         self.runner = None;
         self.snap = None;
-        let result = Config::from_file(std::path::Path::new(&path.to_string()))
+        let path = std::path::PathBuf::from(path.to_string());
+        let result = Config::from_file(&path)
             .map_err(|e| e.to_string())
-            .and_then(|cfg| {
+            .and_then(|mut cfg| {
+                resolve_relative_inputs(&mut cfg, &path);
                 let model = toyclim_core::build::build_model(&cfg)?;
                 let json = serde_json::to_value(&cfg).map_err(|e| e.to_string())?;
                 let size = (image_width > 0 && image_height > 0)
@@ -206,6 +207,34 @@ impl ClimateModel {
             }
             None => PackedFloat32Array::new(),
         }
+    }
+}
+
+/// Cases name input files relative to the repository root (where the headless runner is
+/// started), but Godot changes the working directory to the project folder. A relative
+/// path that does not exist from the working directory is looked up next to the config
+/// file and then in its parent folders.
+fn resolve_relative_inputs(cfg: &mut Config, config_path: &std::path::Path) {
+    let Some(surface) = cfg.surface.as_mut() else {
+        return;
+    };
+    let Some(hm) = surface.heightmap.as_mut() else {
+        return;
+    };
+    let rel = std::path::Path::new(hm.as_str());
+    if rel.is_absolute() || rel.exists() {
+        return;
+    }
+    let dir = std::path::absolute(config_path)
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    if let Some(found) = dir
+        .iter()
+        .flat_map(|d| d.ancestors())
+        .map(|d| d.join(rel))
+        .find(|p| p.exists())
+    {
+        *hm = found.to_string_lossy().into_owned();
     }
 }
 

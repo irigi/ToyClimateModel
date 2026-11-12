@@ -55,7 +55,7 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M0 Skeleton | done (CI to be confirmed on first push) |
 | M1 Spectral transforms | done |
 | M2 Shallow water | done |
-| M3 Godot viewer | Rust side done (runner + gdext wrapper compile); Godot side pending on laptop |
+| M3 Godot viewer | done 2026-11-08 on the laptop: headless check passes in the owner's double-precision Godot 4.3; globe/map/UI viewer |
 | M4 Primitive equations | done (tests 1–3 pass, test 4 recorded at T85) |
 | M5 Held–Suarez / tidally locked | implemented; cloud smoke runs at T21 L10 qualitatively right; acceptance runs (T42 L20, 800–1200 days) pending on laptop |
 | M6 Performance/robustness | determinism + restart tests pass; f32 builds; budget met in cloud; viewer PE level selection in Rust API; f32 HS jet check pending (laptop) |
@@ -69,8 +69,12 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 ## Versions
 
 - Rust 1.97.0 (cloud session), edition 2021.
-- `godot` crate 0.5.5 with feature `api-4-5` (runs on Godot ≥ 4.5). Godot binary not yet
-  installed or tested (M3).
+- `godot` crate 0.5.5. Default features: `api-4-3` (stock single-precision 4.3+, CI).
+  Laptop: feature `double` (`api-custom-json` + `double-precision`) against the owner's
+  custom build *Godot v4.3.stable.custom_build.77dcf97d8* (`scons precision=double`,
+  `~/src/godot-4.3-stable`, `~/.local/bin/godot4`), tested 2026-11-08.
+- Laptop toolchain (2026-11-08): Rust 1.96.0, Python 3.12.3 with numpy 2.4, matplotlib 3.10,
+  scipy 1.17; i7-11850H, 16 threads.
 
 ## Dependencies beyond the SPEC.md §2 allow-list
 
@@ -498,14 +502,53 @@ LCL is located by bisection; one RK4 sub-step agrees with 32 to 0.001 K (8× che
   `as_chunks::<2>()` (stable since 1.88). `scripts/check` also runs clippy with any newer
   installed toolchain.
 
+## 2026-11-08 — M3 on the laptop: Godot integration and viewer (branch `m3-godot-integration`)
+
+First session on the owner's laptop (i7-11850H, 16 threads; other heavy jobs were running,
+so only light builds and short runs). Git: `main` created from the cloud branch and made the
+GitHub default; work now goes on one branch per segment, merged by PR.
+
+**Done**
+- Extension built against the owner's double-precision Godot 4.3 (API JSON dumped from
+  that binary; gdext `api-custom-json` needs no libclang). Compiles with Rust 1.96.
+- `./run` finds Godot like SpaceTrains (`$GODOT4_BINARY`, `~/.local/bin/godot4`, PATH),
+  dumps the API JSON once per binary (`target/godot-api/`), builds with `--features double`
+  (or `--single`), copies the library to `godot/bin/` (both the editor, which is a "debug"
+  build, and release builds load that file), then starts the viewer. `--build-only` too.
+- `toyclim.gdextension`: `compatibility_minimum = 4.3`, library `res://bin/…`;
+  `project.godot`: features 4.3, `max_fps = 60` (so `--quit-after 600` ≈ 10 s).
+- `toyclim-godot`: relative input paths in a case (`[surface] heightmap`) that do not exist
+  from the working directory are resolved next to the config file and its parents (Godot
+  changes the working directory to `godot/`).
+- Viewer (`godot/main.gd`, scene built in code): globe (SphereMesh 128×64, 30° graticule)
+  and flat map (M), orbit camera, case/field/level selectors, auto or typed colour range,
+  diverging colormap for signed fields, run/pause/step, speed, diagnostics, model error.
+  Command line after `--`: `--case= --field= --level= --run --sps= --map
+  --screenshot=<png> --after=<s>`. Orientation checked against Godot's SphereMesh source
+  (UV.x grows eastward from +Z, UV.y = 0 at the north pole), so no texture flip.
+
+**Measured**
+- M3 acceptance: `godot4 --headless --path godot --quit-after 600` → exit 0, Williamson 6
+  (T42, Δt 20 min) advanced 9210 steps = 127.9 model days in ≈ 10 s, ≈ 900–1250 steps/s
+  printed each second (machine loaded, load average ≈ 15).
+- Also loaded and stepped headless: `held_suarez_t21` (≈ 60–130 steps/s) and
+  `testworld_t21` (heightmap found via the path fix, ≈ 10–20 steps/s).
+- Windowed (X11, gl_compatibility) screenshots: Galewsky vorticity at day 5.4 shows the
+  expected roll-up into vortices; HS T21 temperature on the globe; testworld `tas`.
+
+**Figures**: `docs/figures/M3/galewsky_vor_map.png`, `held_suarez_t21_globe.png`,
+`testworld_t21_tas_globe.png`.
+
+**Open questions**: none new.
+
+**Next**: laptop checklist item 3 (M5 acceptance runs, T42 L20) when the machine is free;
+viewer extras (wind particles, σ value of the selected level) later.
+
 ---
 
 ## Laptop checklist (things the cloud session could not do)
 
-1. **Godot integration (early):** follow `docs/godot-integration.md` §"What the Godot side
-   still needs" — dump `extension_api.json` from the double-precision editor, build with
-   `--features double`, fix `godot/toyclim.gdextension` (compatibility_minimum 4.3), run the
-   headless check, then build the globe/map/UI scene.
+1. ~~**Godot integration**~~ — done 2026-11-08 (M3 entry below).
 2. Re-check Williamson test 6 and Galewsky constants against the original papers.
 3. **Acceptance runs** (each in the background, `--release`; analyse with the tools):
 

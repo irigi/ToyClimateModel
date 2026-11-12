@@ -98,4 +98,4 @@ parameter tweaking or terrain painting.
 | Climate/biome maps | Köppen from monthly climatology (`tools/koppen.py`) and downscaled to the heightmap with a lapse-rate correction (`tools/downscale.py`) |
 | Terrain | heightmap input (`[surface] heightmap`) + simple spectral-noise generator `tools/make_planet.py`; full procedural (plate tectonics) still future |
 | Exported layers | `.npy` fields and climatologies; PNG via tools; GeoTIFF not yet |
-| Live weather view | Rust side ready (`ModelRunner`, `ClimateModel`); Godot side pending |
+| Live weather view | done (M3): Godot viewer with globe/map, runs any case live (`./run`) |

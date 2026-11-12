@@ -1,9 +1,9 @@
-# Godot integration (M3, Rust side done; Godot side pending)
+# Godot integration (M3, done 2026-11-08)
 
-Status (2026-11-04): the engine-side interface is implemented and tested in Rust; the
-GDExtension wrapper compiles against the stock Godot 4.3 API, but **nothing has been run in
-Godot yet**. Integration with the owner's custom double-precision Godot is the first laptop
-task (see "Laptop checklist" in `docs/progress.md`).
+The viewer runs inside the owner's double-precision Godot 4.3 (custom build,
+`~/src/godot-4.3-stable`, `~/.local/bin/godot4`). `./run` builds the extension against that
+binary and starts it; see README "Viewer" for options. The scene is built in code in
+`godot/main.gd` (globe, flat map, orbit camera, UI); shaders in `godot/shaders/`.
 
 ## Layers
 
@@ -77,22 +77,23 @@ func _process(_dt):
 ## Building for the owner's Godot (4.3, double precision)
 
 gdext's `double-precision` feature cannot use the bundled API descriptions
-(godotengine/godot#86346); it needs the API JSON of the exact Godot build:
+(godotengine/godot#86346); it needs the API JSON of the exact Godot build. `./run` does this:
 
 ```bash
-godot4 --headless --dump-extension-api        # in some scratch dir → extension_api.json
-```
-
-```bash
-GODOT4_GDEXTENSION_JSON=/path/to/extension_api.json \
+(cd target/godot-api && godot4 --headless --dump-extension-api)   # once per binary
+GODOT4_GDEXTENSION_JSON=$PWD/target/godot-api/extension_api.json \
   cargo build -p toyclim-godot --release --no-default-features --features double
+cp target/release/libtoyclim_godot.so godot/bin/
 ```
 
-The default build (`cargo build -p toyclim-godot`) targets the stock single-precision 4.3
-API; that is what CI compiles. `godot/toyclim.gdextension` sets
-`compatibility_minimum = 4.5` from M0 — **change it to 4.3** when integrating (left as is
-until it can be tested). Inside the wrapper all vectors use gdext's `real`, so the same
-source compiles for both precisions.
+`api-custom-json` needs no libclang. The default build (`cargo build -p toyclim-godot`)
+targets the stock single-precision 4.3 API; that is what CI compiles (`./run --single`).
+`godot/toyclim.gdextension` loads `res://bin/libtoyclim_godot.so` for both debug and
+release tags, because the Godot editor binary counts as a debug build. Inside the wrapper
+all vectors use gdext's `real`, so the same source compiles for both precisions.
+
+Godot changes the working directory to `godot/`; the wrapper resolves relative input paths
+in a case (heightmap) next to the config file and its parent folders.
 
 ## Alternative: file bridge (SpaceTrains style)
 
@@ -103,24 +104,17 @@ rename) and poll a `command.json`. Not implemented; worth it only if the GDExten
 gives trouble with the custom Godot build. The gdext route is preferred: no copies through
 files, no process lifetime management.
 
-## What the Godot side still needs (plan)
+## Viewer: done and still to do
 
-1. Build with `--features double` against the owner's API JSON; fix
-   `toyclim.gdextension` (`compatibility_minimum = 4.3`, library paths).
-2. `godot --headless --path godot --quit-after 600` with a script that loads
-   `cases/williamson6.toml`, runs, and prints step/time each second → M3 acceptance.
-3. Scene: `Globe` = `MeshInstance3D` with `SphereMesh` (radial segments 128, rings 64) and a
-   `ShaderMaterial`; `godot/shaders/field_globe.gdshader` (provided, untested) samples the
-   field texture by UV (the sphere's UV is equirectangular; check the u = 0 seam and
-   orientation: u = 0 should be 0°E, v = 0 north), a 1D colormap texture
-   (`GradientTexture1D`), `vmin`/`vmax` uniforms.
-4. Flat map: a `TextureRect` with the same shader in `canvas_item` mode or a second
-   material; toggle visibility.
-5. Orbit camera: `Camera3D` on a pivot `Node3D`; mouse drag rotates the pivot, wheel zooms.
-6. UI (`Control`, GDScript only): field `OptionButton` from `get_available_fields()`, level
-   `SpinBox` (`get_level_count`), range mode auto/fixed, run/pause, steps-per-second slider,
-   step button, labels for time, mass, energy, max Courant, model error.
-7. Later: wind particles (sample `u`, `v` images), cross-section panel, several planets.
+Done: globe (`field_globe.gdshader`, 30° graticule) and flat map (`field_map.gdshader`),
+1D colormaps (viridis-like; RdBu-like with symmetric range for signed fields), orbit
+camera, case/field/level selectors, auto or typed range, run/pause/step/speed, diagnostics
+and model error, `--screenshot` for checks without a person at the screen. SphereMesh
+UVs: UV.x grows eastward from +Z, UV.y = 0 at the north pole, matching the snapshot
+images (row 0 north, column 0 at 0°E), so no flip or offset.
+
+Later: wind particles (sample `u`, `v` images), σ value of the selected level, coastline
+overlay from `land`/`orog`, cross-section panel, several planets side by side.
 
 Fields per model (`get_available_fields()` lists what a given configuration offers):
 - shallow water: `h, eta, hs, vor, div, u, v, pv`;

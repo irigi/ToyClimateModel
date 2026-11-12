@@ -1,15 +1,60 @@
 #!/usr/bin/env bash
 # Build the GDExtension and start the Godot viewer.
-# Usage: ./run [--debug] [extra godot args...]
+# Usage: ./run [--debug] [--single] [--build-only] [godot args...] [-- viewer args...]
+#   viewer args: --case=<name or path> --field=<name> --run --sps=<steps per second>
+#   e.g. ./run -- --case=galewsky --field=vor --run
+#
+# The Godot binary: $GODOT4_BINARY, else ~/.local/bin/godot4, else godot4/godot on PATH.
+# By default the extension is built for a double-precision Godot (the owner's custom 4.3
+# build) from that binary's own API dump (target/godot-api/extension_api.json, made once
+# per binary). --single builds for a stock single-precision Godot 4.3+ instead.
 set -euo pipefail
 cd "$(dirname "$0")"
+
 profile=release
-if [[ "${1:-}" == "--debug" ]]; then profile=debug; shift; fi
-if [[ $profile == release ]]; then
-  cargo build -p toyclim-godot --release
-else
-  cargo build -p toyclim-godot
+precision=double
+build_only=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --debug) profile=debug; shift ;;
+    --single) precision=single; shift ;;
+    --build-only) build_only=1; shift ;;
+    *) break ;;
+  esac
+done
+
+find_godot() {
+  if [[ -n "${GODOT4_BINARY:-}" ]]; then printf '%s\n' "$GODOT4_BINARY"; return 0; fi
+  if [[ -x "$HOME/.local/bin/godot4" ]]; then printf '%s\n' "$HOME/.local/bin/godot4"; return 0; fi
+  local c
+  for c in godot4 godot-4 godot; do
+    if command -v "$c" >/dev/null 2>&1; then command -v "$c"; return 0; fi
+  done
+  return 1
+}
+godot_bin="$(find_godot)" || { echo "Godot 4 not found; set GODOT4_BINARY=/path/to/godot" >&2; exit 1; }
+
+cargo_args=(-p toyclim-godot)
+[[ $profile == release ]] && cargo_args+=(--release)
+if [[ $precision == double ]]; then
+  api_dir=target/godot-api
+  api_json=$api_dir/extension_api.json
+  stamp=$api_dir/godot-binary
+  real_bin="$(readlink -f "$(command -v "$godot_bin")")"
+  if [[ ! -f $api_json || "$(cat "$stamp" 2>/dev/null)" != "$real_bin $(stat -c %Y "$real_bin")" ]]; then
+    echo "Dumping the extension API of $real_bin"
+    mkdir -p "$api_dir"
+    (cd "$api_dir" && "$godot_bin" --headless --dump-extension-api >/dev/null)
+    echo "$real_bin $(stat -c %Y "$real_bin")" > "$stamp"
+  fi
+  export GODOT4_GDEXTENSION_JSON="$PWD/$api_json"
+  cargo_args+=(--no-default-features --features double)
 fi
-GODOT="${GODOT:-godot}"
-command -v "$GODOT" >/dev/null || { echo "Godot not found; set GODOT=/path/to/godot" >&2; exit 1; }
-exec "$GODOT" --path godot "$@"
+cargo build "${cargo_args[@]}"
+# Copy next to the project (write aside, then rename: a running editor may have it mapped).
+mkdir -p godot/bin
+cp "target/$profile/libtoyclim_godot.so" godot/bin/.libtoyclim_godot.so.tmp
+mv -f godot/bin/.libtoyclim_godot.so.tmp godot/bin/libtoyclim_godot.so
+
+[[ $build_only == 1 ]] && exit 0
+exec "$godot_bin" --path godot "$@"
