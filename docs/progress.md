@@ -1,52 +1,24 @@
 # Progress log
 
-## READ THIS FIRST — night session 2026-11-04/05 summary
+## READ THIS FIRST — plan revised 2026-11-12
 
-Everything is on branch `claude/busy-gauss-sqdo0s`, committed in small steps.
-`scripts/check` runs fmt + clippy + all tests (≈ 1 min in release).
+**The plan is `SPEC.md`.** Part I (M0–M6) is accepted. Part II (§9) defines Phase 2,
+milestones **P0–P11**, and replaces the old sketch of M7–M12. Continue at the lowest unmet
+milestone in SPEC.md §9.6 — currently **P0**.
 
-**State**
-- M0–M2 accepted (numbers below). M3: Rust side done (worker thread + snapshots + gdext
-  `ClimateModel`), Godot side not run (your double-precision 4.3 build needs
-  `--features double` with the API JSON, see `docs/godot-integration.md`).
-- M4 accepted (tests 1–3 pass; JW06 recorded at T85). M5/M6 implemented and smoke-tested at
-  T21; the long acceptance runs are in the laptop checklist below.
-- M7 (moisture) implemented per your go-ahead; and, being "bold", first steps of M8
-  (orbit, gray radiation), M9 (slab ocean, heightmap continents, bucket, ice albedo, q-flux)
-  and M11 tools (Köppen, downscaling with lapse rate and Smith–Barstad orographic rain,
-  stochastic point rain, layer export). Please confirm or redirect.
-- Also: global energy-budget test of the coupled model (closes to 1.1 W/m²), experimental
-  diagnostic clouds (opt-in), slab-ocean heat transport.
-- Your main deliverables now work end to end on a T21 smoke run of a procedural world
-  (`cases/testworld_t21.toml`): hourly station series → rain/wind/temperature
-  distributions per calendar month (`tools/station_stats.py --by-month`,
-  `tools/point_rain.py`), Köppen maps on the model grid and downscaled to the heightmap
-  (`docs/figures/M9/`), exported 16-bit PNG layers.
-
-**Decisions I made that you may want to revisit** (details in the entries below)
-1. Global dry-mass fixer in the PE model (needed for M4 test 3; standard in spectral models).
-2. JW06 L26 top interface set to σ = 0 (σ model requirement).
-3. TJ16 surface moisture flux: kept their tendency (eq. 8), diagnosed the applied flux
-   (eq. 10 is inconsistent with eq. 8 by a factor ≈ 2).
-4. Physics evaluated at the n−1 leapfrog level; moisture is a passive-ish tracer (no
-   virtual temperature in the dynamics).
-5. Land = cells with ≥ 50% land in the heightmap; simple bucket; ice/snow albedo is a
-   temperature switch (no thermodynamic sea ice yet).
-6. Point-rain generator parameters are uncalibrated placeholders.
-
-**Known limitations / honest caveats**
-- Smoke runs are short (≤ 455 days) and at T21; their climates are plausible, not tuned.
-  The gray model has no clouds (M10), so no cloud feedbacks; grid-point storms appear with
-  large-scale condensation.
-- The original Williamson and Held–Suarez PDFs I could reach were scans; constants were
-  cross-checked against secondary sources (noted per case).
-
-**First things to do on the laptop**: see "Laptop checklist" at the end of this file
-(Godot integration first, then the acceptance runs and the T42 world runs).
+- The physics, surface and tools built on 2026-11-04/05 as "M7–M11 first steps" are a
+  **prototype** (SPEC.md §9.1): they run and conserve energy and water, but have no
+  acceptance criteria and the T42 world runs show defects (grid-point storms over tropical
+  land, Dsa-dominated mid-latitude continents, ice-cap climate over open ocean from 55°S,
+  latitude-prescribed optical depth). Entries below that describe them are history, not
+  accepted results.
+- P0–P9 are authorised by the owner; P10 (procedural terrain) and P11 (extended envelope)
+  need a go-ahead.
+- `scripts/check` runs fmt + clippy + all tests (≈ 1 min in release).
 
 ---
 
-Format per SPEC.md §10.6. Newest entry at the bottom.
+Format per SPEC.md §10 item 10. Newest entry at the bottom.
 
 ## Status
 
@@ -59,12 +31,19 @@ Format per SPEC.md §10.6. Newest entry at the bottom.
 | M4 Primitive equations | done (tests 1–3 pass, test 4 recorded at T85) |
 | M5 Held–Suarez / tidally locked | done 2026-11-12: HS T42 L20 1200 d meets all jet criteria; tidally locked and rotation sweeps recorded |
 | M6 Performance/robustness | budget met on the laptop (1 model year in 290 s on 8 threads); f32 HS: jets OK, hemispheric asymmetry 3.19 m/s > 3 (open question 3) |
-| M7 Moisture | implemented; T42 L26 1080-d moist HS runs with and without SBM done 2026-11-12 (P = E to 0.1%) |
-| M8 Radiation/insolation | first step: orbit (Kepler, obliquity, diurnal/daily mean, tidal locking), gray two-stream radiation, calendar |
-| M9 Surface | first step: slab ocean, heightmap orography (filtered), land with bucket hydrology, ice/snow albedo switch |
-| M10 Clouds | experimental diagnostic RH clouds in the gray scheme (opt-in, untuned) |
-| M11 Downscaling/biomes | first step (Python): Köppen, lapse-rate downscaling, Smith–Barstad orographic rain, point-rain generator, layer export |
-| M12 Validation | not started |
+| M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
+| P0 Groundwork (refactor, config v2, regress script, f32 question) | not started — **next** |
+| P1 Surface exchange, boundary layer, sequential physics, SCM | not started |
+| P2 Land, snow, sea ice, precipitation phase | not started |
+| P3 Radiation (multi-band two-stream, semi-gray) | not started |
+| P4 Clouds, Earth-like energy balance | not started |
+| P5 Earth gate (prescribed ocean) | not started |
+| P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
+| P7 Exoplanet gates | not started |
+| P8 Local statistics, downscaling, biomes, exports | not started |
+| P9 Viewer | not started |
+| P10 Procedural terrain | needs go-ahead |
+| P11 Extended envelope | needs go-ahead |
 
 ## Versions
 
@@ -625,6 +604,42 @@ tidally_locked_gray_moist).
 
 ---
 
+## 2026-11-12 — Architecture and plan audit; SPEC.md Part II written
+
+**Milestone**: none (planning). No code changed.
+
+**Done**
+- Audit of the plan, the physics/surface code and the 2026-11-12 world-run figures.
+- `SPEC.md` rewritten from §9 on: Phase 2 principles (spread rule, tuning governance,
+  supported envelope), target architecture (module layout, config schema v2 with star/orbit
+  derivations, sequential physics driver), physics specifications (radiation, surface
+  exchange, boundary layer with implicit surface coupling, phase of precipitation, land,
+  snow, sea ice, albedo, clouds, wind-driven ocean, downscaling), validation infrastructure
+  (single-column model, scorecards, reference data, regression script), milestones P0–P11
+  with acceptance criteria, conditional work items, review triggers. §10 (protocol) and §11
+  (references) updated. `CLAUDE.md` updated to point at it.
+
+**Figures looked at** (existing, `docs/figures/M9/`)
+- `testworld_t42_koppen.png`, `testworld_t42_downscaled.png`: tropical land is a cell-scale
+  mosaic of Af/Aw and BWh; 40–60°N is mostly Dsa; EF over open ocean poleward of ≈ 55°S and
+  over land poleward of ≈ 70°N.
+- `testworld_t42_moist.png`: time-mean precipitation has isolated single-cell maxima up to
+  ≈ 40 mm/day over equatorial land; zonal-mean P peaks at ≈ 7 mm/day near 12°N.
+- `tidally_locked_gray_moist.png`: precipitation concentrated just east of the substellar
+  point (max ≈ 55 mm/day), dry night side; plausible in shape.
+- `gray_aquaplanet_zonal_mean.png`: jets ≈ 30 m/s near 30°, σ ≈ 0.25; Hadley cells
+  ≈ 9e10 kg/s; looks like a normal gray aquaplanet.
+
+**Caveat**: formulas, constants and citations in SPEC.md §9 and §11 were written from
+memory; each must be checked against its paper when first used (SPEC.md P-3).
+
+**Open questions**: 3 (f32, now P0 item 1); 4 (new, below).
+
+**Next step**: P0 (SPEC.md §9.6), starting with `scripts/regress` so the refactor can be
+proved result-neutral.
+
+---
+
 ## Laptop checklist (things the cloud session could not do)
 
 1. ~~**Godot integration**~~ — done 2026-11-08 (M3 entry below).
@@ -673,3 +688,8 @@ tidally_locked_gray_moist).
    < 3 m/s. With a 1000-day window this is plausibly sampling variability rather than a
    precision bug. Criterion not weakened. Options: (a) accept as recorded, (b) rerun f32
    longer (e.g. 2200 days, ~30 min) or with another perturbation seed and report both.
+   **Now handled as P0 item 1** (2200-day reruns with two seeds, f32 and f64).
+4. **Earth-gate thresholds** (2026-11-12): the numbers in SPEC.md §9.6 P5/P6 were set from
+   judgement of what intermediate-complexity models achieve, before any Earth run exists.
+   They are binding for sessions; the owner may want to revise them after seeing the first
+   `earth_amip` scorecard (recorded without thresholds at the end of P2).

@@ -1,5 +1,12 @@
 # Design decisions (owner answers, 2026-11-04)
 
+> **Update 2026-11-12.** The plan for everything after M6 is now SPEC.md §9 (Phase 2,
+> milestones P0–P11). Where this file says "M7+", "M9" or "M11", read the matching Phase 2
+> milestone: moisture/physics → P1–P4, surface → P2, ocean → P6, downscaling, point
+> statistics and biomes → P8, procedural terrain → P10, exotic worlds (thick/thin
+> atmospheres, other condensables, moons, binary stars) → P11. The decisions below still
+> hold; the supported envelope until P11 is in SPEC.md §9.2.
+
 Answers to the scoping questions asked in the M0 session. They do not change the
 M0–M6 acceptance criteria in SPEC.md; they say what those milestones must leave room for
 and how M7+ should be shaped once the owner gives the go-ahead.
