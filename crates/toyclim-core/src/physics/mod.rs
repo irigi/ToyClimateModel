@@ -2,6 +2,7 @@
 
 pub mod column;
 pub mod convection;
+pub mod driver;
 pub mod held_suarez;
 pub mod moist;
 pub mod radiation;

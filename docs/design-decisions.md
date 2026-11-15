@@ -58,7 +58,7 @@ Any distribution can be computed afterwards in Python. No per-cell online histog
 - Interpolation from the Gaussian grid: bilinear (cheap, deterministic).
 - **Implemented in M2** (SPEC §6 "Stations"). Precipitation arrives with M7.
   Config keys: `[[stations]]`, `station_every`, `station_fields`; example
-  `cases/williamson5_stations.toml`.
+  `cases/core/williamson5_stations.toml`.
 
 ## Point-scale extremes: stochastic downscaling
 

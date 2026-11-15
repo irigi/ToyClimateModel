@@ -56,7 +56,7 @@ var tex: ImageTexture
 
 func _ready():
     add_child(model)
-    if not model.load_config(ProjectSettings.globalize_path("res://../cases/galewsky.toml"), 0, 0):
+    if not model.load_config(ProjectSettings.globalize_path("res://../cases/core/galewsky.toml"), 0, 0):
         push_error(model.get_last_error())
     model.set_fields(PackedStringArray(["vor", "h"]))
     model.set_steps_per_second(0)

@@ -1,0 +1,110 @@
+//! Construction of the primitive-equation model from a run configuration.
+
+use super::cases;
+use super::state::PeInitial;
+use super::vertical::SigmaLevels;
+use super::{PeSettings, Primitive};
+use crate::config::{Config, SurfaceConfig};
+use crate::spectral::{Complex, Transform};
+use crate::surface::{geography, ocean_slab, Surface};
+use crate::time::leapfrog::RawFilter;
+use crate::Real;
+
+/// Global-mean surface pressure of a spectral ln p_s \[Pa\] (from the ℓ = 0 coefficient).
+fn init_ps_mean(lnps: &[Complex]) -> f64 {
+    ((lnps[0].re as f64) / std::f64::consts::SQRT_2).exp()
+}
+
+/// The TJ16 SST profile on the grid.
+fn tj16_sst_grid(tr: &Transform) -> Vec<Real> {
+    let sst = crate::physics::moist::SurfaceTemperature::tj16();
+    let mut v = Vec::with_capacity(tr.ngrid());
+    for &lat in &tr.grid.lat {
+        v.extend(std::iter::repeat_n(sst.at(lat, 0.0) as Real, tr.nlon()));
+    }
+    v
+}
+
+/// Build the surface of `sc`. With a heightmap, also sets the orography of `init` and a
+/// hydrostatically adjusted initial surface pressure.
+fn build_surface(
+    sc: &SurfaceConfig,
+    tr: &Transform,
+    planet: &crate::planet::Planet,
+    init: &mut PeInitial,
+) -> Result<Surface, String> {
+    let ts: Vec<Real> = match &sc.initial {
+        None => tj16_sst_grid(tr),
+        Some(toml::Value::String(s)) if s == "tj16" => tj16_sst_grid(tr),
+        Some(v) => {
+            let t = v
+                .as_float()
+                .or_else(|| v.as_integer().map(|i| i as f64))
+                .ok_or("surface.initial must be \"tj16\" or a temperature")?;
+            vec![t as Real; tr.ngrid()]
+        }
+    };
+    let mut sfc = Surface::slab(sc, ts);
+    if let Some(path) = &sc.heightmap {
+        let (h, nlat_h, nlon_h) = crate::io::heightmap::read(std::path::Path::new(path))
+            .map_err(|e| format!("heightmap {path}: {e}"))?;
+        let geo =
+            geography::from_heightmap(tr, planet.gravity, &h, nlat_h, nlon_h, sc.orography_filter);
+        // hydrostatic initial surface pressure over the mountains (T ≈ 288 K)
+        let ps_mean = init_ps_mean(&init.state.lnps);
+        let lnps: Vec<Real> = geo
+            .phis
+            .iter()
+            .map(|&ph| (ps_mean.ln() - ph as f64 / (planet.gas_constant * 288.0)) as Real)
+            .collect();
+        init.state.lnps = tr.analysis(&lnps);
+        init.phis_grid = geo.phis;
+        sfc.set_land(sc, &geo.land_fraction);
+    }
+    if sc.ocean_heat_transport != 0.0 {
+        ocean_slab::set_qflux(&mut sfc, tr, sc.ocean_heat_transport);
+    }
+    Ok(sfc)
+}
+
+/// Build the primitive-equation model from a run configuration.
+pub fn from_config(cfg: &Config) -> Result<Primitive, String> {
+    let planet = cfg.planet.resolve().map_err(|e| e.to_string())?;
+    let levels = match (&cfg.sigma_half, cfg.levels) {
+        (Some(h), _) => SigmaLevels::from_half(h.clone()),
+        (None, Some(n)) => SigmaLevels::equal(n),
+        (None, None) => return Err("primitive model needs `levels` or `sigma_half`".into()),
+    };
+    let tr = Transform::new(cfg.truncation, planet.radius);
+    let mut init = cases::build(&tr, &planet, &levels, &cfg.initial_condition)?;
+    let moisture = match &cfg.moisture {
+        Some(m) => Some(m.resolve().map_err(|e| e.to_string())?),
+        None => None,
+    };
+    let physics = crate::physics::build(cfg.forcing.as_ref(), &planet, moisture.as_ref())?;
+    if let Some(m) = &cfg.moisture {
+        let q = cases::initial_humidity(&tr, &planet, &levels, &m.initial)?;
+        init.state.tracers = vec![super::state::Spec3::from_levels(q)];
+    }
+    let settings = PeSettings {
+        dt: cfg.dt.seconds(),
+        diffusion_order: cfg.diffusion.order,
+        diffusion_tau: cfg.diffusion.tau.seconds(),
+        filter: RawFilter {
+            nu: cfg.time_filter.nu as Real,
+            alpha: cfg.time_filter.alpha as Real,
+        },
+        mass_fixer: cfg.mass_fixer.unwrap_or(true),
+    };
+    let orbit = cfg.orbit.as_ref().map(|o| o.resolve(planet.rotation_rate));
+    let surface = match &cfg.surface {
+        None => None,
+        Some(sc) => Some(build_surface(sc, &tr, &planet, &mut init)?),
+    };
+    let mut m = Primitive::new(tr, planet, settings, levels, init, physics);
+    m.orbit = orbit;
+    m.surface = surface;
+    m.mass_target = m.mass_of(&m.curr.lnps);
+    m.condensable = moisture;
+    Ok(m)
+}

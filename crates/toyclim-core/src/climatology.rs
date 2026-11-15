@@ -36,7 +36,7 @@ pub struct Climatology {
     pub monthly: Vec<Vec<Vec<f64>>>,
     pub monthly_count: Vec<u64>,
     /// Calendar used for the monthly binning.
-    pub calendar: Option<crate::orbit::Calendar>,
+    pub calendar: Option<crate::system::calendar::Calendar>,
 }
 
 impl Climatology {
@@ -80,7 +80,7 @@ impl Climatology {
     }
 
     /// Also accumulate the map fields per calendar month.
-    pub fn enable_monthly(&mut self, calendar: crate::orbit::Calendar) {
+    pub fn enable_monthly(&mut self, calendar: crate::system::calendar::Calendar) {
         let nm = calendar.months.len();
         self.monthly = self
             .maps

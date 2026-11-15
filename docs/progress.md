@@ -648,31 +648,31 @@ proved result-neutral.
 
    ```bash
    cargo build --release
-   RAYON_NUM_THREADS=8 target/release/toyclim run --config cases/held_suarez.toml --out out/hs
+   RAYON_NUM_THREADS=8 target/release/toyclim run --config cases/idealized/held_suarez.toml --out out/hs
    python tools/zonal_mean.py out/hs -o docs/figures/M5/hs_t42l20_zonal_mean.png
    for c in tidally_locked tidally_locked_omega01 tidally_locked_omega002; do
-     target/release/toyclim run --config cases/$c.toml --out out/$c
+     target/release/toyclim run --config $(find cases -name $c.toml) --out out/$c
      python tools/tidally_locked.py out/$c -o docs/figures/M5/$c.png; done
    for c in held_suarez_omega025 held_suarez_omega2; do
-     target/release/toyclim run --config cases/$c.toml --out out/$c
+     target/release/toyclim run --config $(find cases -name $c.toml) --out out/$c
      python tools/zonal_mean.py out/$c -o docs/figures/M5/$c.png; done
    ```
 
    M5 criteria (jets 26–34 m/s at 38–50°, σ 0.15–0.35; surface easterlies/westerlies;
    asymmetry < 3 m/s; KE trend < 5% over the last 1000 days) are printed by
-   `zonal_mean.py`. Also time one model year (`toyclim bench --config cases/held_suarez.toml
+   `zonal_mean.py`. Also time one model year (`toyclim bench --config cases/idealized/held_suarez.toml
    --length 365day`) on 8 threads → M6 budget.
 4. ~~M6 f32 check~~ — done 2026-11-12 (asymmetry 3.19 m/s, open question 3): build with `--features f32` (`cargo build --release -p toyclim-headless
    --features f32 --target-dir target/f32`), rerun HS, compare jets and record the speedup.
 5. Compare HS with SpeedyWeather/Isca output placed in `reference/` (and later PlaSim).
-6. ~~M7~~ (done 2026-11-12): `cases/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
+6. ~~M7~~ (done 2026-11-12): `cases/idealized/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
    and without `convection = "sbm"`; `tools/moist_stats.py`, `tools/zonal_mean.py`.
 7. Worlds (overnight runs, the owner's main use) — done 2026-11-12 except the tidally locked gray maps:
-   - `cases/gray_aquaplanet.toml` (T42 L26, 10 years) → `moist_stats.py`, `koppen.py`;
-   - `cases/testworld.toml` (T42 L26, 4 years, continents from `worlds/testworld.npy`) →
+   - `cases/worlds/gray_aquaplanet.toml` (T42 L26, 10 years) → `moist_stats.py`, `koppen.py`;
+   - `cases/worlds/testworld.toml` (T42 L26, 4 years, continents from `worlds/testworld.npy`) →
      `koppen.py`, `downscale.py out/testworld worlds/testworld.npy --orographic`,
      `export_layers.py`, `station_stats.py ... --by-month`, `point_rain.py --by-month`;
-   - `cases/tidally_locked_gray.toml` (T42 L26, 3 years) → `tidally_locked.py`-style maps
+   - `cases/worlds/tidally_locked_gray.toml` (T42 L26, 3 years) → `tidally_locked.py`-style maps
      (needs maps t850/u850/v850 in its climatology block if wanted).
 
 ---

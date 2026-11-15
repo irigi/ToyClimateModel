@@ -47,9 +47,11 @@ against() {
   (cd "$src" && cargo build -q --release -p toyclim-headless --target-dir "$tgt") || exit 2
   echo "== building working tree"
   cargo build -q --release -p toyclim-headless || exit 2
-  local refbin=$tgt/release/toyclim newbin=$ROOT/target/release/toyclim
   local d=$OUT/against-$sha
   rm -rf "$d"; mkdir -p "$d"
+  # Snapshot both binaries so rebuilds during the run cannot mix builds.
+  cp "$tgt/release/toyclim" "$d/toyclim_ref"; cp "$ROOT/target/release/toyclim" "$d/toyclim_new"
+  local refbin=$d/toyclim_ref newbin=$d/toyclim_new
 
   # Job list: side tree bin case length threads
   local jobsfile=$d/jobs.txt

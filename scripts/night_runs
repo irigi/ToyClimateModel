@@ -18,7 +18,8 @@ step() { # lane name cmd...
   "$@" >> "$L/$lane.$name.out" 2>&1; local rc=$?
   echo "[$(date +%F' '%T)] END   $name rc=$rc wall=$(( $(date +%s)-t0 ))s" >> "$L/$lane.log"
 }
-run() { step "$1" "run_$2" $B run --config cases/$3.toml --out out/$2 "${@:4}"; }
+case_path() { find cases -name "$1.toml" | head -n1; }
+run() { step "$1" "run_$2" $B run --config "$(case_path $3)" --out out/$2 "${@:4}"; }
 
 laneA() { # ~4 h: 10-year gray aquaplanet
   run A gray_aquaplanet gray_aquaplanet
@@ -56,12 +57,12 @@ laneC() { # ~4 h: dry acceptance (M5/M6) and moist HS
   step C an_mhs bash -c "$PY tools/moist_stats.py out/moist_held_suarez -o docs/figures/M7/mhs_t42_moist.png; \
     $PY tools/zonal_mean.py out/moist_held_suarez -o docs/figures/M7/mhs_t42_zonal_mean.png"
   step C build_f32 cargo build --release -p toyclim-headless --features f32 --target-dir target/f32
-  step C run_hs_f32 $F32 run --config cases/held_suarez.toml --out out/hs_f32
+  step C run_hs_f32 $F32 run --config cases/idealized/held_suarez.toml --out out/hs_f32
   step C an_hs_f32 $PY tools/zonal_mean.py out/hs_f32 -o docs/figures/M5/hs_t42l20_f32_zonal_mean.png
 }
 laneD() { # after A and C: timing and long tests on a quieter machine
-  step D bench8_f64 env RAYON_NUM_THREADS=8 $B bench --config cases/held_suarez.toml --length 365day
-  step D bench8_f32 env RAYON_NUM_THREADS=8 $F32 bench --config cases/held_suarez.toml --length 365day
+  step D bench8_f64 env RAYON_NUM_THREADS=8 $B bench --config cases/idealized/held_suarez.toml --length 365day
+  step D bench8_f32 env RAYON_NUM_THREADS=8 $F32 bench --config cases/idealized/held_suarez.toml --length 365day
   step D tests_ignored env RAYON_NUM_THREADS=8 cargo test --release -- --ignored
 }
 

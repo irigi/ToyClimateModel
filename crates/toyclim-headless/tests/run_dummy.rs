@@ -10,7 +10,7 @@ fn dummy_run_writes_output() {
     let out = std::env::temp_dir().join(format!("toyclim_dummy_{}", std::process::id()));
     let status = Command::new(env!("CARGO_BIN_EXE_toyclim"))
         .args(["run", "--config"])
-        .arg(root.join("cases/dummy.toml"))
+        .arg(root.join("cases/core/dummy.toml"))
         .arg("--out")
         .arg(&out)
         .status()
@@ -37,7 +37,7 @@ fn dummy_run_writes_output() {
 #[test]
 fn stations_and_restart_are_bitwise() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let cfg = root.join("cases/williamson5_stations.toml");
+    let cfg = root.join("cases/core/williamson5_stations.toml");
     let base = std::env::temp_dir().join(format!("toyclim_st_{}", std::process::id()));
     let (a, b) = (base.join("a"), base.join("b"));
     let run = |out: &PathBuf, extra: &[&str]| {

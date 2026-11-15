@@ -4,7 +4,7 @@ extends Node3D
 ## lives in Rust, this script only moves images to textures and handles the UI.
 ##
 ## Command line (after `--`):
-##   --case=<name in cases/ or path to .toml>   default: williamson6
+##   --case=<name in cases/ (any subfolder) or path to .toml>   default: williamson6
 ##   --field=<name>  --level=<n>  --run  --sps=<model steps per second, 0 = max>
 ##   --map (start in the flat map view)
 ##   --screenshot=<png path> [--after=<seconds, default 3>]: save the window and quit
@@ -90,12 +90,39 @@ func _parse_args() -> Dictionary:
 	return out
 
 
+## Case files under cases/ (recursively), as paths relative to it without ".toml",
+## e.g. "worlds/testworld_t21".
+func _case_names(dir: String = "") -> PackedStringArray:
+	var out := PackedStringArray()
+	var base := repo_root.path_join("cases")
+	if dir != "":
+		base = base.path_join(dir)
+	var subdirs := DirAccess.get_directories_at(base)
+	subdirs.sort()
+	for d in subdirs:
+		out.append_array(_case_names(dir.path_join(d) if dir != "" else d))
+	var files := DirAccess.get_files_at(base)
+	files.sort()
+	for f in files:
+		if f.ends_with(".toml"):
+			out.append((dir.path_join(f) if dir != "" else f).trim_suffix(".toml"))
+	return out
+
+
 func _case_path(c: String) -> String:
 	if c.is_absolute_path():
 		return c
 	if FileAccess.file_exists(repo_root.path_join(c)):
 		return repo_root.path_join(c)
-	return repo_root.path_join("cases").path_join(c.trim_suffix(".toml") + ".toml")
+	var direct := repo_root.path_join("cases").path_join(c.trim_suffix(".toml") + ".toml")
+	if FileAccess.file_exists(direct):
+		return direct
+	# a bare name: find it in any subfolder of cases/
+	var stem := c.get_file().trim_suffix(".toml")
+	for n in _case_names():
+		if n.get_file() == stem:
+			return repo_root.path_join("cases").path_join(n + ".toml")
+	return direct
 
 
 func _load_case(c: String) -> void:
@@ -204,11 +231,8 @@ func _build_ui() -> void:
 	panel.add_child(box)
 
 	ui.case = OptionButton.new()
-	var files := DirAccess.get_files_at(repo_root.path_join("cases"))
-	files.sort()
-	for f in files:
-		if f.ends_with(".toml"):
-			ui.case.add_item(f.trim_suffix(".toml"))
+	for n in _case_names():
+		ui.case.add_item(n)
 	ui.case.item_selected.connect(func(i): _load_case(ui.case.get_item_text(i)))
 	_row(box, "Case", ui.case)
 

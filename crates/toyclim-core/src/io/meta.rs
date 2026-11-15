@@ -26,7 +26,7 @@ pub struct RunMeta<'a> {
     /// Echo of the parsed configuration.
     pub config: serde_json::Value,
     /// Calendar for statistics (from the orbit), if any.
-    pub calendar: Option<crate::orbit::Calendar>,
+    pub calendar: Option<crate::system::calendar::Calendar>,
 }
 
 impl RunMeta<'_> {

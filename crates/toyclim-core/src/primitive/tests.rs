@@ -214,8 +214,8 @@ fn pe_restart_is_bitwise() {
     }
     let bits = |s: &PeState| -> Vec<u64> {
         s.tmp
+            .as_slice()
             .iter()
-            .flatten()
             .chain(s.lnps.iter())
             .flat_map(|c| [c.re.to_bits() as u64, c.im.to_bits() as u64])
             .collect()
@@ -244,8 +244,8 @@ fn pe_thread_independent() {
             }
             m.curr
                 .tmp
+                .as_slice()
                 .iter()
-                .flatten()
                 .flat_map(|c| [c.re.to_bits() as u64, c.im.to_bits() as u64])
                 .collect::<Vec<_>>()
         })
