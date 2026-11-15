@@ -295,13 +295,40 @@ pub(crate) fn explicit(
     };
     lap.add(&mut timers, 1);
     if let Some(ph) = phys {
-        for k in 0..l {
-            for p in 0..n {
-                w.qu[k][p] -= ph.du[k][p];
-                w.qv[k][p] -= ph.dv[k][p];
-                w.trest[k][p] += ph.dt[k][p];
+        let add = |x: &mut [Real], y: &[Real], sign: Real| {
+            for (a, b) in x.iter_mut().zip(y) {
+                if sign < 0.0 {
+                    *a -= *b;
+                } else {
+                    *a += *b;
+                }
             }
-        }
+        };
+        rayon::join(
+            || {
+                w.qu.as_mut_slice()
+                    .par_chunks_mut(n)
+                    .zip(ph.du.as_slice().par_chunks(n))
+                    .for_each(|(x, y)| add(x, y, -1.0))
+            },
+            || {
+                rayon::join(
+                    || {
+                        w.qv.as_mut_slice()
+                            .par_chunks_mut(n)
+                            .zip(ph.dv.as_slice().par_chunks(n))
+                            .for_each(|(x, y)| add(x, y, -1.0))
+                    },
+                    || {
+                        w.trest
+                            .as_mut_slice()
+                            .par_chunks_mut(n)
+                            .zip(ph.dt.as_slice().par_chunks(n))
+                            .for_each(|(x, y)| add(x, y, 1.0))
+                    },
+                )
+            },
+        );
     }
     for (it, dst) in out.tracers.iter_mut().enumerate() {
         tracers::tendency(tr, &w.grids, it, &w.sdl, cx.dsigma, phys, dst);
