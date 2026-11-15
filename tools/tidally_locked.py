@@ -4,8 +4,9 @@
 Usage:
     python tools/tidally_locked.py out/<run> [-o figure.png]
 
-Needs a [climatology] block with maps t850, u850, v850, t500 (cases/tidally_locked*.toml).
-Prints the zonal-mean u at the equator above σ = 0.5 (superrotation), and the day–night
+Uses the [climatology] maps t850, u850, v850 and t500 when present (missing maps are
+skipped with a note). The substellar longitude is read from the run's config
+(`[orbit] substellar_lon` or `[forcing] substellar_lon`, default 180°). Prints the zonal-mean u at the equator above σ = 0.5 (superrotation), and the day–night
 temperature contrast at 850 and 500 hPa (weak temperature gradient regime: contrast
 aloft much smaller than near the surface).
 """
@@ -32,6 +33,19 @@ def main():
     lon = np.degrees(np.asarray(meta["grid"]["lon"]))
     sigma = np.asarray(meta["sigma"])
     om = meta["planet"]["rotation_rate"] / 7.292e-5
+    cfg = meta.get("config", {})
+    lon_ss = 180.0
+    for block in ("orbit", "forcing"):
+        b = cfg.get(block) or {}
+        if isinstance(b, dict) and b.get("substellar_lon") is not None:
+            lon_ss = float(b["substellar_lon"])
+    maps = {}
+    for f in ["t850", "u850", "v850", "t500"]:
+        path = c / f"mean_{f}.npy"
+        if path.exists():
+            maps[f] = np.load(path)
+        else:
+            print(f"note: no climatology map {f} in this run (add it to [climatology] maps)")
     zu = np.load(c / "zonal_u.npy")
     jeq = np.argsort(np.abs(lat))[:2]
     upper = sigma < 0.5
@@ -40,24 +54,28 @@ def main():
     print("equatorial zonal-mean u above sigma=0.5: " + ", ".join(f"{s:.2f}:{u:.1f}" for s, u in zip(sigma[upper], ueq[upper])))
     print(f"  mean {ueq[upper].mean():.2f} m/s ({'superrotating' if ueq[upper].mean() > 0 else 'not superrotating'})")
     w = np.cos(np.radians(lat))[:, None] * np.ones((1, len(lon)))
-    day = (np.cos(np.radians(lat))[:, None] * np.cos(np.radians(lon - 180.0))[None, :]) > 0
-    for f in ["t850", "t500"]:
-        t = np.load(c / f"mean_{f}.npy")
+    day = (np.cos(np.radians(lat))[:, None] * np.cos(np.radians(lon - lon_ss))[None, :]) > 0
+    for f in [f for f in ["t850", "t500"] if f in maps]:
+        t = maps[f]
         td = (t * w)[day].sum() / w[day].sum()
         tn = (t * w)[~day].sum() / w[~day].sum()
         print(f"{f}: day-side mean {td:.1f} K, night-side mean {tn:.1f} K, contrast {td - tn:.1f} K, max-min {t.max() - t.min():.1f} K")
 
-    t850 = np.load(c / "mean_t850.npy")
-    u850 = np.load(c / "mean_u850.npy")
-    v850 = np.load(c / "mean_v850.npy")
     fig, axs = plt.subplots(1, 2, figsize=(13, 4.2), constrained_layout=True)
-    m = axs[0].pcolormesh(lon, lat, t850, cmap="RdYlBu_r", shading="nearest")
-    s = 4
-    axs[0].quiver(lon[::s], lat[::s], u850[::s, ::s], v850[::s, ::s], scale=400, width=0.002)
-    axs[0].set_title("time-mean T850 [K] and 850 hPa wind", fontsize=10)
-    axs[0].set_xlabel("longitude [°E] (substellar at 180°)")
+    if "t850" in maps:
+        m = axs[0].pcolormesh(lon, lat, maps["t850"], cmap="RdYlBu_r", shading="nearest")
+        title = "time-mean T850 [K]"
+        if "u850" in maps and "v850" in maps:
+            s = 4
+            axs[0].quiver(lon[::s], lat[::s], maps["u850"][::s, ::s], maps["v850"][::s, ::s],
+                          scale=400, width=0.002)
+            title += " and 850 hPa wind"
+        axs[0].set_title(title, fontsize=10)
+        fig.colorbar(m, ax=axs[0], shrink=0.85)
+    else:
+        axs[0].text(0.5, 0.5, "no t850 map", ha="center", transform=axs[0].transAxes)
+    axs[0].set_xlabel(f"longitude [°E] (substellar at {lon_ss:g}°)")
     axs[0].set_ylabel("latitude [°]")
-    fig.colorbar(m, ax=axs[0], shrink=0.85)
     vmax = np.abs(zu).max()
     cs = axs[1].contourf(lat, sigma, zu, levels=15, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
     axs[1].contour(lat, sigma, zu, levels=15, colors="k", linewidths=0.4)
