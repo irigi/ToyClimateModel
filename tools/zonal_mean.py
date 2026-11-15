@@ -38,7 +38,10 @@ def main():
     ap.add_argument("run")
     ap.add_argument("-o", "--output", default=None)
     ap.add_argument("--title", default=None)
+    ap.add_argument("--hs-criteria", action="store_true",
+                    help="print PASS/FAIL against the M5 Held-Suarez criteria (SPEC.md §8 M5)")
     a = ap.parse_args()
+    checks = []
     run = pathlib.Path(a.run)
     meta = json.loads((run / "meta.json").read_text())
     c = run / "climatology"
@@ -56,12 +59,16 @@ def main():
         sub = np.where(sel[None, :], u, -np.inf)
         k, j = np.unravel_index(np.argmax(sub), u.shape)
         print(f"{name} jet: max [u] = {u[k, j]:.2f} m/s at {latd[j]:.1f}°, sigma = {sigma[k]:.3f}")
+        checks.append((f"{name} jet 26-34 m/s at 38-50°, sigma 0.15-0.35",
+                       26 <= u[k, j] <= 34 and 38 <= abs(latd[j]) <= 50 and 0.15 <= sigma[k] <= 0.35))
     low = u[-1]
     trop = low[np.abs(latd) < 15].mean()
     mid = low[(np.abs(latd) > 30) & (np.abs(latd) < 60)].mean()
     print(f"lowest level [u]: tropics (|lat|<15) {trop:.2f} m/s, midlatitudes (30-60) {mid:.2f} m/s")
+    checks.append(("lowest level: tropical easterlies, midlatitude westerlies", trop < 0 < mid))
     asym = np.abs(u - u[:, ::-1]).max()
     print(f"max hemispheric asymmetry of [u]: {asym:.2f} m/s")
+    checks.append(("hemispheric asymmetry < 3 m/s", asym < 3))
     psi = streamfunction(z["v"], sh, lat, ps, planet["radius"], planet["gravity"])
     kmid = np.argmin(np.abs(sh - 0.7))
     prof = psi[kmid]
@@ -87,6 +94,14 @@ def main():
                 p = np.polyfit(t[sel], ke[sel], 1)
                 span = t[sel][-1] - t[sel][0]
                 print(f"KE trend over the window: {p[0]*span/ke[sel].mean()*100:.2f}% (mean {ke[sel].mean():.3e} J)")
+            last = t >= t[-1] - 1000
+            p1 = np.polyfit(t[last], ke[last], 1)
+            tr = p1[0] * (t[last][-1] - t[last][0]) / ke[last].mean() * 100
+            print(f"KE trend over the last 1000 days: {tr:.2f}%")
+            checks.append(("KE trend over the last 1000 days < 5%", abs(tr) < 5))
+    if a.hs_criteria:
+        for name, ok in checks:
+            print(f"  {'PASS' if ok else 'FAIL'}  {name}")
 
     fig, axs = plt.subplots(2, 2, figsize=(11, 7.5), constrained_layout=True)
     def panel(ax, f, title, cmap="RdBu_r", sym=True, levels=None):

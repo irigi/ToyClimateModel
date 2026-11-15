@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# Regression suite (SPEC.md §9.5.4).
+#
+#   scripts/regress --against <git-ref> [--threads "1 8"] [--jobs N] [--only NAME]
+#       Result-neutrality check for refactors (P0): builds <git-ref> into a separate target
+#       directory, runs a fixed list of short cases with both builds on this machine, f64,
+#       once per thread count, and compares every output file byte for byte
+#       (scripts/regress_compare.py; JSON sidecars without git hash and config echo).
+#       Cases are found by file stem anywhere under cases/ in each tree, and each binary
+#       runs from its own tree, so case reorganisation and schema migration are allowed.
+#
+#   scripts/regress [--skip-hs]
+#       Milestone ratchet (P-7): all --ignored tests, then Held–Suarez T42 L20 1200 days
+#       and the M5 criteria printed by tools/zonal_mean.py. Phase 2 gate scorecards are
+#       added here as the gates are passed.
+#
+# Everything goes to out/regress/; a summary is printed at the end. Exit status 0 = pass.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+ROOT=$PWD
+OUT=$ROOT/out/regress
+mkdir -p "$OUT"
+
+# name  length   (the P0 acceptance list)
+CASES=(
+  "held_suarez_t21 30day"
+  "moist_held_suarez_t21 30day"
+  "moist_held_suarez_sbm_t21 30day"
+  "gray_aquaplanet_t21 60day"
+  "testworld_t21 60day"
+  "tidally_locked_gray_t21 60day"
+)
+
+find_case() { # tree name -> path relative to tree
+  (cd "$1" && find cases -name "$2.toml" | sort | head -n1)
+}
+
+against() {
+  local ref=$1 threads=$2 jobs=$3 only=$4
+  local sha
+  sha=$(git rev-parse --short=12 "$ref^{commit}") || { echo "unknown ref $ref"; exit 2; }
+  local src=$ROOT/target/regress/src-$sha tgt=$ROOT/target/regress/target
+  if [ ! -d "$src" ]; then
+    git worktree add --detach "$src" "$sha" >/dev/null || exit 2
+  fi
+  echo "== building reference $ref ($sha)"
+  (cd "$src" && cargo build -q --release -p toyclim-headless --target-dir "$tgt") || exit 2
+  echo "== building working tree"
+  cargo build -q --release -p toyclim-headless || exit 2
+  local refbin=$tgt/release/toyclim newbin=$ROOT/target/release/toyclim
+  local d=$OUT/against-$sha
+  rm -rf "$d"; mkdir -p "$d"
+
+  # Job list: side tree bin case length threads
+  local jobsfile=$d/jobs.txt
+  : > "$jobsfile"
+  for c in "${CASES[@]}"; do
+    set -- $c
+    local name=$1 len=$2
+    [ -n "$only" ] && [ "$only" != "$name" ] && continue
+    local pr pn
+    pr=$(find_case "$src" "$name"); pn=$(find_case "$ROOT" "$name")
+    if [ -z "$pr" ] || [ -z "$pn" ]; then
+      echo "case $name not found (ref: '${pr}', new: '${pn}')"; exit 2
+    fi
+    for t in $threads; do
+      echo "ref $src $refbin $pr $len $t $name" >> "$jobsfile"
+      echo "new $ROOT $newbin $pn $len $t $name" >> "$jobsfile"
+    done
+  done
+  echo "== running $(wc -l < "$jobsfile") runs, $jobs at a time"
+  export D=$d
+  # shellcheck disable=SC2016
+  xargs -P "$jobs" -L 1 bash -c '
+    side=$0 tree=$1 bin=$2 cfg=$3 len=$4 t=$5 name=$6
+    run=$D/$side/${name}_t$t
+    cd "$tree" && RAYON_NUM_THREADS=$t "$bin" run --config "$cfg" --out "$run" --length "$len" \
+      > "$D/$side.${name}_t$t.log" 2>&1
+    echo "$side ${name}_t$t rc=$?"
+  ' < "$jobsfile" | sort > "$d/rc.txt"
+  cat "$d/rc.txt"
+
+  local fail=0
+  echo "== comparing"
+  for c in "${CASES[@]}"; do
+    set -- $c
+    local name=$1
+    [ -n "$only" ] && [ "$only" != "$name" ] && continue
+    for t in $threads; do
+      local r=$d/ref/${name}_t$t n=$d/new/${name}_t$t
+      printf '%-32s ' "${name}_t$t"
+      if grep -q "${name}_t$t rc=[^0]" "$d/rc.txt"; then
+        echo "RUN FAILED (logs in $d)"; fail=1; continue
+      fi
+      python3 scripts/regress_compare.py "$r" "$n" || fail=1
+    done
+    # Thread independence of the new build.
+    set -- $threads
+    if [ $# -gt 1 ]; then
+      printf '%-32s ' "${name} new t$1 vs t$2"
+      python3 scripts/regress_compare.py "$d/new/${name}_t$1" "$d/new/${name}_t$2" || fail=1
+    fi
+  done
+  if [ $fail = 0 ]; then echo "regress --against $ref: PASS"; else echo "regress --against $ref: FAIL"; fi
+  return $fail
+}
+
+ratchet() {
+  local skip_hs=$1 fail=0
+  cargo build -q --release || exit 2
+  echo "== --ignored tests"
+  RAYON_NUM_THREADS=8 cargo test -q --release --workspace -- --ignored > "$OUT/ignored.log" 2>&1 \
+    && echo "ignored tests: PASS" || { echo "ignored tests: FAIL (out/regress/ignored.log)"; fail=1; }
+  if [ "$skip_hs" = 0 ]; then
+    echo "== Held–Suarez T42 L20 1200 days (M5 criteria)"
+    local hs
+    hs=$(find cases -name held_suarez.toml | head -n1)
+    RAYON_NUM_THREADS=8 target/release/toyclim run --config "$hs" --out "$OUT/hs" > "$OUT/hs.log" 2>&1 \
+      || { echo "HS run failed"; fail=1; }
+    python3 tools/zonal_mean.py "$OUT/hs" --hs-criteria -o "$OUT/hs_zonal_mean.png" | tee "$OUT/hs_criteria.txt"
+    grep -q "FAIL" "$OUT/hs_criteria.txt" && fail=1
+  fi
+  if [ $fail = 0 ]; then echo "regress: PASS"; else echo "regress: FAIL"; fi
+  return $fail
+}
+
+REF="" THREADS="1 8" JOBS=4 ONLY="" SKIP_HS=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    --against) REF=$2; shift 2 ;;
+    --threads) THREADS=$2; shift 2 ;;
+    --jobs) JOBS=$2; shift 2 ;;
+    --only) ONLY=$2; shift 2 ;;
+    --skip-hs) SKIP_HS=1; shift ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    *) echo "unknown argument $1"; exit 2 ;;
+  esac
+done
+if [ -n "$REF" ]; then against "$REF" "$THREADS" "$JOBS" "$ONLY"; else ratchet "$SKIP_HS"; fi
