@@ -8,6 +8,8 @@
 #       (scripts/regress_compare.py; JSON sidecars without git hash and config echo).
 #       Cases are found by file stem anywhere under cases/ in each tree, and each binary
 #       runs from its own tree, so case reorganisation and schema migration are allowed.
+#       scripts/regress_ref_patches/<case>.sed, if present, is applied to the reference
+#       copy of a case whose outputs were changed on purpose (documented in the patch).
 #
 #   scripts/regress [--skip-hs]
 #       Milestone ratchet (P-7): all --ignored tests, then Held–Suarez T42 L20 1200 days
@@ -64,6 +66,17 @@ against() {
     pr=$(find_case "$src" "$name"); pn=$(find_case "$ROOT" "$name")
     if [ -z "$pr" ] || [ -z "$pn" ]; then
       echo "case $name not found (ref: '${pr}', new: '${pn}')"; exit 2
+    fi
+    # A reviewed sed patch can bring the reference copy of a case up to the current
+    # outputs (e.g. added climatology maps); the comparison itself stays byte for byte.
+    local patch=$ROOT/scripts/regress_ref_patches/$name.sed
+    if [ -f "$patch" ]; then
+      sed -f "$patch" "$src/$pr" > "$src/$pr.regress.toml"
+      if cmp -s "$src/$pr" "$src/$pr.regress.toml"; then
+        echo "patch $patch did not change $pr"; exit 2
+      fi
+      pr=$pr.regress.toml
+      echo "reference case $name patched with $(basename "$patch")"
     fi
     for t in $threads; do
       echo "ref $src $refbin $pr $len $t $name" >> "$jobsfile"
