@@ -91,7 +91,10 @@ impl Default for HeldSuarez {
 impl HeldSuarez {
     /// T_eq at latitude `lat` and pressure `p`.
     pub fn t_eq(&self, kappa: f64, lat: f64, p: f64) -> f64 {
-        let (s2, c2) = (lat.sin().powi(2), lat.cos().powi(2));
+        self.t_eq_sc(kappa, lat.sin().powi(2), lat.cos().powi(2), p)
+    }
+    /// T_eq from sin²φ and cos²φ (computed once per column).
+    fn t_eq_sc(&self, kappa: f64, s2: f64, c2: f64, p: f64) -> f64 {
         let pr = p / self.p0;
         ((self.t_surface - self.delta_ty * s2 - self.delta_theta_z * pr.ln() * c2) * pr.powf(kappa))
             .max(self.t_min)
@@ -106,8 +109,9 @@ impl ColumnPhysics for HeldSuarez {
         let kappa = planet.kappa();
         let lat = col.lat as f64;
         let w4 = lat.cos().powi(4);
+        let (s2, c2) = (lat.sin().powi(2), lat.cos().powi(2));
         self.damping
-            .apply(col, out, w4, |p| self.t_eq(kappa, lat, p));
+            .apply(col, out, w4, |p| self.t_eq_sc(kappa, s2, c2, p));
     }
 }
 
@@ -146,10 +150,13 @@ impl TidallyLocked {
         (lat.cos() * (lon - self.substellar_lon).cos()).max(0.0)
     }
     pub fn t_eq(&self, kappa: f64, lat: f64, lon: f64, p: f64) -> f64 {
+        self.t_eq_mu(kappa, self.mu_star(lat, lon), p)
+    }
+    /// T_eq from μ* (computed once per column).
+    fn t_eq_mu(&self, kappa: f64, mu: f64, p: f64) -> f64 {
         let pr = p / self.p0;
-        ((self.t_night + self.delta_td * self.mu_star(lat, lon) - self.delta_theta_z * pr.ln())
-            * pr.powf(kappa))
-        .max(self.t_min)
+        ((self.t_night + self.delta_td * mu - self.delta_theta_z * pr.ln()) * pr.powf(kappa))
+            .max(self.t_min)
     }
 }
 
@@ -160,9 +167,10 @@ impl ColumnPhysics for TidallyLocked {
     fn tendencies(&self, planet: &Planet, col: &ColumnIn, out: &mut ColumnOut) {
         let kappa = planet.kappa();
         let (lat, lon) = (col.lat as f64, col.lon as f64);
-        let w4 = self.mu_star(lat, lon).powi(4);
+        let mu = self.mu_star(lat, lon);
+        let w4 = mu.powi(4);
         self.damping
-            .apply(col, out, w4, |p| self.t_eq(kappa, lat, lon, p));
+            .apply(col, out, w4, |p| self.t_eq_mu(kappa, mu, p));
     }
 }
 
