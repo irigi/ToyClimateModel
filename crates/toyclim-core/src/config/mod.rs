@@ -5,6 +5,7 @@
 
 mod blocks;
 mod duration;
+mod envelope;
 pub mod v2;
 
 pub use blocks::*;
@@ -179,7 +180,7 @@ impl Config {
     /// Warnings for settings outside the supported envelope (SPEC.md §9.2 P-5).
     pub fn envelope_warnings(&self) -> Vec<String> {
         if self.model == ModelKind::Primitive && (self.orbit.is_some() || self.system.is_some()) {
-            v2::envelope_warnings(self)
+            envelope::envelope_warnings(self)
         } else {
             Vec::new()
         }
