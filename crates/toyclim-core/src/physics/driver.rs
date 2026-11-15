@@ -180,16 +180,20 @@ impl PhysicsDriver {
         let ndiag = self.registry.len();
         let dslot = ndiag.max(1);
         let tref = cx.planet.t_ref as Real;
-        self.grids.fill(tr, s);
+        self.grids.fill_with(tr, s, false);
         if let Some(orbit) = cx.orbit {
             let sun = orbit.sun(cx.time);
-            for j in 0..nlat {
-                for i in 0..nlon {
-                    let (la, lo) = (tr.grid.lat[j], tr.grid.lon[i]);
-                    self.insol[j * nlon + i] = orbit.insolation(&sun, la, lo) as Real;
-                    self.coszen[j * nlon + i] = orbit.cos_zenith(&sun, la, lo) as Real;
-                }
-            }
+            self.insol
+                .par_chunks_mut(nlon)
+                .zip(self.coszen.par_chunks_mut(nlon))
+                .enumerate()
+                .for_each(|(j, (ins, cz))| {
+                    for i in 0..nlon {
+                        let (la, lo) = (tr.grid.lat[j], tr.grid.lon[i]);
+                        ins[i] = orbit.insolation(&sun, la, lo) as Real;
+                        cz[i] = orbit.cos_zenith(&sun, la, lo) as Real;
+                    }
+                });
         }
         let g = &self.grids;
         let (sigma, sigma_half) = (&self.sigma, &self.sigma_half);
@@ -270,27 +274,37 @@ impl PhysicsDriver {
             q: vec![0.0; ntr * l],
         };
         jobs.for_each_init(scratch, row);
-        // Scatter the column-major row buffers to `[lev][point]`.
+        // Scatter the column-major buffers (`[point][du | dv | dT | dq]`) to
+        // `[lev][point]`, in parallel over levels.
+        let n = nlat * nlon;
+        let row_out = &self.row_out;
+        let gather = |off: usize, dst: &mut [Real]| {
+            for p in 0..n {
+                dst[p] = row_out[p * w + off];
+            }
+        };
         let t = &mut self.tend;
-        for j in 0..nlat {
-            let out = &self.row_out[j * nlon * w..(j + 1) * nlon * w];
-            let diag = &self.row_diag[j * nlon * dslot..(j + 1) * nlon * dslot];
-            for i in 0..nlon {
-                let p = j * nlon + i;
-                for k in 0..l {
-                    t.du[k][p] = out[i * w + k];
-                    t.dv[k][p] = out[i * w + l + k];
-                    t.dt[k][p] = out[i * w + 2 * l + k];
-                }
-                for (it, dqt) in t.dq.iter_mut().enumerate() {
-                    for k in 0..l {
-                        dqt[k][p] = out[i * w + (3 + it) * l + k];
-                    }
-                }
-                for d in 0..ndiag {
-                    self.diag[d][p] = diag[i * ndiag + d];
-                }
+        let mut dsts: Vec<(usize, &mut [Real])> = Vec::with_capacity((3 + ntr) * l);
+        for (f, field) in [&mut t.du, &mut t.dv, &mut t.dt]
+            .into_iter()
+            .chain(t.dq.iter_mut())
+            .enumerate()
+        {
+            for (k, lvl) in field.levels_mut().enumerate() {
+                dsts.push((f * l + k, lvl));
             }
         }
+        dsts.into_par_iter().for_each(|(off, dst)| gather(off, dst));
+        let row_diag = &self.row_diag;
+        self.diag
+            .levels_mut()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .enumerate()
+            .for_each(|(d, dst)| {
+                for p in 0..n {
+                    dst[p] = row_diag[p * ndiag + d];
+                }
+            });
     }
 }

@@ -176,38 +176,69 @@ impl Grids {
 
     /// Synthesize all grid-point fields of `s` into these buffers.
     pub fn fill(&mut self, tr: &Transform, s: &PeState) {
+        self.fill_with(tr, s, true);
+    }
+
+    /// Synthesize the grid-point fields of `s`; vorticity and divergence only if
+    /// `vor_div` (the physics does not need them). Levels are done in parallel, each
+    /// writing straight into its slice of the flat buffers.
+    pub fn fill_with(&mut self, tr: &Transform, s: &PeState, vor_div: bool) {
         let l = s.vor.nlev();
-        let per: Vec<_> = map_levels(l, |k| {
-            let (u, v) = tr.uv_from_vort_div(&s.vor[k], &s.div[k]);
-            (
-                u,
-                v,
-                tr.synthesis(&s.vor[k]),
-                tr.synthesis(&s.div[k]),
-                tr.synthesis(&s.tmp[k]),
-            )
-        });
-        for (k, (u, v, z, d, t)) in per.into_iter().enumerate() {
-            self.u[k].copy_from_slice(&u);
-            self.v[k].copy_from_slice(&v);
-            self.vor[k].copy_from_slice(&z);
-            self.div[k].copy_from_slice(&d);
-            self.t[k].copy_from_slice(&t);
-        }
-        let (px, py) = tr.grad(&s.lnps);
-        self.px.copy_from_slice(&px);
-        self.py.copy_from_slice(&py);
-        self.lnps.copy_from_slice(&tr.synthesis(&s.lnps));
+        let n = tr.ngrid();
         self.q
-            .resize_with(s.tracers.len(), || Grid3::filled(l, tr.ngrid(), 0.0));
-        for (gq, tq) in self.q.iter_mut().zip(&s.tracers) {
-            for (k, x) in map_levels(l, |k| tr.synthesis(&tq[k]))
-                .into_iter()
-                .enumerate()
-            {
-                gq[k].copy_from_slice(&x);
+            .resize_with(s.tracers.len(), || Grid3::filled(l, n, 0.0));
+        let Grids {
+            u,
+            v,
+            vor,
+            div,
+            t,
+            lnps,
+            px,
+            py,
+            q,
+        } = self;
+        let dyn_levels = |k: usize,
+                          u: &mut [Real],
+                          v: &mut [Real],
+                          z: &mut [Real],
+                          d: &mut [Real],
+                          t: &mut [Real]| {
+            let (gu, gv) = tr.uv_from_vort_div(&s.vor[k], &s.div[k]);
+            u.copy_from_slice(&gu);
+            v.copy_from_slice(&gv);
+            if vor_div {
+                z.copy_from_slice(&tr.synthesis(&s.vor[k]));
+                d.copy_from_slice(&tr.synthesis(&s.div[k]));
             }
-        }
+            t.copy_from_slice(&tr.synthesis(&s.tmp[k]));
+        };
+        let surface = || {
+            let (gx, gy) = tr.grad(&s.lnps);
+            (gx, gy, tr.synthesis(&s.lnps))
+        };
+        let tracers = |q: &mut Vec<Grid3>| {
+            for (gq, tq) in q.iter_mut().zip(&s.tracers) {
+                gq.as_mut_slice()
+                    .par_chunks_mut(n)
+                    .enumerate()
+                    .for_each(|(k, x)| x.copy_from_slice(&tr.synthesis(&tq[k])));
+            }
+        };
+        let ((gx, gy, gl), ()) = rayon::join(surface, || {
+            u.as_mut_slice()
+                .par_chunks_mut(n)
+                .zip(v.as_mut_slice().par_chunks_mut(n))
+                .zip(vor.as_mut_slice().par_chunks_mut(n))
+                .zip(div.as_mut_slice().par_chunks_mut(n))
+                .zip(t.as_mut_slice().par_chunks_mut(n))
+                .enumerate()
+                .for_each(|(k, ((((u, v), z), d), t))| dyn_levels(k, u, v, z, d, t));
+            tracers(q);
+        });
+        px.copy_from_slice(&gx);
+        py.copy_from_slice(&gy);
+        lnps.copy_from_slice(&gl);
     }
 }
 

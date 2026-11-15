@@ -87,6 +87,8 @@ pub struct Primitive {
     spare: Option<PeState>,
     precip: Vec<Real>,
     evap: Vec<Real>,
+    /// Scratch of the semi-implicit solve.
+    isol: Vec<Complex>,
     /// Wall time per phase (see [`PHASES`]) when profiling is on.
     timers: Option<[f64; 9]>,
 }
@@ -138,6 +140,7 @@ impl Primitive {
             precip: vec![0.0; n],
             evap: vec![0.0; n],
             timers: None,
+            isol: Vec::new(),
             prev: init.state.clone(),
             curr: init.state,
             coriolis_row,
@@ -258,12 +261,28 @@ impl Model for Primitive {
         let (lay, radius) = (&self.tr.layout, self.tr.radius);
         if first {
             let minus = &self.curr;
-            self.si
-                .update(lay, radius, minus, &self.ntend, 0.5 * dt, true, &mut next);
+            self.si.update(
+                lay,
+                radius,
+                minus,
+                &self.ntend,
+                0.5 * dt,
+                true,
+                &mut next,
+                &mut self.isol,
+            );
         } else {
             let minus = &self.prev;
-            self.si
-                .update(lay, radius, minus, &self.ntend, dt, false, &mut next);
+            self.si.update(
+                lay,
+                radius,
+                minus,
+                &self.ntend,
+                dt,
+                false,
+                &mut next,
+                &mut self.isol,
+            );
         }
         lap.add(&mut t.as_mut(), 5);
         let diff = if first {

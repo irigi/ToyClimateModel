@@ -3,8 +3,9 @@
 use super::state::{PeState, CZERO};
 use super::vertical::SigmaLevels;
 use crate::planet::Planet;
-use crate::spectral::Layout;
+use crate::spectral::{Complex, Layout};
 use crate::Real;
+use rayon::prelude::*;
 
 /// Matrices of the linearised system and the inverses S_ℓ⁻¹ per total wavenumber ℓ.
 pub struct SemiImplicit {
@@ -64,7 +65,10 @@ impl SemiImplicit {
 
     /// Semi-implicit update from `minus` with centre-level tendencies `n` into `out`, with
     /// half-step `dt` (Δt for leapfrog steps, Δt/2 for the first step, chosen by `first`).
-    /// Every coefficient of `out` is overwritten.
+    /// Every coefficient of `out` is overwritten. The coupled (δ, T', ln p_s) solve runs in
+    /// parallel over spectral coefficients into `sol` (`[coefficient][δ | T' | ln p_s]`),
+    /// then is copied to `out`; the arithmetic per coefficient does not depend on the
+    /// thread count.
     #[allow(clippy::too_many_arguments)]
     pub fn update(
         &self,
@@ -75,8 +79,10 @@ impl SemiImplicit {
         dt: Real,
         first: bool,
         out: &mut PeState,
+        sol: &mut Vec<Complex>,
     ) {
         let l = self.w.len();
+        let nspec = lay.len();
         let a2 = radius * radius;
         let sinv = if first {
             &self.sinv_first
@@ -84,17 +90,30 @@ impl SemiImplicit {
             &self.sinv_leap
         };
         let (rt, w) = (self.rt, &self.w);
-        for (it, tq) in out.tracers.iter_mut().enumerate() {
-            for k in 0..l {
-                for (idx, x) in tq[k].iter_mut().enumerate() {
-                    *x = minus.tracers[it][k][idx] + n.tracers[it][k][idx] * (2.0 * dt);
-                }
+        // Explicit parts: vorticity and tracers, elementwise.
+        let explicit = |o: &mut [Complex], m: &[Complex], t: &[Complex]| {
+            for ((x, a), b) in o.iter_mut().zip(m).zip(t) {
+                *x = a + b * (2.0 * dt);
             }
+        };
+        out.vor
+            .as_mut_slice()
+            .par_chunks_mut(nspec)
+            .zip(minus.vor.as_slice().par_chunks(nspec))
+            .zip(n.vor.as_slice().par_chunks(nspec))
+            .for_each(|((o, m), t)| explicit(o, m, t));
+        for (it, tq) in out.tracers.iter_mut().enumerate() {
+            tq.as_mut_slice()
+                .par_chunks_mut(nspec)
+                .zip(minus.tracers[it].as_slice().par_chunks(nspec))
+                .zip(n.tracers[it].as_slice().par_chunks(nspec))
+                .for_each(|((o, m), t)| explicit(o, m, t));
         }
-        let mut tt = vec![CZERO; l];
-        let mut rhs = vec![CZERO; l];
-        let mut x = vec![CZERO; l];
-        for idx in 0..lay.len() {
+        // Coupled solve per coefficient.
+        let stride = 2 * l + 1;
+        sol.resize(nspec * stride, CZERO);
+        let solve = |(tt, rhs, x): &mut (Vec<Complex>, Vec<Complex>, Vec<Complex>),
+                     (idx, o): (usize, &mut [Complex])| {
             let ell = lay.l_of[idx];
             let lam = (ell * (ell + 1)) as Real / a2;
             let si = &sinv[ell];
@@ -121,15 +140,33 @@ impl SemiImplicit {
                 wx += x[k] * w[k];
             }
             for k in 0..l {
-                out.div[k][idx] = x[k] * 2.0 - minus.div[k][idx];
+                o[k] = x[k] * 2.0 - minus.div[k][idx];
                 let mut tx = CZERO;
                 for j in 0..=k {
                     tx += x[j] * self.tau[k * l + j];
                 }
-                out.tmp[k][idx] = minus.tmp[k][idx] + (n.tmp[k][idx] - tx) * (2.0 * dt);
-                out.vor[k][idx] = minus.vor[k][idx] + n.vor[k][idx] * (2.0 * dt);
+                o[l + k] = minus.tmp[k][idx] + (n.tmp[k][idx] - tx) * (2.0 * dt);
             }
-            out.lnps[idx] = minus.lnps[idx] + (n.lnps[idx] - wx) * (2.0 * dt);
+            o[2 * l] = minus.lnps[idx] + (n.lnps[idx] - wx) * (2.0 * dt);
+        };
+        sol.par_chunks_mut(stride)
+            .enumerate()
+            .with_min_len(16)
+            .for_each_init(|| (vec![CZERO; l], vec![CZERO; l], vec![CZERO; l]), solve);
+        let sol = &*sol;
+        out.div
+            .as_mut_slice()
+            .par_chunks_mut(nspec)
+            .zip(out.tmp.as_mut_slice().par_chunks_mut(nspec))
+            .enumerate()
+            .for_each(|(k, (d, t))| {
+                for idx in 0..nspec {
+                    d[idx] = sol[idx * stride + k];
+                    t[idx] = sol[idx * stride + l + k];
+                }
+            });
+        for (idx, x) in out.lnps.iter_mut().enumerate() {
+            *x = sol[idx * stride + 2 * l];
         }
     }
 }

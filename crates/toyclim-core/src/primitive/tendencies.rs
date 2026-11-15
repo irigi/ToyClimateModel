@@ -149,47 +149,67 @@ fn column_row(
             np[i] = s;
         }
     }
-    let va = |x: &Grid3, k: usize, i: usize| -> Real {
-        let p = r0 + i;
-        let below = if k + 1 < l {
-            sdot[(k + 1) * nlon + i] * (x[k + 1][p] - x[k][p])
-        } else {
-            0.0
+    // Vertical advection (σ̇ ∂X/∂σ)_k at column i, from the row slices of levels k−1, k,
+    // k+1 and σ̇ above (`sa`) and below (`sb`) level k.
+    #[inline(always)]
+    fn va(
+        x: &[Real],
+        xa: Option<&[Real]>,
+        xb: Option<&[Real]>,
+        sa: &[Real],
+        sb: &[Real],
+        ds: Real,
+        i: usize,
+    ) -> Real {
+        let below = match xb {
+            Some(xb) => sb[i] * (xb[i] - x[i]),
+            None => 0.0,
         };
-        let above = if k > 0 {
-            sdot[k * nlon + i] * (x[k][p] - x[k - 1][p])
-        } else {
-            0.0
+        let above = match xa {
+            Some(xa) => sa[i] * (x[i] - xa[i]),
+            None => 0.0,
         };
-        (below + above) / (2.0 * c.ds[k])
-    };
+        (below + above) / (2.0 * ds)
+    }
+    // Row r0..r0+nlon of level k (None outside the column).
+    fn row_at(f: &Grid3, k: Option<usize>, l: usize, r0: usize, nlon: usize) -> Option<&[Real]> {
+        k.filter(|&k| k < l).map(|k| &f[k][r0..r0 + nlon])
+    }
     let mut umax: Real = 0.0;
     let [qu, qv, ke, tu, tv, trest, sdl] = &mut row.fields;
     for k in 0..l {
         sdl[k].copy_from_slice(&sdot[(k + 1) * nlon..(k + 2) * nlon]);
     }
     for k in 0..l {
-        let (u, v, t, z, dv) = (
-            &g.u[k][rng.clone()],
-            &g.v[k][rng.clone()],
-            &g.t[k][rng.clone()],
-            &g.vor[k][rng.clone()],
-            &g.div[k][rng.clone()],
+        let at = |f| row_at(f, Some(k), l, r0, nlon).unwrap_or_default();
+        let (u, v, t, z, dv) = (at(&g.u), at(&g.v), at(&g.t), at(&g.vor), at(&g.div));
+        let (ka, kb) = (k.checked_sub(1), Some(k + 1));
+        let (ua, ub) = (row_at(&g.u, ka, l, r0, nlon), row_at(&g.u, kb, l, r0, nlon));
+        let (va_, vb) = (row_at(&g.v, ka, l, r0, nlon), row_at(&g.v, kb, l, r0, nlon));
+        let (ta, tb) = (row_at(&g.t, ka, l, r0, nlon), row_at(&g.t, kb, l, r0, nlon));
+        let sa = &sdot[k * nlon..(k + 1) * nlon];
+        let sb = &sdot[(k + 1) * nlon..(k + 2) * nlon];
+        let ds = c.ds[k];
+        let cum_above = &cum[k.saturating_sub(1) * nlon..k.saturating_sub(1) * nlon + nlon];
+        let (vgk, ddk) = (&vg[k * nlon..(k + 1) * nlon], &dd[k * nlon..(k + 1) * nlon]);
+        let (qu, qv, ke, tu, tv, trest) = (
+            &mut *qu[k],
+            &mut *qv[k],
+            &mut *ke[k],
+            &mut *tu[k],
+            &mut *tv[k],
+            &mut *trest[k],
         );
         for i in 0..nlon {
-            let above = if k > 0 {
-                c.lnr[k] * cum[(k - 1) * nlon + i]
-            } else {
-                0.0
-            };
-            let wp = vg[k * nlon + i] - (above + c.alpha[k] * c.ds[k] * dd[k * nlon + i]) / c.ds[k];
+            let above = if k > 0 { c.lnr[k] * cum_above[i] } else { 0.0 };
+            let wp = vgk[i] - (above + c.alpha[k] * ds * ddk[i]) / ds;
             let eta = z[i] + f;
-            qu[k][i] = -eta * v[i] + va(&g.u, k, i) + c.r * t[i] * px[i];
-            qv[k][i] = eta * u[i] + va(&g.v, k, i) + c.r * t[i] * py[i];
-            ke[k][i] = 0.5 * (u[i] * u[i] + v[i] * v[i]) * ic2;
-            tu[k][i] = u[i] * t[i];
-            tv[k][i] = v[i] * t[i];
-            trest[k][i] = t[i] * dv[i] - va(&g.t, k, i) + c.kappa * (c.tref + t[i]) * wp;
+            qu[i] = -eta * v[i] + va(u, ua, ub, sa, sb, ds, i) + c.r * t[i] * px[i];
+            qv[i] = eta * u[i] + va(v, va_, vb, sa, sb, ds, i) + c.r * t[i] * py[i];
+            ke[i] = 0.5 * (u[i] * u[i] + v[i] * v[i]) * ic2;
+            tu[i] = u[i] * t[i];
+            tv[i] = v[i] * t[i];
+            trest[i] = t[i] * dv[i] - va(t, ta, tb, sa, sb, ds, i) + c.kappa * (c.tref + t[i]) * wp;
             umax = umax.max(u[i].abs() * ic2);
         }
     }
