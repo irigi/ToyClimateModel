@@ -68,6 +68,8 @@ pub struct Budget {
     /// Kinetic energy removed by hyperdiffusion (returned as heat when the energy fixer is
     /// on).
     pub diffusion_ke: f64,
+    /// Water mass moved by the negative-humidity fixer (SPEC.md §9.8 monitor) \[kg\].
+    pub fixer: f64,
 }
 
 /// The primitive-equation model.
@@ -422,7 +424,8 @@ impl Model for Primitive {
             self.fix_mass();
         }
         let ds = &self.levels.dsigma;
-        tracers::fix_negative(&self.tr, &self.curr.lnps, ds, &mut self.curr.tracers);
+        let moved = tracers::fix_negative(&self.tr, &self.curr.lnps, ds, &mut self.curr.tracers);
+        self.budget.fixer += moved / self.planet.gravity;
         lap.add(&mut t.as_mut(), 7);
         self.steps += 1;
         if let (Some(acc), Some(t), Some(d)) = (self.timers.as_mut(), t, dyn_t) {

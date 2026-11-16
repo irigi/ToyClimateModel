@@ -35,6 +35,7 @@ impl Primitive {
                 ("budget_precip".to_string(), b.precip),
                 ("budget_evap".to_string(), b.evap),
                 ("budget_diffusion_ke".to_string(), b.diffusion_ke),
+                ("budget_fixer".to_string(), b.fixer),
             ]);
         }
         (a, sc)
@@ -86,6 +87,7 @@ impl Primitive {
                 "budget_precip" => self.budget.precip = *v,
                 "budget_evap" => self.budget.evap = *v,
                 "budget_diffusion_ke" => self.budget.diffusion_ke = *v,
+                "budget_fixer" => self.budget.fixer = *v,
                 _ => {}
             }
         }

@@ -100,6 +100,9 @@ func _case_names(dir: String = "") -> PackedStringArray:
 	var subdirs := DirAccess.get_directories_at(base)
 	subdirs.sort()
 	for d in subdirs:
+		# single-column cases run with `toyclim scm`, not in the viewer
+		if dir == "" and d == "scm":
+			continue
 		out.append_array(_case_names(dir.path_join(d) if dir != "" else d))
 	var files := DirAccess.get_files_at(base)
 	files.sort()

@@ -60,14 +60,21 @@ pub(crate) fn tendency(
 /// Negative-value fixer: in grid space, set negative values to zero and scale the positive
 /// values so that the global tracer mass ∫Σ_k q Δσ_k p_s/g dA is unchanged; then transform
 /// back. Applied to the new time level after each step. Tracers without negative values
-/// are left untouched.
-pub(crate) fn fix_negative(tr: &Transform, lnps: &[Complex], ds: &[f64], tracers: &mut [Spec3]) {
+/// are left untouched. Returns the mass of tracer 0 filled in where it was negative (and
+/// taken from the positive values) \[kg × g, i.e. ∫Σ_k |q⁻| Δσ_k p_s dA in Pa m²\].
+pub(crate) fn fix_negative(
+    tr: &Transform,
+    lnps: &[Complex],
+    ds: &[f64],
+    tracers: &mut [Spec3],
+) -> f64 {
+    let mut moved0 = 0.0;
     if tracers.is_empty() {
-        return;
+        return moved0;
     }
     let n = tr.ngrid();
     let ps: Vec<Real> = tr.synthesis(lnps).iter().map(|x| x.exp()).collect();
-    for tq in tracers.iter_mut() {
+    for (it, tq) in tracers.iter_mut().enumerate() {
         let l = tq.nlev();
         let mut grids: Vec<Vec<Real>> = map_levels(l, |k| tr.synthesis(&tq[k]));
         if !grids.par_iter().any(|g| g.iter().any(|&x| x < 0.0)) {
@@ -97,6 +104,9 @@ pub(crate) fn fix_negative(tr: &Transform, lnps: &[Complex], ds: &[f64], tracers
             }
         });
         let after = column_mass(&grids);
+        if it == 0 {
+            moved0 = after - before;
+        }
         let scale = if after > 0.0 && before > 0.0 {
             (before / after) as Real
         } else {
@@ -113,4 +123,5 @@ pub(crate) fn fix_negative(tr: &Transform, lnps: &[Complex], ds: &[f64], tracers
             .enumerate()
             .for_each(|(k, x)| x.copy_from_slice(&tr.analysis(&grids[k])));
     }
+    moved0
 }

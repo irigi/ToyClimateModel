@@ -104,6 +104,8 @@ impl Primitive {
     /// T₀ = T* + γ z_s; if T* < 255 K, T* ← (T* + 255)/2; if T₀ > 290.5 K, γ ← (290.5 − T*)/z_s
     /// (or γ = 0 and T* ← (290.5 + T*)/2 when T* > 290.5 K); then
     /// p_msl = p_s exp[β (1 − αβ/2 + (αβ)²/3)], β = Φ_s/(R T*), α = R γ / g.
+    /// **Unverified**: written from memory; the NCAR note was not reachable on 2026-11-16
+    /// (docs/progress.md). Check before the P5 sea-level-pressure row.
     pub(crate) fn sea_level_pressure(&self) -> Vec<Real> {
         let tr = &self.tr;
         let l = self.nlev();

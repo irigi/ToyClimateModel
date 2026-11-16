@@ -244,6 +244,7 @@ impl Primitive {
                 ("cum_precip", b.precip),
                 ("cum_evap", b.evap),
                 ("cum_diffusion_ke", b.diffusion_ke),
+                ("cum_fixer", b.fixer),
             ]);
         }
         // latent energy ∫ L q dm [J]
