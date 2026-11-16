@@ -13,6 +13,8 @@ pub enum ModelKind {
     Dummy,
     ShallowWater,
     Primitive,
+    /// Single-column model (`toyclim scm`, SPEC.md §9.5.1).
+    Scm,
 }
 
 impl ModelKind {
@@ -20,6 +22,7 @@ impl ModelKind {
         match self {
             ModelKind::Dummy => "dummy",
             ModelKind::ShallowWater => "shallow_water",
+            ModelKind::Scm => "scm",
             ModelKind::Primitive => "primitive",
         }
     }

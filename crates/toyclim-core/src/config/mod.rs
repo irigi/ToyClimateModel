@@ -63,6 +63,8 @@ pub struct Config {
     pub physics: Option<PhysicsConfig>,
     /// Dynamical-core options (energy fixer, sponge).
     pub dynamics: Option<DynamicsConfig>,
+    /// Single-column settings (`model = "scm"`), see `crate::scm`.
+    pub scm: Option<toml::Table>,
     #[serde(default)]
     pub diffusion: DiffusionConfig,
     #[serde(default)]
@@ -199,9 +201,17 @@ impl Config {
                 return bad("station names must be non-empty and contain no slashes");
             }
         }
-        if self.model == ModelKind::Primitive && self.levels.is_none() && self.sigma_half.is_none()
+        if matches!(self.model, ModelKind::Primitive | ModelKind::Scm)
+            && self.levels.is_none()
+            && self.sigma_half.is_none()
         {
             return bad("primitive model needs `levels` or `sigma_half`");
+        }
+        if (self.model == ModelKind::Scm) != self.scm.is_some() {
+            return bad("an [scm] block goes with model = \"scm\" (and only there)");
+        }
+        if let Some(s) = &self.scm {
+            crate::scm::ScmSettings::parse(s).map_err(ConfigError::Invalid)?;
         }
         self.planet.resolve()?;
         Ok(())

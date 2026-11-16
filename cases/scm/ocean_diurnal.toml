@@ -1,0 +1,63 @@
+# Single column over a 50 m ocean mixed layer at 20°N, perpetual equinox, clear sky
+# (SPEC.md P1 acceptance 3: diurnal range of the 2 m temperature below 1 K). Gray radiation
+# (Frierson et al. 2006 optical depths; prototype SW absorption), K-profile boundary layer
+# with Louis (1979) surface exchange and Charnock roughness, dry adjustment, water vapour
+# with SBM convection and large-scale condensation. Ocean: 50 m mixed layer
+# (2e8 J m⁻² K⁻¹), albedo 0.06 (the SPEC.md §9.4.6 starting value for open ocean).
+schema = 2
+description = "SCM: 50 m ocean mixed layer at 20°N, equinox, moist"
+model = "scm"
+truncation = 21
+levels = "L26"
+length = "10day"
+output_every = "30min"
+
+[scm]
+lat = 20.0
+lon = 0.0
+dt = "30min"
+t_air = 300.0
+lapse_rate = 6.5
+t_tropopause = 200.0
+wind = [5.0, 0.0]
+wind_mode = "geostrophic"
+rh = 0.7
+
+[scm.surface]
+kind = "ocean"
+mixed_layer_depth = 50.0
+albedo = 0.06
+t_initial = 300.0
+
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0
+obliquity = 0.0
+spin = "free"
+diurnal = true
+
+[planet]
+preset = "earth"
+
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[radiation]
+scheme = "gray"
+
+[boundary_layer]
+scheme = "kprofile"
+
+[convection]
+scheme = "sbm"
+
+[moisture]
+condensable = "water"

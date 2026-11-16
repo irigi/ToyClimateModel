@@ -13,5 +13,6 @@ pub fn build_model(cfg: &Config) -> Result<Box<dyn Model>, String> {
         ModelKind::ShallowWater => Ok(Box::new(crate::shallow_water::from_config(cfg)?)),
         ModelKind::Primitive => Ok(Box::new(crate::primitive::from_config(cfg)?)),
         ModelKind::Dummy => Err("the dummy model has no dynamics".into()),
+        ModelKind::Scm => Err("single-column cases run with `toyclim scm`".into()),
     }
 }

@@ -47,6 +47,18 @@ enum Cmd {
         #[arg(long)]
         length: Option<String>,
     },
+    /// Run a single-column case (`model = "scm"`, SPEC.md §9.5.1): writes <out>/scm.csv
+    /// (time series of T_s, the scheme diagnostics and the budget residuals) and
+    /// <out>/profiles.csv (final T, q, u, v per level).
+    Scm {
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        /// Override the run length (e.g. "2day").
+        #[arg(long)]
+        length: Option<String>,
+    },
     /// List the configs in a cases directory.
     ListCases {
         #[arg(long, default_value = "cases")]
@@ -80,8 +92,61 @@ fn main() -> Result<()> {
             }
             bench(&c)
         }
+        Cmd::Scm {
+            config,
+            out,
+            length,
+        } => {
+            let mut c = Config::from_file(&config)?;
+            if let Some(l) = length {
+                c.length = l.parse()?;
+            }
+            run_scm(&c, &out)
+        }
         Cmd::ListCases { dir } => list_cases(&dir),
     }
+}
+
+fn run_scm(c: &Config, out: &Path) -> Result<()> {
+    let mut m = toyclim_core::scm::Scm::from_config(c).map_err(anyhow::Error::msg)?;
+    fs::create_dir_all(out)?;
+    let dt = m.settings.dt;
+    let steps = (c.length.0 / dt).round() as u64;
+    let every = ((c.output_every.0 / dt).round() as u64).max(1);
+    let mut f = std::io::BufWriter::new(fs::File::create(out.join("scm.csv"))?);
+    write!(f, "time_s,ts")?;
+    for n in &m.names {
+        write!(f, ",{n}")?;
+    }
+    writeln!(f, ",energy_residual,water_residual")?;
+    let (mut emax, mut wmax) = (0.0f64, 0.0f64);
+    for n in 1..=steps {
+        let r = m.step();
+        emax = emax.max(r.energy_residual.abs());
+        wmax = wmax.max(r.water_residual.abs());
+        if n % every == 0 {
+            write!(f, "{},{}", r.time, r.ts)?;
+            for x in &r.diag {
+                write!(f, ",{x}")?;
+            }
+            writeln!(f, ",{},{}", r.energy_residual, r.water_residual)?;
+        }
+    }
+    let mut p = std::io::BufWriter::new(fs::File::create(out.join("profiles.csv"))?);
+    writeln!(p, "level,sigma,p_pa,t,q,u,v")?;
+    let s = &m.state;
+    for k in 0..s.nlev {
+        let q = s.humidity().map_or(0.0, |q| q[k]);
+        writeln!(
+            p,
+            "{k},{},{},{},{q},{},{}",
+            m.sigma[k], m.p[k], s.t[k], s.u[k], s.v[k]
+        )?;
+    }
+    log::info!(
+        "scm: {steps} steps of {dt} s; max |energy residual| {emax:.2e} W/m², max |water residual| {wmax:.2e} kg/m²/s"
+    );
+    Ok(())
 }
 
 fn list_cases(dir: &Path) -> Result<()> {

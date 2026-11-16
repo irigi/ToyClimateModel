@@ -152,6 +152,7 @@ pub struct ConfigV2 {
     pub stations: Option<Value>,
     pub station_every: Option<Value>,
     pub station_fields: Option<Value>,
+    pub scm: Option<Value>,
 }
 
 /// Derived system quantities and the inputs they came from (echoed in `meta.json`).
@@ -236,6 +237,7 @@ impl ConfigV2 {
             "stations",
             "station_every",
             "station_fields",
+            "scm",
         ] {
             if let Some(v) = raw.get(key) {
                 t.insert(key.into(), v.clone());
