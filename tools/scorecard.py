@@ -13,6 +13,9 @@ Metrics every world suite includes:
 - energy closure of the atmosphere: |d(moist total energy)/dt − (net TOA − net surface)|
   over the window, from the time-integrated fluxes accumulated every step;
 - water closure: |dW/dt − (E − P)|;
+- with a surface model: system energy closure |d(atmosphere + surface energy)/dt − (net TOA
+  + q-flux + ice-cap flux)| and system water closure |d(vapour + bucket + snow)/dt + runoff
+  + water taken by the ocean| (SPEC.md P2 acceptance 2–3);
 - grid-point storm index G: the largest ratio, over cells whose orography is within ±300 m
   of their neighbours, of a cell's time-mean precipitation to the mean of its neighbours
   (8; 5 at the first and last latitude rows);
@@ -163,6 +166,24 @@ def world_metrics(run, meta, c, info, diag):
             if "cum_fixer" in diag:
                 fx = (diag["cum_fixer"][i1] - diag["cum_fixer"][i0]) / (T / 86400)
                 m["fixer_percent_per_day"] = float(100 * fx / vap)
+        # P2: whole-system closures with the surface reservoirs (slab ocean, soil, snow,
+        # sea ice); the ocean is an infinite water reservoir, a fixed SST also for energy
+        fixed = bool(((meta.get("config") or {}).get("surface") or {}).get("fixed", False))
+        if "surface_energy" in diag and "cum_qflux" in diag and not fixed:
+            es = diag["surface_energy"]
+            ds = (es[i1] - es[i0]) / T / area
+            src = toa + rate("cum_qflux") + rate("cum_ice_cap")
+            m["surface_energy_tendency_W_m2"] = float(ds)
+            m["energy_closure_system_W_m2"] = float(abs(de + ds - src))
+            m["ice_cap_flux_W_m2"] = float(rate("cum_ice_cap"))
+        if "surface_water" in diag and "latent_energy" in diag and "cum_runoff" in diag:
+            lv = 2.5e6
+            dw = (diag["latent_energy"][i1] - diag["latent_energy"][i0]) / lv / T / area
+            sw = diag["surface_water"]
+            dws = (sw[i1] - sw[i0]) / T / area
+            out = rate("cum_runoff") + rate("cum_ocean_uptake")
+            m["runoff_mm_day"] = float(rate("cum_runoff") * 86400)
+            m["water_closure_system_mm_day"] = float(abs(dw + dws + out) * 86400)
     if "rsdt" in diag and "asr" in diag:
         sel = slice(i0, i1 + 1)
         m["planetary_albedo"] = float(1 - diag["asr"][sel].mean() / diag["rsdt"][sel].mean())

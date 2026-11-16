@@ -170,8 +170,8 @@ fn moist_case(text: &str, tag: &str) {
     std::fs::remove_file(&cfg).ok();
 }
 
-/// Land, orography, bucket, slab ocean, gray radiation, the K-profile boundary layer with the
-/// coupled surface solve (carried state: u*) and orbit together: the model runs, stays
+/// Land, orography, soil, bucket, snow, slab ocean and sea ice, gray radiation, the K-profile
+/// boundary layer with the coupled surface solve (carried state: u*) and orbit together: the model runs, stays
 /// finite and keeps the bucket within its bounds; restart is bitwise and the output does
 /// not depend on the thread count.
 #[test]
@@ -186,8 +186,8 @@ levels = 10
 dt = "30min"
 length = "4day"
 output_every = "2day"
-output_fields = ["ts", "bucket", "precip", "orog", "land"]
-initial_condition = {{ case = "rest", temperature = 280.0 }}
+output_fields = ["ts", "bucket", "precip", "orog", "land", "snw", "sic", "sit", "tos", "mrro"]
+initial_condition = {{ case = "rest", temperature = 265.0 }}
 [moisture]
 condensable = "water"
 [orbit]
@@ -210,7 +210,16 @@ type = "gray_aquaplanet"
     run(&cfg, &c, "2", &["--length", "2day"]);
     let r = c.join("restart");
     run(&cfg, &c, "2", &["--restart", r.to_str().unwrap()]);
-    for f in ["ts_000192.npy", "bucket_000192.npy", "precip_000192.npy"] {
+    for f in [
+        "ts_000192.npy",
+        "bucket_000192.npy",
+        "precip_000192.npy",
+        "snw_000192.npy",
+        "sic_000192.npy",
+        "sit_000192.npy",
+        "tos_000192.npy",
+        "mrro_000192.npy",
+    ] {
         let x = std::fs::read(a.join("fields").join(f)).unwrap();
         let y = std::fs::read(c.join("fields").join(f)).unwrap();
         assert!(x == y, "{f} differs after restart");
@@ -221,6 +230,11 @@ type = "gray_aquaplanet"
     assert!(b.iter().all(|&w| (0.0..=150.0).contains(&w)));
     assert!(land.iter().any(|&f| f >= 0.5) && land.iter().any(|&f| f < 0.5));
     assert!(ts.iter().all(|&t| t.is_finite() && t > 150.0 && t < 350.0));
+    // a cold start makes snow and sea ice somewhere: the new surface state is exercised
+    let (snw, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/snw_000192.npy")).unwrap();
+    let (sic, _) = toyclim_core::io::npy::read::<f32>(&a.join("fields/sic_000192.npy")).unwrap();
+    assert!(snw.iter().any(|&s| s > 0.0), "no snow anywhere");
+    assert!(sic.iter().any(|&s| s > 0.0), "no sea ice anywhere");
     for d in [&a, &a5, &c] {
         std::fs::remove_dir_all(d).ok();
     }
