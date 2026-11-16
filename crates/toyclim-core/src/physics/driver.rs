@@ -308,7 +308,10 @@ impl PhysicsDriver {
                 e[Exchange::PRECIP] = sfc.rain + sfc.snow;
                 e[Exchange::EVAP] = sfc.evap;
                 e[Exchange::TOA_NET] = toa_net;
-                e[Exchange::SFC_NET] = sfc.sfc_net;
+                // energy leaving the atmosphere at the bottom: the net flux into the surface
+                // and the latent-heat deficit of the snow that reaches it
+                let lf = cx.cond.map_or(0.0, |c| c.latent_heat_fusion);
+                e[Exchange::SFC_NET] = sfc.sfc_net - lf * sfc.snow;
             }
         };
         let jobs = self

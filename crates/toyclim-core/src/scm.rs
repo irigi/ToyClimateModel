@@ -391,6 +391,10 @@ impl Scm {
         }
         boundary += self.tile.qflux;
         let lv = self.cond.as_ref().map_or(0.0, |c| c.latent_heat);
+        // snow reaches the surface with the latent-heat deficit L_f per kg (the atmosphere
+        // kept the heat of freezing)
+        let lf = self.cond.as_ref().map_or(0.0, |c| c.latent_heat_fusion);
+        let d_sfc = d_sfc - lf * sfc.snow * dt;
         let d_col = column_energy_change(s, &self.dp, &self.planet, lv, (&t0, &u0, &v0, &q0));
         let energy_residual = (d_col + d_sfc) / dt - boundary;
         // water: column change = E − P (the ocean is an infinite reservoir; the land

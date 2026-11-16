@@ -212,17 +212,27 @@ impl ColumnScheme for SimplifiedBettsMiller {
         // Σ c_p (T_ref − T) dp = Σ L (q − q_ref) dp (q_ref held at the first-guess value)
         let mass: f64 = dp[top..l].iter().sum();
         let dtref = (lv / cp) * (pq - pt) / mass;
-        let mut precip = 0.0;
+        let (mut precip, mut rain, mut snow) = (0.0, 0.0, 0.0);
+        let lf = self.cond.latent_heat_fusion;
         for k in top..l {
             let dtk = (tp[k] + dtref - st.t[k]) / self.tau;
             let dqk = -(st.q[k] - qref(tp[k], p[k])) / self.tau;
-            st.add_t(k, dtk);
+            // condensate (net drying) of the layer freezes with f_ice of the layer
+            let fi = self.cond.ice_fraction(st.t[k]);
+            let fusion = if dqk < 0.0 { -fi * lf / cp * dqk } else { 0.0 };
+            st.add_t(k, dtk + fusion);
             st.add_q(0, k, dqk);
-            precip -= dqk * dp[k] / g;
+            let m = -dqk * dp[k] / g;
+            let fi = if dqk < 0.0 { fi } else { 0.0 };
+            st.produce(k, m, fi);
+            precip += m;
+            rain += (1.0 - fi) * m;
+            snow += fi * m;
         }
         // The closure makes the column heating equal L × precipitation; report the column
         // water loss (the same number) so the water budget closes.
-        sfc.rain += precip;
+        sfc.rain += rain;
+        sfc.snow += snow;
         diag[0] += precip;
     }
 }
