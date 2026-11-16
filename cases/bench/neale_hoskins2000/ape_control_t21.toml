@@ -10,7 +10,11 @@
 #     diurnal cycle; eccentricity and obliquity zero;
 #   - CO₂ 348 ppmv and an AMIP II ozone climatology (not represented: gray radiation);
 #   - 3.5 years, the first 0.5 omitted (this gate: 1 + 3 years, SPEC.md P1).
-# Physics: gray radiation (Frierson et al. 2006 optical depths, prototype SW absorption),
+# Physics: gray radiation as in Frierson, Held & Zurita-Gotor (2006, Sect. 2b and Table 1:
+# τ_e = 6, τ_p = 1.5, f_l = 0.1; "No solar radiation is absorbed by the atmosphere", so
+# tau_sw = 0 — the prototype's slant-path absorption τ_sw = 0.22 σ²/μ₀ heats the polar upper
+# troposphere by several K/day at low sun, where the gray longwave cannot cool it; see
+# docs/progress.md, P1),
 # K-profile boundary layer with Louis surface exchange, dry adjustment, SBM convection,
 # large-scale condensation, hyperdiffusion energy fixer. T21 L26, Δt = 30 min (development and regression version of the T42 gate).
 schema = 2
@@ -52,6 +56,7 @@ initial = "tj16"
 
 [radiation]
 scheme = "gray"
+tau_sw = 0.0
 
 [boundary_layer]
 scheme = "kprofile"
