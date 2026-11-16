@@ -292,28 +292,32 @@ impl OrbitConfig {
     }
 }
 
-/// `[surface]` block: slab ocean (mixed layer).
+/// `[surface]` block: slab ocean or prescribed SST, sea ice, land (SPEC.md §9.4.5).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceConfig {
     /// Mixed-layer depth \[m\] (default 20).
     #[serde(default = "default_mld")]
     pub mixed_layer_depth: f64,
-    /// Initial surface temperature: "tj16" (default) or a number in K.
+    /// Initial surface temperature: "tj16" (default), "ape_control" or a number in K.
     pub initial: Option<toml::Value>,
-    /// Keep T_s fixed (prescribed SST).
+    /// Keep the SST fixed (prescribed SST; no sea ice).
     #[serde(default)]
     pub fixed: bool,
     /// Equirectangular heightmap (.npy, float32/64, `[lat][lon]`, row 0 north, metres; ≤ 0 is
     /// ocean). Path relative to the working directory. Absent → aquaplanet.
     pub heightmap: Option<String>,
-    /// Land heat capacity \[J m⁻² K⁻¹\] (default 2e5 ≈ 5 cm of water).
-    #[serde(default = "default_land_c")]
-    pub land_heat_capacity: f64,
-    /// Land albedo (default 0.3).
-    #[serde(default = "default_land_albedo")]
-    pub land_albedo: f64,
-    /// Ocean albedo (default: the radiation scheme's own value).
+    /// Land as one layer of this heat capacity \[J m⁻² K⁻¹\] instead of the 5-layer soil
+    /// (prototype land; single-column stability tests).
+    pub land_heat_capacity: Option<f64>,
+    /// Soil volumetric heat capacity \[J m⁻³ K⁻¹\] and conductivity \[W m⁻¹ K⁻¹\].
+    #[serde(default = "default_soil_cv")]
+    pub soil_heat_capacity: f64,
+    #[serde(default = "default_soil_k")]
+    pub soil_conductivity: f64,
+    /// Broadband bare-land albedo (default: 0.15 visible / 0.30 near-IR).
+    pub land_albedo: Option<f64>,
+    /// Broadband ocean albedo (default 0.06).
     pub ocean_albedo: Option<f64>,
     /// Bucket capacity \[kg m⁻²\] (default 150).
     #[serde(default = "default_bucket")]
@@ -321,18 +325,26 @@ pub struct SurfaceConfig {
     /// Initial bucket fill fraction (default 0.75 = fully wet).
     #[serde(default = "default_bucket_init")]
     pub initial_bucket: f64,
+    /// Snow cover scale S_c of f_snow = S/(S + S_c) on land \[kg m⁻²\] (default 15) and the
+    /// snow cap \[kg m⁻²\] (default 5000).
+    #[serde(default = "default_snow_cover")]
+    pub snow_cover_scale: f64,
+    #[serde(default = "default_snow_cap")]
+    pub snow_cap: f64,
     /// Spectral orography filter: damping factor at ℓ = M (default 0.1).
     #[serde(default = "default_oro_filter")]
     pub orography_filter: f64,
-    /// Albedo of sea ice / snow (default 0.6; negative disables the ice–albedo switch).
-    #[serde(default = "default_ice_albedo")]
-    pub ice_albedo: f64,
-    /// Ocean freezing temperature \[K\] (default 271.15).
-    #[serde(default = "default_ocean_freeze")]
-    pub ocean_freeze: f64,
-    /// Land snow threshold \[K\] (default 273.15).
-    #[serde(default = "default_land_freeze")]
-    pub land_freeze: f64,
+    /// Sea ice on/off (default on; always off with a fixed SST).
+    #[serde(default = "default_true")]
+    pub sea_ice: bool,
+    /// Freezing point of sea water \[K\] (default 271.35).
+    #[serde(default = "default_sea_freeze")]
+    pub sea_freeze: f64,
+    /// Sea-ice concentration scale h₀ \[m\] (default 0.5) and thickness cap \[m\] (50).
+    #[serde(default = "default_ice_h0")]
+    pub ice_h0: f64,
+    #[serde(default = "default_ice_h_max")]
+    pub ice_h_max: f64,
     /// Amplitude Q0 \[W m⁻²\] of the prescribed ocean heat transport (q-flux)
     /// Q0 (1 − 2φ²/φ0²) exp(−φ²/φ0²)/cos φ with φ0 = 16° (Merlis et al. 2013). Typical
     /// Earth-like value 50; default 0 (off).
@@ -340,21 +352,26 @@ pub struct SurfaceConfig {
     pub ocean_heat_transport: f64,
 }
 
-fn default_ice_albedo() -> f64 {
-    0.6
+fn default_soil_cv() -> f64 {
+    2.0e6
 }
-fn default_ocean_freeze() -> f64 {
-    271.15
+fn default_soil_k() -> f64 {
+    1.0
 }
-fn default_land_freeze() -> f64 {
-    273.15
+fn default_snow_cover() -> f64 {
+    15.0
 }
-
-fn default_land_c() -> f64 {
-    2.0e5
+fn default_snow_cap() -> f64 {
+    5000.0
 }
-fn default_land_albedo() -> f64 {
-    0.3
+fn default_sea_freeze() -> f64 {
+    271.35
+}
+fn default_ice_h0() -> f64 {
+    0.5
+}
+fn default_ice_h_max() -> f64 {
+    50.0
 }
 fn default_bucket() -> f64 {
     150.0

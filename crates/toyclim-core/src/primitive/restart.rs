@@ -40,6 +40,10 @@ impl Primitive {
                 ("budget_evap".to_string(), b.evap),
                 ("budget_diffusion_ke".to_string(), b.diffusion_ke),
                 ("budget_fixer".to_string(), b.fixer),
+                ("budget_runoff".to_string(), b.runoff),
+                ("budget_ocean_uptake".to_string(), b.ocean_uptake),
+                ("budget_ice_cap".to_string(), b.ice_cap),
+                ("budget_qflux".to_string(), b.qflux),
             ]);
         }
         (a, sc)
@@ -104,6 +108,10 @@ impl Primitive {
                 "budget_evap" => self.budget.evap = *v,
                 "budget_diffusion_ke" => self.budget.diffusion_ke = *v,
                 "budget_fixer" => self.budget.fixer = *v,
+                "budget_runoff" => self.budget.runoff = *v,
+                "budget_ocean_uptake" => self.budget.ocean_uptake = *v,
+                "budget_ice_cap" => self.budget.ice_cap = *v,
+                "budget_qflux" => self.budget.qflux = *v,
                 _ => {}
             }
         }

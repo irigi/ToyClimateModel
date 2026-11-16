@@ -10,9 +10,9 @@ pub fn heat_capacity(h: f64) -> f64 {
     1000.0 * 4000.0 * h
 }
 
-/// Prescribed ocean heat-flux convergence Q(φ) = Q0 (1 − 2φ²/φ0²) exp(−φ²/φ0²) / cos φ
-/// over the ocean with φ0 = 16° (Merlis et al. 2013 form), re-centred so that its area
-/// mean over the ocean is exactly zero.
+/// Prescribed ocean heat-flux convergence per ocean area
+/// Q(φ) = Q0 (1 − 2φ²/φ0²) exp(−φ²/φ0²) / cos φ with φ0 = 16° (Merlis et al. 2013 form),
+/// re-centred so that its integral over the ocean part of every cell is exactly zero.
 pub fn set_qflux(s: &mut Surface, tr: &Transform, q0: f64) {
     let n = tr.ngrid();
     let phi0 = 16f64.to_radians();
@@ -22,22 +22,18 @@ pub fn set_qflux(s: &mut Surface, tr: &Transform, q0: f64) {
         let x = lat * lat / (phi0 * phi0);
         let q = q0 * (1.0 - 2.0 * x) * (-x).exp() / lat.cos();
         for i in 0..nlon {
-            let p = j * nlon + i;
-            if !s.is_land(p) {
-                s.qflux[p] = q as Real;
-            }
+            s.qflux[j * nlon + i] = q;
         }
     }
-    let ocean: Vec<Real> = (0..n)
-        .map(|p| if s.is_land(p) { 0.0 } else { 1.0 })
-        .collect();
+    let ocean: Vec<Real> = (0..n).map(|p| (1.0 - s.land_fraction[p]) as Real).collect();
     let area = tr.integrate(&ocean);
     if area > 0.0 {
-        let mean = tr.integrate(&s.qflux) / area;
-        for p in 0..n {
-            if !s.is_land(p) {
-                s.qflux[p] -= mean as Real;
-            }
+        let weighted: Vec<Real> = (0..n)
+            .map(|p| (ocean[p] as f64 * s.qflux[p]) as Real)
+            .collect();
+        let mean = tr.integrate(&weighted) / area;
+        for q in s.qflux.iter_mut() {
+            *q -= mean;
         }
     }
 }

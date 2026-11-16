@@ -96,37 +96,36 @@ pub(super) fn lower_surface(s: &SurfaceV2) -> Result<Table, ConfigError> {
             land,
             &[
                 ("heat_capacity", "land_heat_capacity"),
+                ("soil_heat_capacity", "soil_heat_capacity"),
+                ("soil_conductivity", "soil_conductivity"),
                 ("albedo", "land_albedo"),
                 ("bucket_capacity", "bucket_capacity"),
                 ("initial_bucket", "initial_bucket"),
+                ("snow_cover_scale", "snow_cover_scale"),
+                ("snow_cap", "snow_cap"),
             ],
             &mut t,
         )?;
     }
-    // Prototype sea ice: an albedo switch below a freezing temperature (P2 replaces it).
+    // Sea ice: zero-layer thermodynamics (P2).
     if let Some(ice) = &s.sea_ice {
         let mut ice = ice.clone();
-        let enabled = ice
-            .remove("enabled")
-            .map(|v| {
-                v.as_bool()
-                    .ok_or_else(|| invalid("sea_ice.enabled must be a bool"))
-            })
-            .transpose()?
-            .unwrap_or(true);
+        if let Some(v) = ice.remove("enabled") {
+            let on = v
+                .as_bool()
+                .ok_or_else(|| invalid("sea_ice.enabled must be a bool"))?;
+            put(&mut t, "sea_ice", on);
+        }
         copy_params(
             "surface.sea_ice",
             &ice,
             &[
-                ("albedo", "ice_albedo"),
-                ("ocean_freeze", "ocean_freeze"),
-                ("land_freeze", "land_freeze"),
+                ("freezing_point", "sea_freeze"),
+                ("h0", "ice_h0"),
+                ("max_thickness", "ice_h_max"),
             ],
             &mut t,
         )?;
-        if !enabled {
-            put(&mut t, "ice_albedo", -1.0);
-        }
     }
     Ok(t)
 }

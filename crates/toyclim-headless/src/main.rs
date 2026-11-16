@@ -413,6 +413,9 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
         }
         // Checking every step is cheap (a scan of the spectral state) and stops a blow-up
         // before it pollutes outputs and statistics.
+        if let Some(why) = model.failure() {
+            bail!("step {s} (t = {:.3} d): {why}", model.time() / 86400.0);
+        }
         if !model.is_finite() {
             let crash = out.join("restart_crash");
             dump_restart(model.as_ref(), config, &crash)?;

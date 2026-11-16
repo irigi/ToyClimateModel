@@ -42,15 +42,63 @@ pub fn ape_control_sst(lat: f64) -> f64 {
     273.15 + t
 }
 
+/// Surface parameters of `sc`: `lf` the condensable's latent heat of fusion (0 = dry),
+/// `t_eff` the star's effective temperature (band weights of the albedo), `omega_day` the
+/// solar-day angular frequency (None: no diurnal cycle; sets the top soil layer).
+pub fn surface_params(
+    sc: &SurfaceConfig,
+    lf: f64,
+    t_eff: f64,
+    omega_day: Option<f64>,
+) -> crate::surface::SurfaceParams {
+    use crate::surface::{albedo, soil::SoilColumn, SurfaceParams};
+    let mut p = SurfaceParams {
+        fixed: sc.fixed,
+        ocean_c: ocean_slab::heat_capacity(sc.mixed_layer_depth),
+        sea_ice: sc.sea_ice && !sc.fixed,
+        t_freeze_sea: sc.sea_freeze,
+        lf,
+        ice_h0: sc.ice_h0,
+        ice_h_max: sc.ice_h_max,
+        bucket_capacity: sc.bucket_capacity,
+        snow_cap: sc.snow_cap,
+        soil: match sc.land_heat_capacity {
+            Some(c) => SoilColumn::single(c),
+            None => SoilColumn::layered(sc.soil_heat_capacity, sc.soil_conductivity, omega_day),
+        },
+        ..Default::default()
+    };
+    p.albedo.visible_fraction = albedo::visible_fraction(t_eff);
+    p.albedo.snow_cover_land = sc.snow_cover_scale;
+    if let Some(a) = sc.ocean_albedo {
+        p.albedo.ocean = [a, a];
+    }
+    if let Some(a) = sc.land_albedo {
+        p.albedo.land = [a, a];
+    }
+    p
+}
+
+/// Solar-day angular frequency of an orbit \[rad/s\] (None without a diurnal cycle).
+pub fn solar_day_frequency(orbit: Option<&crate::system::orbit::Orbit>) -> Option<f64> {
+    let o = orbit?;
+    if !o.diurnal || o.tidally_locked {
+        return None;
+    }
+    let w = (o.rotation_rate - std::f64::consts::TAU / o.year).abs();
+    (w > 0.0).then_some(w)
+}
+
 /// Build the surface of `sc`. With a heightmap, also sets the orography of `init` and a
 /// hydrostatically adjusted initial surface pressure.
 fn build_surface(
     sc: &SurfaceConfig,
+    params: crate::surface::SurfaceParams,
     tr: &Transform,
     planet: &crate::planet::Planet,
     init: &mut PeInitial,
 ) -> Result<Surface, String> {
-    let ts: Vec<Real> = match &sc.initial {
+    let ts: Vec<f64> = match &sc.initial {
         None => tj16_sst_grid(tr),
         Some(toml::Value::String(s)) if s == "tj16" => tj16_sst_grid(tr),
         Some(toml::Value::String(s)) if s == "ape_control" => zonal_grid(tr, ape_control_sst),
@@ -61,8 +109,11 @@ fn build_surface(
                 .ok_or("surface.initial must be \"tj16\", \"ape_control\" or a temperature")?;
             vec![t as Real; tr.ngrid()]
         }
-    };
-    let mut sfc = Surface::slab(sc, ts);
+    }
+    .into_iter()
+    .map(|x| x as f64)
+    .collect();
+    let mut sfc = Surface::aquaplanet(params, ts);
     if let Some(path) = &sc.heightmap {
         let (h, nlat_h, nlon_h) = crate::io::heightmap::read(std::path::Path::new(path))
             .map_err(|e| format!("heightmap {path}: {e}"))?;
@@ -77,7 +128,7 @@ fn build_surface(
             .collect();
         init.state.lnps = tr.analysis(&lnps);
         init.phis_grid = geo.phis;
-        sfc.set_land(sc, &geo.land_fraction);
+        sfc.set_land(&geo.land_fraction, sc.initial_bucket);
     }
     if sc.ocean_heat_transport != 0.0 {
         ocean_slab::set_qflux(&mut sfc, tr, sc.ocean_heat_transport);
@@ -117,14 +168,6 @@ pub fn from_config(cfg: &Config) -> Result<Primitive, String> {
         }
         _ => {}
     }
-    // surface albedo where none is configured: the gray scheme's `albedo` (0.3)
-    let default_albedo = cfg
-        .physics
-        .as_ref()
-        .and_then(|p| p.radiation.params.get("albedo"))
-        .or_else(|| cfg.forcing.as_ref().and_then(|f| f.get("albedo")))
-        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
-        .unwrap_or(0.3);
     if let Some(m) = &cfg.moisture {
         let q = cases::initial_humidity(&tr, &planet, &levels, &m.initial)?;
         init.state.tracers = vec![super::state::Spec3::from_levels(q)];
@@ -174,9 +217,10 @@ pub fn from_config(cfg: &Config) -> Result<Primitive, String> {
     let surface = match &cfg.surface {
         None => None,
         Some(sc) => {
-            let mut s = build_surface(sc, &tr, &planet, &mut init)?;
-            s.set_default_albedo(default_albedo);
-            Some(s)
+            let lf = moisture.as_ref().map_or(0.0, |c| c.latent_heat_fusion);
+            let t_eff = cfg.system.as_ref().map_or(5772.0, |s| s.star.t_eff);
+            let params = surface_params(sc, lf, t_eff, solar_day_frequency(orbit.as_ref()));
+            Some(build_surface(sc, params, &tr, &planet, &mut init)?)
         }
     };
     let mut m = Primitive::new(tr, planet, settings, levels, init, physics);

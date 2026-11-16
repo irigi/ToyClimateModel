@@ -183,7 +183,7 @@ enabled = false
     );
     let s = c.surface.as_ref().unwrap();
     assert_eq!(s.mixed_layer_depth, 50.0);
-    assert!(s.ice_albedo < 0.0 && s.heightmap.is_none());
+    assert!(!s.sea_ice && s.heightmap.is_none());
     // the lowered config builds a model
     crate::primitive::from_config(&c).unwrap();
 }
