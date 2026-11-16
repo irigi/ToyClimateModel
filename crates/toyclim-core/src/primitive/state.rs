@@ -89,8 +89,12 @@ pub struct PeState {
     pub tmp: Spec3,
     /// ln(p_s / 1 Pa).
     pub lnps: Vec<Complex>,
-    /// Tracers, one `[lev][spec]` field each (e.g. specific humidity q \[kg/kg\]).
+    /// Tracers, one `[lev][spec]` field each (e.g. specific humidity q \[kg/kg\]), with
+    /// spectral transport.
     pub tracers: Vec<Spec3>,
+    /// Grid-point tracers, one `[lev][point]` field each, with semi-Lagrangian transport
+    /// (SPEC.md §9.8). A model uses either `tracers` or `gq`, never both.
+    pub gq: Vec<Grid3>,
 }
 
 impl PeState {
@@ -103,15 +107,33 @@ impl PeState {
             vor: z.clone(),
             div: z.clone(),
             tracers: vec![z.clone(); ntracers],
+            gq: Vec::new(),
             tmp: z,
             lnps: vec![CZERO; nspec],
         }
+    }
+    /// Number of tracers (spectral or grid-point).
+    pub fn ntracers(&self) -> usize {
+        self.tracers.len() + self.gq.len()
+    }
+    /// Grid-point values of tracer `it` at level `k`.
+    pub fn tracer_level(&self, tr: &Transform, it: usize, k: usize) -> Option<Vec<Real>> {
+        if let Some(g) = self.gq.get(it) {
+            return Some(g[k].to_vec());
+        }
+        self.tracers.get(it).map(|t| tr.synthesis(&t[k]))
     }
     /// Same number of levels, coefficients and tracers as `other`.
     pub fn same_shape(&self, other: &PeState) -> bool {
         self.vor.as_slice().len() == other.vor.as_slice().len()
             && self.vor.level_len() == other.vor.level_len()
             && self.tracers.len() == other.tracers.len()
+            && self.gq.len() == other.gq.len()
+            && self
+                .gq
+                .iter()
+                .zip(&other.gq)
+                .all(|(a, b)| a.as_slice().len() == b.as_slice().len())
     }
     pub(crate) fn is_finite(&self) -> bool {
         let ok = |v: &[Complex]| v.iter().all(|c| c.re.is_finite() && c.im.is_finite());
@@ -119,6 +141,10 @@ impl PeState {
             && ok(self.div.as_slice())
             && ok(self.tmp.as_slice())
             && self.tracers.iter().all(|t| ok(t.as_slice()))
+            && self
+                .gq
+                .iter()
+                .all(|t| t.as_slice().iter().all(|x| x.is_finite()))
             && ok(&self.lnps)
     }
 }
@@ -186,7 +212,7 @@ impl Grids {
         let l = s.vor.nlev();
         let n = tr.ngrid();
         self.q
-            .resize_with(s.tracers.len(), || Grid3::filled(l, n, 0.0));
+            .resize_with(s.ntracers(), || Grid3::filled(l, n, 0.0));
         let Grids {
             u,
             v,
@@ -218,6 +244,9 @@ impl Grids {
             (gx, gy, tr.synthesis(&s.lnps))
         };
         let tracers = |q: &mut Vec<Grid3>| {
+            for (gq, sq) in q.iter_mut().zip(&s.gq) {
+                gq.as_mut_slice().copy_from_slice(sq.as_slice());
+            }
             for (gq, tq) in q.iter_mut().zip(&s.tracers) {
                 gq.as_mut_slice()
                     .par_chunks_mut(n)
@@ -244,7 +273,7 @@ impl Grids {
 
 /// Synthesize all grid-point fields of `s` into new buffers.
 pub(crate) fn grids(tr: &Transform, s: &PeState) -> Grids {
-    let mut g = Grids::new(s.vor.nlev(), tr.ngrid(), s.tracers.len());
+    let mut g = Grids::new(s.vor.nlev(), tr.ngrid(), s.ntracers());
     g.fill(tr, s);
     g
 }

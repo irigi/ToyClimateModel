@@ -129,6 +129,17 @@ impl Config {
         let inv = |e: String| ConfigError::Invalid(e);
         let cond = self.moisture.as_ref().map(|m| m.resolve()).transpose()?;
         let sponge = self.dynamics.as_ref().and_then(|d| d.sponge.as_ref());
+        if let Some(t) = self
+            .dynamics
+            .as_ref()
+            .and_then(|d| d.tracer_transport.as_deref())
+        {
+            if !matches!(t, "spectral" | "semi_lagrangian") {
+                return Err(inv(format!(
+                    "[dynamics] tracer_transport = \"{t}\": expected \"spectral\" or \"semi_lagrangian\""
+                )));
+            }
+        }
         match &self.physics {
             Some(pc) => {
                 crate::physics::build_world(pc, sponge, cond.as_ref()).map_err(inv)?;

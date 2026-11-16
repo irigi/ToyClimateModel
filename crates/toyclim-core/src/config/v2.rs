@@ -115,6 +115,7 @@ pub struct DynamicsV2 {
     #[serde(default)]
     pub energy_fixer: bool,
     pub sponge: Option<Table>,
+    pub tracer_transport: Option<String>,
 }
 
 /// A schema-2 configuration as written.
@@ -261,6 +262,9 @@ impl ConfigV2 {
         if let Some(d) = &self.dynamics {
             let mut dt = Table::new();
             put(&mut dt, "energy_fixer", d.energy_fixer);
+            if let Some(tt) = &d.tracer_transport {
+                put(&mut dt, "tracer_transport", tt.as_str());
+            }
             if let Some(sp) = &d.sponge {
                 put(&mut dt, "sponge", Value::Table(sp.clone()));
             }

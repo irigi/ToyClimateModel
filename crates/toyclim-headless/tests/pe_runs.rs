@@ -132,9 +132,26 @@ maps = ["precip", "evap"]
 /// sanity (it rains, precipitable water stays finite and positive).
 #[test]
 fn moist_bitwise_and_sane() {
-    let cfg = tmp("moist.toml");
-    std::fs::write(&cfg, MOIST).unwrap();
-    let (a, b, c) = (tmp("ma"), tmp("mb"), tmp("mc"));
+    moist_case(MOIST, "m");
+}
+
+/// The same with grid-point semi-Lagrangian humidity transport (SPEC.md §9.8): its grid
+/// tracers are restart state, and the departure-point search and the vertical step do not
+/// depend on the thread count.
+#[test]
+fn moist_semi_lagrangian_bitwise_and_sane() {
+    let text = format!("{MOIST}[dynamics]\ntracer_transport = \"semi_lagrangian\"\n");
+    moist_case(&text, "s");
+}
+
+fn moist_case(text: &str, tag: &str) {
+    let cfg = tmp(&format!("moist_{tag}.toml"));
+    std::fs::write(&cfg, text).unwrap();
+    let (a, b, c) = (
+        tmp(&format!("{tag}a")),
+        tmp(&format!("{tag}b")),
+        tmp(&format!("{tag}c")),
+    );
     run(&cfg, &a, "1", &[]);
     run(&cfg, &b, "4", &[]);
     assert_same(&a, &b);

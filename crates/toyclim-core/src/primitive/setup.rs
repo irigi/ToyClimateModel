@@ -129,6 +129,36 @@ pub fn from_config(cfg: &Config) -> Result<Primitive, String> {
         let q = cases::initial_humidity(&tr, &planet, &levels, &m.initial)?;
         init.state.tracers = vec![super::state::Spec3::from_levels(q)];
     }
+    let transport = cfg
+        .dynamics
+        .as_ref()
+        .and_then(|d| d.tracer_transport.as_deref())
+        .unwrap_or("spectral");
+    match transport {
+        "spectral" => {}
+        "semi_lagrangian" => {
+            // grid-point tracers (SPEC.md §9.8): synthesize the initial spectral fields
+            let st = &mut init.state;
+            st.gq = st
+                .tracers
+                .iter()
+                .map(|t| {
+                    let lv: Vec<Vec<crate::Real>> =
+                        (0..t.nlev()).map(|k| tr.synthesis(&t[k])).collect();
+                    let mut g = super::state::Grid3::from_levels(lv);
+                    g.as_mut_slice().iter_mut().for_each(|x| *x = x.max(0.0));
+                    g
+                })
+                .collect();
+            st.tracers.clear();
+        }
+        other => {
+            return Err(format!(
+                "[dynamics] tracer_transport = \"{other}\": expected \"spectral\" or \"semi_lagrangian\""
+            )
+            )
+        }
+    }
     let settings = PeSettings {
         dt: cfg.dt.seconds(),
         diffusion_order: cfg.diffusion.order,

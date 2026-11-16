@@ -14,6 +14,7 @@ pub mod implicit;
 pub mod levels;
 mod output;
 mod restart;
+pub(crate) mod semi_lagrangian;
 pub mod setup;
 pub mod state;
 pub mod tendencies;
@@ -112,6 +113,11 @@ pub struct Primitive {
     ke_norm: f64,
     /// Wall time per phase (see [`PHASES`]) when profiling is on.
     timers: Option<[f64; 9]>,
+    /// Semi-Lagrangian transport of the grid-point tracers (`PeState::gq`), if used.
+    sl: Option<semi_lagrangian::SemiLagrangian>,
+    /// Global mass of each grid-point tracer after physics, before transport (target of
+    /// the mass fixer) \[Pa m²\].
+    sl_target: Vec<f64>,
 }
 
 /// Phases reported by [`Model::profile`].
@@ -137,7 +143,7 @@ impl Primitive {
         physics: Vec<Box<dyn ColumnScheme>>,
     ) -> Self {
         let (l, n) = (levels.nlev, tr.ngrid());
-        let ntr = init.state.tracers.len();
+        let ntr = init.state.ntracers();
         let lay = &tr.layout;
         let (order, tau) = (settings.diffusion_order, settings.diffusion_tau);
         let coriolis_row = tr
@@ -159,6 +165,9 @@ impl Primitive {
             ntend: PeState::zeros_with_tracers(l, lay.len(), ntr),
             spare: None,
             timers: None,
+            sl: (!init.state.gq.is_empty())
+                .then(|| semi_lagrangian::SemiLagrangian::new(&tr.grid, tr.radius)),
+            sl_target: Vec::new(),
             isol: Vec::new(),
             ke_norm: harmonic_norm(&tr),
             prev: init.state.clone(),
@@ -186,6 +195,86 @@ impl Primitive {
     pub fn mass_of(&self, lnps: &[Complex]) -> f64 {
         let ps: Vec<Real> = self.tr.synthesis(lnps).iter().map(|x| x.exp()).collect();
         self.tr.integrate(&ps) / self.planet.gravity
+    }
+
+    /// ∫ Σ_k q_k Δσ_k p_s dA of a grid-point tracer \[Pa m²\] (= g × mass).
+    fn grid_tracer_mass(&self, q: &Grid3, lnps: &[Complex]) -> f64 {
+        let ps: Vec<Real> = self.tr.synthesis(lnps).iter().map(|x| x.exp()).collect();
+        let mut w = vec![0.0 as Real; ps.len()];
+        for k in 0..self.nlev() {
+            let ds = self.levels.dsigma[k] as Real;
+            for (x, (qq, p)) in w.iter_mut().zip(q[k].iter().zip(&ps)) {
+                *x += qq * ds * p;
+            }
+        }
+        self.tr.integrate(&w)
+    }
+
+    /// Semi-Lagrangian step of the grid-point tracers into `next`: Q* = q^{base} + τ·P
+    /// (physics), carried to n+1 by the level-n winds of the dynamics workspace. Records
+    /// the mass of Q* for the fixer; returns the water mass removed where Q* < 0 (round-off
+    /// of the physics) \[Pa m²\].
+    fn sl_step(&mut self, first: bool, next: &mut PeState) -> f64 {
+        let Some(sl) = &self.sl else {
+            return 0.0;
+        };
+        let (base, tau) = if first {
+            (&self.curr, self.settings.dt)
+        } else {
+            (&self.prev, 2.0 * self.settings.dt)
+        };
+        let phys = (!self.physics.is_empty()).then_some(&self.physics.tend);
+        let mut targets = Vec::with_capacity(base.gq.len());
+        let mut clipped0 = 0.0;
+        for it in 0..base.gq.len() {
+            let mut qs = base.gq[it].clone();
+            if let Some(ph) = phys {
+                for (x, y) in qs.as_mut_slice().iter_mut().zip(ph.dq[it].as_slice()) {
+                    *x += tau as Real * y;
+                }
+            }
+            let before = self.grid_tracer_mass(&qs, &base.lnps);
+            qs.as_mut_slice().iter_mut().for_each(|x| *x = x.max(0.0));
+            let after = self.grid_tracer_mass(&qs, &base.lnps);
+            if it == 0 {
+                clipped0 = after - before;
+            }
+            targets.push(after);
+            semi_lagrangian::transport(
+                sl,
+                &qs,
+                &self.work.grids.u,
+                &self.work.grids.v,
+                &self.work.sdl,
+                &self.levels.full,
+                &self.levels.dsigma,
+                tau,
+                &mut next.gq[it],
+            );
+        }
+        self.sl_target = targets;
+        clipped0
+    }
+
+    /// Multiplicative global mass fixer of the grid-point tracers of the new state;
+    /// returns the absolute mass correction of tracer 0 \[Pa m²\].
+    fn sl_fix_mass(&mut self) -> f64 {
+        let mut moved0 = 0.0;
+        for it in 0..self.sl_target.len() {
+            let m = self.grid_tracer_mass(&self.curr.gq[it], &self.curr.lnps);
+            let target = self.sl_target[it];
+            if m > 0.0 {
+                let scale = (target / m) as Real;
+                self.curr.gq[it]
+                    .as_mut_slice()
+                    .iter_mut()
+                    .for_each(|x| *x *= scale);
+            }
+            if it == 0 {
+                moved0 = (target - m).abs();
+            }
+        }
+        moved0
     }
 
     /// Shift ln p_s by a constant so the global mass equals `mass_target`.
@@ -329,6 +418,7 @@ impl Model for Primitive {
             Some(s) if s.same_shape(&self.curr) => s,
             _ => self.curr.clone(),
         };
+        let clipped = self.sl_step(first, &mut next);
         let (lay, radius) = (&self.tr.layout, self.tr.radius);
         if first {
             let minus = &self.curr;
@@ -417,6 +507,15 @@ impl Model for Primitive {
                     c.tracers[it].as_mut_slice(),
                 );
             }
+            // grid-point tracers: classic Robert–Asselin (α = 1, x^{n+1} untouched), whose
+            // weights are all non-negative, so the filter cannot create negative values
+            let h = 0.5 * f.nu;
+            for it in 0..curr.gq.len() {
+                let (pq, nq) = (p.gq[it].as_slice(), c.gq[it].as_slice());
+                for ((x, a), b) in curr.gq[it].as_mut_slice().iter_mut().zip(pq).zip(nq) {
+                    *x += h * (*a - 2.0 * *x + *b);
+                }
+            }
         }
         self.spare = Some(std::mem::replace(&mut self.prev, curr));
         lap.add(&mut t.as_mut(), 6);
@@ -425,7 +524,8 @@ impl Model for Primitive {
         }
         let ds = &self.levels.dsigma;
         let moved = tracers::fix_negative(&self.tr, &self.curr.lnps, ds, &mut self.curr.tracers);
-        self.budget.fixer += moved / self.planet.gravity;
+        let moved_sl = self.sl_fix_mass();
+        self.budget.fixer += (moved + moved_sl + clipped) / self.planet.gravity;
         lap.add(&mut t.as_mut(), 7);
         self.steps += 1;
         if let (Some(acc), Some(t), Some(d)) = (self.timers.as_mut(), t, dyn_t) {

@@ -23,6 +23,7 @@ until then are reproducible; do not tune).
 | 2026-11-15 | — | — | Register created in P0 from the prototype code (commit 0f7d33a). No values changed. |
 | 2026-11-16 | P1 surface exchange and boundary layer | new | Defaults from Louis (1979), Frierson et al. (2006) and SPEC.md §9.4.2–9.4.3; not tuned (tuning is P4–P6). World cases: TJ16 exchange and Rayleigh drag removed. |
 | 2026-11-16 | `tau_sw` in the APE benchmark cases | 0.22 → 0 | Not tuning: the benchmark configuration follows Frierson et al. (2006, no SW absorption). With 0.22 along the slant path the gray scheme heats the polar upper troposphere by several K/day at low sun (P1 SCM diagnosis). World cases keep 0.22 until P3 replaces the radiation. |
+| 2026-11-16 | `[dynamics] tracer_transport` in the moist world and APE cases | spectral → semi_lagrangian | Not tuning: SPEC.md §9.8 remedy after the tracer-fixer trigger fired (2.3%/day of the vapour mass at T42). |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -116,6 +117,11 @@ marked **[knob]** there).
 | Sponge on/off | `sponge.enabled` | false | — | decision rule §9.8 | SPEC.md §9.4.3 |
 | Sponge bottom σ | `sponge.sigma_top` | 0.02 | — | knob | SPEC.md §9.4.3 |
 | Sponge time at the top level | `sponge.tau` | 1 day | — | knob | SPEC.md §9.4.3 |
+| Tracer transport | `tracer_transport` | `"spectral"` (moist worlds and APE: `"semi_lagrangian"`) | — | decision rule §9.8 (fired in P1) | SPEC.md §9.8 |
+| SL midpoint iterations | (code) | 3 | — | fixed | Ritchie (1987) |
+| SL interpolation | (code) | cubic Lagrange 4×4, clipped to the 2×2 range | — | fixed | Bermejo & Staniforth (1992) |
+| SL vertical Courant number per sub-step | (code) | 0.5 | — | fixed | numerical (MUSCL, van Leer limiter) |
+| Time filter of grid-point tracers | (code) | Robert–Asselin, ν as `[time_filter]`, α = 1 | — | fixed | positivity (all weights ≥ 0) |
 
 ### Convection (P1)
 

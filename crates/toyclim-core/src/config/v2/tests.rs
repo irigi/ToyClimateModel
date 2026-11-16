@@ -199,6 +199,7 @@ fn unknown_and_unimplemented_keys_are_errors() {
         "[orbit]\nsemi_major_axis = 1.0\nbogus = 2\n",
         "[surface.ocean]\nmodel = \"wind_driven\"\n",
         "[dynamics.sponge]\nenabled = true\n",
+        "[dynamics]\ntracer_transport = \"lagrangian\"\n",
         "[star]\nt_eff = 3000.0\nluminosity = 0.01\nmass = 0.2\n",
     ] {
         assert!(Config::parse(&base(bad)).is_err(), "accepted:\n{bad}");

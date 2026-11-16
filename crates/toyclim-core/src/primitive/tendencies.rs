@@ -48,7 +48,7 @@ pub(crate) struct DynWork {
     tv: Grid3,
     trest: Grid3,
     /// σ̇ at the half level below each full level, σ̇_{k+1/2}.
-    sdl: Grid3,
+    pub sdl: Grid3,
     np: Vec<Real>,
 }
 

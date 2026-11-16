@@ -73,8 +73,8 @@ impl Primitive {
 
     /// Column water Σ q Δσ p_s / g of tracer 0 \[kg m⁻²\], if the model is moist.
     fn column_water(&self) -> Option<Vec<Real>> {
-        let tq = self.curr.tracers.first()?;
         let tr = &self.tr;
+        self.curr.tracer_level(tr, 0, 0)?;
         let ps: Vec<Real> = tr
             .synthesis(&self.curr.lnps)
             .iter()
@@ -82,7 +82,7 @@ impl Primitive {
             .collect();
         let mut w = vec![0.0 as Real; tr.ngrid()];
         for k in 0..self.nlev() {
-            let q = tr.synthesis(&tq[k]);
+            let q = self.curr.tracer_level(tr, 0, k)?;
             let ds = self.levels.dsigma[k] as Real;
             for p in 0..w.len() {
                 w[p] += q[p] * ds * ps[p] / self.planet.gravity as Real;
@@ -97,7 +97,7 @@ impl Primitive {
             "sfcwind",
         ];
         v.extend_from_slice(PRESSURE_FIELDS);
-        if !self.curr.tracers.is_empty() {
+        if self.curr.ntracers() > 0 {
             v.extend_from_slice(&["q", "rh", "pw"]);
         }
         v.extend_from_slice(&["t_low", "u_low", "v_low", "wind_low", "psl"]);

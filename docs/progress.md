@@ -978,3 +978,6 @@ T21 and T42. The criterion is not weakened; P1 is blocked on that row (open ques
      - (c) the owner revises the row for gray-radiation configurations (a criterion change,
        the owner's call).
    - **Recommendation:** (b) as data, then (a).
+   - **Owner decision (2026-11-16): "Go ahead with b, then a".** T63 run started
+     (`cases/bench/neale_hoskins2000/ape_control_t63.toml`, Δt 10 min). P2 may proceed with this
+     row open; it is re-tested after P3/P4 and stays in the ratchet.

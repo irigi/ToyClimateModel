@@ -61,15 +61,16 @@ impl Primitive {
                 (0..l).for_each(|k| out.extend(tr.synthesis(&s.tmp[k]).iter().map(|t| t + tref)))
             }
             "q" => {
-                let tq = s.tracers.first()?;
-                (0..l).for_each(|k| out.extend(tr.synthesis(&tq[k])));
+                for k in 0..l {
+                    out.extend(s.tracer_level(tr, 0, k)?);
+                }
             }
             "rh" => {
                 let cond = self.condensable.as_ref()?;
-                let tq = s.tracers.first()?;
+                s.tracer_level(tr, 0, 0)?;
                 let ps: Vec<Real> = tr.synthesis(&s.lnps).iter().map(|x| x.exp()).collect();
                 for k in 0..l {
-                    let q = tr.synthesis(&tq[k]);
+                    let q = s.tracer_level(tr, 0, k)?;
                     let t = tr.synthesis(&s.tmp[k]);
                     for p in 0..n {
                         let pr = self.levels.full[k] * ps[p] as f64;

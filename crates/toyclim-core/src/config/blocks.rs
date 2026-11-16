@@ -436,4 +436,7 @@ pub struct DynamicsConfig {
     pub energy_fixer: bool,
     /// `[dynamics.sponge]`: `enabled`, `sigma_top` (0.02), `tau` ("1day").
     pub sponge: Option<toml::Table>,
+    /// Tracer (humidity) transport: `"spectral"` (default; Part I and the idealized
+    /// comparators) or `"semi_lagrangian"` (grid-point, SPEC.md §9.8).
+    pub tracer_transport: Option<String>,
 }

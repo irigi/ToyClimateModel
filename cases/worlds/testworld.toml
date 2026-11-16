@@ -77,6 +77,9 @@ scheme = "gray"
 scheme = "kprofile"
 
 [dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
 energy_fixer = true
 
 [convection]
