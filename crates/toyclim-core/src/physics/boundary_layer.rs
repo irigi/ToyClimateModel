@@ -298,9 +298,20 @@ impl ColumnScheme for KProfile {
                 0.0
             };
             let (dts, capped) = if finite {
-                let d = (r0 - h0 - lt * e0 - t.g0) / (c_body + r1 + h1 + lt * e1);
+                let den = c_body + r1 + h1 + lt * e1;
+                let d = (r0 - h0 - lt * e0 - t.g0) / den;
                 if t.ts + d > t.t_max {
-                    (t.t_max - t.ts, true)
+                    // the surplus at T_max melts snow or ice, at most `melt_max`; beyond
+                    // that the tile warms past T_max with the melt as a fixed sink. The
+                    // melt is net_body − G = den (d − ΔT_s) either way. (A tile that starts
+                    // above T_max, snow falling on warm ground, is cooled to T_max only as
+                    // far as its snow can take the energy.)
+                    let dc = t.t_max - t.ts;
+                    if den * (d - dc) <= t.melt_max {
+                        (dc, true)
+                    } else {
+                        (d - t.melt_max / den, true)
+                    }
                 } else {
                     (d, false)
                 }

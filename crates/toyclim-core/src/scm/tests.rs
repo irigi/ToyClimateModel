@@ -245,6 +245,31 @@ fn snow_covered_land_stays_at_or_below_freezing() {
     assert!(s.surface.bucket[0] > w0);
 }
 
+/// A trace of snow on land above freezing (snow falling on warm ground) gives no runaway. The melt cap may only take as much energy as the snow can absorb. Before the
+/// fix, the cap evaluated the fluxes at T_melt and put the unused surplus into the soil, a
+/// positive feedback (the 2026-11-16 P2 land-world crash: a 3 % land tile reached
+/// ~6000 K).
+#[test]
+fn trace_snow_on_warm_land_stays_bounded() {
+    let mut s = scm(&SNOW
+        .replace("t_initial = 272.0", "t_initial = 279.0")
+        .replace("snow = 40.0", "snow = 0.01"));
+    // as in the 3-D crash, light snowfall keeps a trace of snow on the ground every step
+    // (added directly, so the budgets are not checked here; the snow_melt case checks them)
+    let mut tmax = 0.0f64;
+    for _ in 0..4 * 48 {
+        s.surface.snow[0] = s.surface.snow[0].max(0.001);
+        s.step();
+        tmax = tmax.max(s.surface.soil_t[0][0]);
+    }
+    eprintln!(
+        "trace snow: snow {:.4} kg/m², max T_s {tmax:.2} K, bucket {:.2} kg/m²",
+        s.surface.snow[0], s.surface.bucket[0]
+    );
+    assert!(tmax < 300.0, "land skin ran away: {tmax:.1} K");
+    assert!(s.surface.bucket[0] >= 0.0);
+}
+
 /// P2 acceptance 1 (sea ice): cold air over thick ice grows it at the base; the ice surface
 /// stays at or below the melting point; warm air melts thin ice away (conservation through
 /// the transition is checked in `conservation_per_scheme_and_chain`).

@@ -74,6 +74,9 @@ pub struct Tile {
     pub g1: f64,
     /// Highest surface temperature \[K\]: above it the surplus melts snow or ice.
     pub t_max: f64,
+    /// Largest melt the tile can take \[W m⁻²\] (L_f × snow / Δt_p on land; infinite on
+    /// sea ice). Energy above it warms the tile past `t_max`.
+    pub melt_max: f64,
     /// Broadband albedo.
     pub albedo: f64,
     /// Evaporation efficiency β ∈ [0, 1].
@@ -107,6 +110,7 @@ impl Tile {
             g0: 0.0,
             g1: 0.0,
             t_max: f64::INFINITY,
+            melt_max: f64::INFINITY,
             albedo,
             beta: 1.0,
             z0: 0.0,
@@ -339,6 +343,7 @@ impl Surface {
             t.beta = beff;
             if self.snow[p] > 0.0 {
                 t.t_max = pr.t_melt;
+                t.melt_max = pr.lf * self.snow[p] / dtp;
             }
             // evaporation from the snow-covered part sublimates: L_v + L_f × share
             let share = if beff > 0.0 { fs / beff } else { 0.0 };

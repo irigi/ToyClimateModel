@@ -8,7 +8,9 @@
 //!   surplus melts it (melt water into the bucket); S is capped at 5000 kg m⁻², the
 //!   excess leaves as (frozen) runoff and its latent energy is reported (`ice_cap_flux`).
 //! - The soil column takes the surface solve's heat flux, plus any melt energy left when
-//!   the snow is gone.
+//!   the snow is gone. The surface solve caps the melt at the energy the snow can take
+//!   (L_f S/Δt_p); snow still left on a skin above T_melt after the step (fallen during it)
+//!   melts with the heat of the top soil layer.
 
 use super::Surface;
 
@@ -66,6 +68,14 @@ pub fn step(
     }
     let mut t = s.soil_t[p];
     pr.soil.step(&mut t, dt, f_soil);
+    // snow left on a skin above T_melt (fallen during the step after the surface solve
+    // capped the melt at the snow it saw) melts with the heat of the top soil layer
+    if lf > 0.0 && sn > 0.0 && t[0] > pr.t_melt {
+        let m = sn.min(pr.soil.c[0] * (t[0] - pr.t_melt) / lf);
+        sn -= m;
+        w += m;
+        t[0] -= m * lf / pr.soil.c[0];
+    }
     let mut r = 0.0;
     if w > pr.bucket_capacity {
         r += w - pr.bucket_capacity;
