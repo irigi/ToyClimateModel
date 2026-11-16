@@ -14,7 +14,7 @@ Rust core, Godot viewer. See [`SPEC.md`](SPEC.md) for the design and milestones 
 | `crates/toyclim-headless` | the `toyclim` binary: run cases, benchmarks |
 | `crates/toyclim-godot` | GDExtension for the viewer |
 | `godot/` | Godot project (viewer) |
-| `cases/` | TOML run configs |
+| `cases/` | TOML run configs: `core/` (Part I tests), `idealized/` (Held–Suarez family, TJ16), `bench/` (published comparators), `worlds/` |
 | `tools/` | Python analysis and plotting |
 | `docs/` | progress log and acceptance figures |
 
@@ -49,7 +49,7 @@ cargo run --release --bin toyclim -- list-cases
 ```
 
 ```bash
-cargo run --release --bin toyclim -- run --config cases/dummy.toml --out out/dummy
+cargo run --release --bin toyclim -- run --config cases/core/dummy.toml --out out/dummy
 ```
 
 Output goes to `out/<run>/`: `meta.json` (grid, planet, config echo, git hash),
@@ -74,12 +74,23 @@ python tools/plot_field.py out/dummy analytic --kind map
 python tools/make_planet.py worlds/myworld.npy --seed 7 --land 0.35
 ```
 
-Copy `cases/testworld_t21.toml`, point `[surface] heightmap` at your file, adjust
-`[planet]` and `[orbit]` (year, obliquity, eccentricity, instellation, `tidally_locked`), add
-`[[stations]]` where you want weather statistics, then:
+Copy `cases/worlds/testworld_t21.toml` (config schema 2, SPEC.md §9.3.2) to
+`cases/worlds/myworld.toml`, point `[surface] geography` at your file, and adjust the
+system:
+
+- `[star]` (T_eff, luminosity, mass in solar units) and `[orbit]` (`semi_major_axis` in AU,
+  eccentricity, obliquity, `spin = "free" | "synchronous" | "resonant"`): the instellation,
+  the year and, for locked spins, the rotation rate are derived. Explicit `instellation`,
+  `year` or `[planet] rotation_rate` values are accepted only within 1% of the derived ones
+  (or with `allow_inconsistent = true`).
+- `[planet]` (radius, gravity, `rotation_period` for free rotation, negative = retrograde)
+  and `[atmosphere]` (surface pressure, gas composition → R_d and c_p).
+- `[[stations]]` where you want weather statistics.
+
+Settings outside the supported envelope (SPEC.md §9.2 P-5) are logged as warnings. Then:
 
 ```bash
-cargo run --release --bin toyclim -- run --config cases/myworld.toml --out out/myworld
+cargo run --release --bin toyclim -- run --config cases/worlds/myworld.toml --out out/myworld
 ```
 
 ```bash
@@ -108,7 +119,7 @@ the library to `godot/bin/` and opens the viewer. For a stock Godot download use
 ./run -- --case=galewsky --field=vor --run
 ```
 
-Viewer options after `--`: `--case=<name in cases/ or path>`, `--field=`, `--level=`,
+Viewer options after `--`: `--case=<name anywhere under cases/, or a path>`, `--field=`, `--level=`,
 `--run`, `--sps=<steps per second>`, `--map`, `--screenshot=<png> --after=<seconds>`.
 Keys: space run/pause, M map/globe; drag rotates, wheel zooms. Headless check:
 `godot4 --headless --path godot --quit-after 600` (after `./run --build-only`).

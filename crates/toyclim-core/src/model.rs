@@ -41,6 +41,12 @@ pub trait Model: Send {
     fn is_finite(&self) -> bool;
     /// Spectral state for a restart (both leapfrog levels), plus scalar counters.
     fn restart_state(&self) -> (Vec<RestartArray>, Vec<(String, f64)>);
+    /// Switch the per-phase wall-clock timers on or off (no effect on results).
+    fn set_profiling(&mut self, _on: bool) {}
+    /// Accumulated wall time per phase \[s\] since profiling was switched on.
+    fn profile(&self) -> Vec<(&'static str, f64)> {
+        Vec::new()
+    }
     /// Restore from [`Model::restart_state`] output.
     fn load_restart_state(
         &mut self,

@@ -9,13 +9,13 @@
 // would obscure the correspondence with the equations.
 #![allow(clippy::needless_range_loop)]
 
+pub mod atmosphere;
 pub mod build;
 pub mod climatology;
 pub mod config;
 pub mod grid;
 pub mod io;
 pub mod model;
-pub mod orbit;
 pub mod physics;
 pub mod planet;
 pub mod primitive;
@@ -23,6 +23,8 @@ pub mod runtime;
 pub mod shallow_water;
 pub mod spectral;
 pub mod stations;
+pub mod surface;
+pub mod system;
 pub mod time;
 pub mod util;
 

@@ -84,7 +84,7 @@ pub fn isothermal(
     let mut s = PeState::zeros(l, tr.layout.len());
     let mut rng = SplitMix64(seed);
     for k in 0..l {
-        s.tmp[k] = constant(tr, temp - planet.t_ref);
+        s.tmp[k].copy_from_slice(&constant(tr, temp - planet.t_ref));
         if noise > 0.0 {
             for idx in 0..tr.layout.len() {
                 let ell = tr.layout.l_of[idx];
@@ -318,9 +318,9 @@ pub fn jw06(tr: &Transform, planet: &Planet, lev: &SigmaLevels, perturbed: bool)
             }
         }
         let (d, z) = tr.div_curl(&ucos, &zeros);
-        s.vor[k] = z;
-        s.div[k] = d;
-        s.tmp[k] = tr.analysis(&t);
+        s.vor[k].copy_from_slice(&z);
+        s.div[k].copy_from_slice(&d);
+        s.tmp[k].copy_from_slice(&tr.analysis(&t));
     }
     s.lnps = constant(tr, 1.0e5f64.ln());
     // Surface geopotential: eq. (7) at η = 1 (Φ̄(1) = 0).

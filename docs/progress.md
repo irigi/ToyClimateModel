@@ -4,7 +4,7 @@
 
 **The plan is `SPEC.md`.** Part I (M0–M6) is accepted. Part II (§9) defines Phase 2,
 milestones **P0–P11**, and replaces the old sketch of M7–M12. Continue at the lowest unmet
-milestone in SPEC.md §9.6 — currently **P0**.
+milestone in SPEC.md §9.6 — currently **P1** (P0 done 2026-11-15; one owner decision open, question 3).
 
 - The physics, surface and tools built on 2026-11-04/05 as "M7–M11 first steps" are a
   **prototype** (SPEC.md §9.1): they run and conserve energy and water, but have no
@@ -32,8 +32,8 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M5 Held–Suarez / tidally locked | done 2026-11-12: HS T42 L20 1200 d meets all jet criteria; tidally locked and rotation sweeps recorded |
 | M6 Performance/robustness | budget met on the laptop (1 model year in 290 s on 8 threads); f32 HS: jets OK, hemispheric asymmetry 3.19 m/s > 3 (open question 3) |
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
-| P0 Groundwork (refactor, config v2, regress script, f32 question) | not started — **next** |
-| P1 Surface exchange, boundary layer, sequential physics, SCM | not started |
+| P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
+| P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | **next** |
 | P2 Land, snow, sea ice, precipitation phase | not started |
 | P3 Radiation (multi-band two-stream, semi-gray) | not started |
 | P4 Clouds, Earth-like energy balance | not started |
@@ -640,39 +640,133 @@ proved result-neutral.
 
 ---
 
+## 2026-11-15 — P0 Groundwork (branch `p0-groundwork`)
+
+**Milestone**: P0 (SPEC.md §9.6). All acceptance criteria met; the f32 item is data for the
+owner (open question 3).
+
+**Done**
+- `scripts/regress` (§9.5.4): `--against <ref>` builds the reference commit in a worktree,
+  runs the six P0 cases with both builds (1 and 8 threads, binaries snapshotted), and
+  compares every output file byte for byte (`scripts/regress_compare.py`; JSON sidecars
+  without git hash and config echo). Cases are found by file stem, so moved and migrated
+  cases are compared. `scripts/regress_ref_patches/<case>.sed` documents intended output
+  changes (one: two added climatology maps). Without `--against`: the milestone ratchet
+  (all `--ignored` tests, HS T42 1200 d with `tools/zonal_mean.py --hs-criteria`).
+- `docs/tuning.md`: every prototype parameter with default, status and source.
+- `tools/tidally_locked.py`: missing maps are skipped, substellar longitude from the
+  config; the gray tidally locked cases now write `v850` and `t500`.
+- Laptop checklist 2: Williamson test 6 (OSTI report version, §3.6, eqs. 135–143) and
+  Galewsky et al. (2004, eqs. 2–4, plus the 2006 corrigendum) — all constants agree with
+  the code; citations in the case files.
+- Restructure (§9.3.1): `primitive/` split into mod (395 lines), state (flat `[lev][point]`
+  `Field3`, also for the spectral state), tendencies, implicit, tracers, levels, output,
+  restart, setup; `physics/driver.rs` (column loop with buffers allocated once, per-worker
+  scratch, **diagnostics registry** with typed ids — no `diagnostic_names()` per column, no
+  prefix matching per step); `surface/` (slab, land bucket, albedo switch, geography,
+  q-flux); `system/` (orbit, calendar, star, derive); `config/` (blocks, duration, v2,
+  envelope); `atmosphere.rs`. The previous-state clone is gone (state buffers recycled),
+  as are the per-step tendency and grid buffers. Largest core file: 478 lines.
+- **Config schema 2** (§9.3.2): `[star]`, `[orbit]` (`semi_major_axis`, `spin` free /
+  synchronous / resonant), `[atmosphere]` (composition → R_d, c_p; JANAF 300 K heat
+  capacities, checked), typed physics blocks, `[surface.ocean|land|sea_ice]`, named level
+  sets (`"L26"`), default Δt per resolution. Overrides more than 1% off the derived value
+  are rejected unless `allow_inconsistent = true`. Settings outside the envelope (P-5) are
+  logged as warnings. The derived values are echoed as `config.system` in `meta.json`.
+- Cases reorganised into `core/`, `idealized/`, `bench/` (empty), `worlds/`; the six world
+  cases migrated to schema 2 with their old numbers as checked overrides (365.25-day year,
+  R_d = 287.04; the tidally locked case keeps S = 900 W m⁻² and P = 6.1 d with a
+  TRAPPIST-1-like star whose L is 2% above Agol et al. 2021 — stated in the file).
+  `toyclim list-cases` and the viewer find cases in subfolders.
+- `toyclim bench` prints a per-phase profile (`Model::set_profiling`, results unaffected).
+
+**Measured**
+- `scripts/regress --against 0f7d33a` (pre-P0), commit 0f216f1: **PASS**, all 6 cases ×
+  {1, 8} threads byte-identical (120–338 files each), new build thread-independent.
+  The later performance commit ff76cc6 was compared on HS, TJ16+SBM and test world T21
+  at 1 and 8 threads against those outputs: identical.
+- Derivation tests (`system::derive`, `config::v2::tests`): Earth S = 1361 W m⁻², year
+  365.256 d (to 1e-4); TRAPPIST-1e (Agol et al. 2021: L = 5.53e-4 L☉, M = 0.0898 M☉,
+  a = 0.02925 AU) year 6.098 d (paper 6.0996 d), S = 880 W m⁻² (paper 0.646 S⊕ = 879;
+  within 5% of 900); SPEC input a = 0.0293 AU also passes; inconsistent overrides rejected.
+- Performance, i7-11850H, 8 threads, quiet machine, before (0f7d33a) → after (ff76cc6):
+  HS T42 L20 (Δt 20 min) **11.4 → 5.53 ms/step (2.06×)**, one model year ≈ 145 s;
+  test world T42 L26 (Δt 15 min) 27.6 → 20.1 ms/step (1.37×; prototype column physics
+  is 58% of the step). One thread, HS: 73 → 50 ms/step.
+- f32 study (open question 3): HS T42 L20 2200 d, seeds 1/2: asymmetry f64 1.52 / 1.79,
+  f32 4.24 / 0.87 m/s; jets 32.3–33.9 m/s at ±43°, σ 0.225 (f32 s1 SH at −46°); KE trend
+  over the last 1000 d −1.8 / −0.8 / −4.7 / +0.7 %. Wall 4.9e3 s (f64) / 4.5e3 s (f32),
+  3 threads each, machine shared. The f64 seed-1 fields at day 1200 are bit-identical to
+  the accepted M5 run.
+- Viewer: `godot4 --headless --path godot --quit-after 600 -- --case=testworld_t21 --run`
+  exits 0 and advances (schema-2 case found by bare name in `worlds/`); default case too.
+
+**Figures** (looked at)
+- `docs/figures/P0/tidally_locked_gray_t21.png`: T21 one year; T850 peaks ≈ 285 K just east
+  of the substellar point, poles ≈ 238 K; upper-tropospheric superrotation with twin
+  ≈ 45 m/s maxima at ±30°, σ ≈ 0.4; tool output: equatorial [u] above σ 0.5 = 18.4 m/s,
+  day−night contrast 12.9 K at 850 hPa, 7.7 K at 500 hPa.
+- `docs/figures/P0/hs_t42l20_2200d_{f64,f32}_s{1,2}.png`: four textbook HS climates (jets,
+  eddy T variance at σ ≈ 0.8 near 40–45°, Hadley cells ≈ 9e10 kg/s); f32 seed 1 has a
+  visibly broader SH jet on its poleward flank.
+
+**Deviations from SPEC.md, recorded**
+- Typed physics blocks lower to the prototype bundle (`[forcing] type =
+  "gray_aquaplanet"`) instead of the bundle expanding to blocks; interim scheme names
+  `boundary_layer.scheme = "tj16"` and `clouds.scheme = "rh_prototype"`. P1 inverts this
+  when the sequential driver arrives.
+- The envelope (P-5) is enforced by warnings, not refusal.
+- Allocations inside the prototype schemes remain until the P1 `ColumnScheme` interface
+  with a per-worker `Workspace`; the driver itself no longer allocates per column.
+
+**Tuning changes**: none (register created).
+
+**Open questions**: 3 (updated with the f32 data), 5 (new: Courant trigger of §9.8).
+
+**Next step**: P1 (sequential driver, surface exchange, boundary layer, SCM, aquaplanet
+gate).
+
+**Ratchet** (`scripts/regress`, ff76cc6, 8 threads): `--ignored` tests 6/6 pass (48 s);
+HS T42 L20 1200 d: jets 33.72 / 32.20 m/s at ±43.3°, σ 0.225, lowest-level [u] −5.66 /
++4.31 m/s, asymmetry 2.13 m/s, KE trend −1.52% — identical to the accepted M5 numbers.
+**PASS**.
+
+---
+
 ## Laptop checklist (things the cloud session could not do)
 
 1. ~~**Godot integration**~~ — done 2026-11-08 (M3 entry below).
-2. Re-check Williamson test 6 and Galewsky constants against the original papers.
+2. ~~Re-check Williamson test 6 and Galewsky constants against the original papers~~ — done
+   2026-11-15 (P0 entry): all constants agree with the code.
 3. ~~**Acceptance runs**~~ — done 2026-11-12 (entry above). (each in the background, `--release`; analyse with the tools):
 
    ```bash
    cargo build --release
-   RAYON_NUM_THREADS=8 target/release/toyclim run --config cases/held_suarez.toml --out out/hs
+   RAYON_NUM_THREADS=8 target/release/toyclim run --config cases/idealized/held_suarez.toml --out out/hs
    python tools/zonal_mean.py out/hs -o docs/figures/M5/hs_t42l20_zonal_mean.png
    for c in tidally_locked tidally_locked_omega01 tidally_locked_omega002; do
-     target/release/toyclim run --config cases/$c.toml --out out/$c
+     target/release/toyclim run --config $(find cases -name $c.toml) --out out/$c
      python tools/tidally_locked.py out/$c -o docs/figures/M5/$c.png; done
    for c in held_suarez_omega025 held_suarez_omega2; do
-     target/release/toyclim run --config cases/$c.toml --out out/$c
+     target/release/toyclim run --config $(find cases -name $c.toml) --out out/$c
      python tools/zonal_mean.py out/$c -o docs/figures/M5/$c.png; done
    ```
 
    M5 criteria (jets 26–34 m/s at 38–50°, σ 0.15–0.35; surface easterlies/westerlies;
    asymmetry < 3 m/s; KE trend < 5% over the last 1000 days) are printed by
-   `zonal_mean.py`. Also time one model year (`toyclim bench --config cases/held_suarez.toml
+   `zonal_mean.py`. Also time one model year (`toyclim bench --config cases/idealized/held_suarez.toml
    --length 365day`) on 8 threads → M6 budget.
 4. ~~M6 f32 check~~ — done 2026-11-12 (asymmetry 3.19 m/s, open question 3): build with `--features f32` (`cargo build --release -p toyclim-headless
    --features f32 --target-dir target/f32`), rerun HS, compare jets and record the speedup.
 5. Compare HS with SpeedyWeather/Isca output placed in `reference/` (and later PlaSim).
-6. ~~M7~~ (done 2026-11-12): `cases/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
+6. ~~M7~~ (done 2026-11-12): `cases/idealized/moist_held_suarez.toml` (T42 L26, 1080 days, 6-month spin-up as in TJ16), with
    and without `convection = "sbm"`; `tools/moist_stats.py`, `tools/zonal_mean.py`.
 7. Worlds (overnight runs, the owner's main use) — done 2026-11-12 except the tidally locked gray maps:
-   - `cases/gray_aquaplanet.toml` (T42 L26, 10 years) → `moist_stats.py`, `koppen.py`;
-   - `cases/testworld.toml` (T42 L26, 4 years, continents from `worlds/testworld.npy`) →
+   - `cases/worlds/gray_aquaplanet.toml` (T42 L26, 10 years) → `moist_stats.py`, `koppen.py`;
+   - `cases/worlds/testworld.toml` (T42 L26, 4 years, continents from `worlds/testworld.npy`) →
      `koppen.py`, `downscale.py out/testworld worlds/testworld.npy --orographic`,
      `export_layers.py`, `station_stats.py ... --by-month`, `point_rain.py --by-month`;
-   - `cases/tidally_locked_gray.toml` (T42 L26, 3 years) → `tidally_locked.py`-style maps
+   - `cases/worlds/tidally_locked_gray.toml` (T42 L26, 3 years) → `tidally_locked.py`-style maps
      (needs maps t850/u850/v850 in its climatology block if wanted).
 
 ---
@@ -688,8 +782,28 @@ proved result-neutral.
    < 3 m/s. With a 1000-day window this is plausibly sampling variability rather than a
    precision bug. Criterion not weakened. Options: (a) accept as recorded, (b) rerun f32
    longer (e.g. 2200 days, ~30 min) or with another perturbation seed and report both.
-   **Now handled as P0 item 1** (2200-day reruns with two seeds, f32 and f64).
+   **P0 result (2026-11-15)**: 2200-day runs, seeds 1 and 2, f32 and f64 (statistics days
+   200–2200, 6-hourly): asymmetry f64 1.52 / 1.79, f32 **4.24** / 0.87 m/s; all other M5
+   criteria pass in all four. From 10-daily snapshots, single 1000-day windows reach 5.3 m/s
+   in f64 (seed 2, days 200–1200) and 5.5 m/s in f32 (seed 2), so 1000-day means are not
+   enough to resolve 3 m/s in either precision. Over 2000 days three runs fall to 1.1–1.6 m/s
+   (snapshots), but f32 seed 1 stays asymmetric in both halves (3.7, 5.2): a persistent
+   poleward broadening of its SH jet (max difference at σ 0.275, 52°). Reading: mostly
+   sampling variability of a slow annular-mode-like fluctuation, with one f32 run in a long
+   asymmetric excursion; a precision-induced bias cannot be excluded from four runs.
+   Options: (a) accept f32 as recorded (f64 stays the default for acceptance, f32 only for
+   speed); (b) define the M5 asymmetry criterion on ≥ 2000-day means or an ensemble mean of
+   two seeds (a criterion change — owner's call); (c) four more seeds per precision (~3 h on
+   the laptop) to test for a systematic f32 difference. Recommendation: (a) now, (c) only if
+   f32 becomes a production mode. Figures: `docs/figures/P0/hs_t42l20_2200d_*.png`.
 4. **Earth-gate thresholds** (2026-11-12): the numbers in SPEC.md §9.6 P5/P6 were set from
    judgement of what intermediate-complexity models achieve, before any Earth run exists.
    They are binding for sessions; the owner may want to revise them after seeing the first
    `earth_amip` scorecard (recorded without thresholds at the end of P2).
+5. **Courant trigger of SPEC.md §9.8** (2026-11-15): "max Courant number above 0.8 in the log →
+   reduce Δt". The logged number is SPEC §4.5's u Δt / (a cos φ Δλ), which near the poles
+   grows like 1/cos φ; the accepted HS T42 run (Δt 20 min, stable for 2200 days) logs up to
+   3.78. For a spectral model the explicit limit is set by the total wavenumber, not the
+   grid spacing at the pole. Proposed replacement: monitor |v|_max Δt √(M(M+1)) / a (or the
+   same with the grid spacing at the equator) and set the trigger on that. Until decided,
+   the trigger is not applied to Part I cases.

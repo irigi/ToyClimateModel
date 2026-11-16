@@ -85,17 +85,26 @@ fn main() -> Result<()> {
 }
 
 fn list_cases(dir: &Path) -> Result<()> {
-    let mut entries: Vec<_> = fs::read_dir(dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-        .collect();
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+        for e in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+            let p = e?.path();
+            if p.is_dir() {
+                walk(&p, out)?;
+            } else if p.extension().is_some_and(|x| x == "toml") {
+                out.push(p);
+            }
+        }
+        Ok(())
+    }
+    let mut entries = Vec::new();
+    walk(dir, &mut entries)?;
     entries.sort();
     for p in entries {
-        let name = p.file_stem().unwrap_or_default().to_string_lossy();
+        let name = p.strip_prefix(dir).unwrap_or(&p).with_extension("");
+        let name = name.to_string_lossy();
         match Config::from_file(&p) {
-            Ok(c) => println!("{name:<28} {:<14} {}", c.model.as_str(), c.description),
-            Err(e) => println!("{name:<28} INVALID: {e}"),
+            Ok(c) => println!("{name:<40} {:<14} {}", c.model.as_str(), c.description),
+            Err(e) => println!("{name:<40} INVALID: {e}"),
         }
     }
     Ok(())
@@ -238,7 +247,11 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
         config: serde_json::to_value(config)?,
         calendar: config.orbit.as_ref().map(|o| {
             let orb = o.resolve(planet.rotation_rate);
-            toyclim_core::orbit::Calendar::new(orb.year, orb.solar_day(), o.months.clone())
+            toyclim_core::system::calendar::Calendar::new(
+                orb.year,
+                orb.solar_day(),
+                o.months.clone(),
+            )
         }),
     };
     meta.write(&out.join("meta.json"))?;
@@ -296,7 +309,7 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
                         .as_ref()
                         .ok_or_else(|| anyhow::anyhow!("climatology.monthly needs an [orbit]"))?
                         .resolve(planet.rotation_rate);
-                    cl.enable_monthly(toyclim_core::orbit::Calendar::new(
+                    cl.enable_monthly(toyclim_core::system::calendar::Calendar::new(
                         o.year,
                         o.solar_day(),
                         config.orbit.as_ref().unwrap().months.clone(),
@@ -375,6 +388,7 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
 
 fn bench(config: &Config) -> Result<()> {
     let mut model = build_model(config).map_err(anyhow::Error::msg)?;
+    model.set_profiling(true);
     let total = config.total_steps();
     let t0 = Instant::now();
     for _ in 0..total {
@@ -390,6 +404,13 @@ fn bench(config: &Config) -> Result<()> {
         wall * 1e3 / total as f64,
         rayon_threads()
     );
+    for (phase, secs) in model.profile() {
+        println!(
+            "  {phase:<18} {:8.3} ms/step  {:5.1}%",
+            secs * 1e3 / total as f64,
+            100.0 * secs / wall
+        );
+    }
     if !model.is_finite() {
         bail!("state became non-finite");
     }

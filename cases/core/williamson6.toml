@@ -1,8 +1,11 @@
 # Williamson et al. (1992), test case 6: Rossby–Haurwitz wave, R = 4,
 # ω = K = 7.848e-6 s⁻¹, h0 = 8000 m. Unstable on long runs (Thuburn & Li 2000):
 # do not run beyond 14 days for acceptance.
-# Constants from SPEC.md (standard values); the original paper could not be fetched as
-# text in the 2026-11-04 session.
+# Checked 2026-11-15 against the report version of the paper (OSTI 5232139, §3.6,
+# eqs. 135-143, p. 19): ψ = −a²ω sin θ + a²K cos^R θ sin θ cos Rλ; gh = gh0 + a²A + a²B cos Rλ
+# + a²C cos 2Rλ with A, B, C as in shallow_water/cases.rs; ω = K = 7.848e-6 s⁻¹,
+# h0 = 8e3 m, R = 4; Earth constants eqs. 72-74 (a = 6.37122e6 m, Ω = 7.292e-5 s⁻¹,
+# g = 9.80616 m s⁻²). All agree with the code.
 description = "Williamson 1992 test 6: Rossby-Haurwitz wave R=4"
 model = "shallow_water"
 truncation = 42
