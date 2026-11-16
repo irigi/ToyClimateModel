@@ -25,9 +25,9 @@ jobs:
       - name: f32 build and smoke run
         run: |
           cargo build --release -p toyclim-headless --features f32 --target-dir target/f32
-          RUST_LOG=warn target/f32/release/toyclim run --config cases/williamson6.toml --out out/ci-f32 --length 2day
+          RUST_LOG=warn target/f32/release/toyclim run --config cases/core/williamson6.toml --out out/ci-f32 --length 2day
       - name: smoke run
-        run: cargo run --release --bin toyclim -- run --config cases/dummy.toml --out out/ci-dummy
+        run: cargo run --release --bin toyclim -- run --config cases/core/dummy.toml --out out/ci-dummy
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
