@@ -56,10 +56,10 @@ fn files(dir: &Path) -> Vec<PathBuf> {
     let mut v = Vec::new();
     for sub in ["fields", "stations", "climatology"] {
         let d = dir.join(sub);
-        let mut fs: Vec<PathBuf> = std::fs::read_dir(&d)
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .collect();
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        let mut fs: Vec<PathBuf> = rd.map(|e| e.unwrap().path()).collect();
         fs.sort();
         v.extend(fs);
     }
@@ -153,8 +153,10 @@ fn moist_bitwise_and_sane() {
     std::fs::remove_file(&cfg).ok();
 }
 
-/// Land, orography, bucket, slab ocean, gray radiation and orbit together: the model runs,
-/// stays finite and keeps the bucket within its bounds; restart is bitwise.
+/// Land, orography, bucket, slab ocean, gray radiation, the K-profile boundary layer with the
+/// coupled surface solve (carried state: u*) and orbit together: the model runs, stays
+/// finite and keeps the bucket within its bounds; restart is bitwise and the output does
+/// not depend on the thread count.
 #[test]
 fn land_world_runs_and_restarts() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -184,8 +186,10 @@ type = "gray_aquaplanet"
     );
     let cfg = tmp("land.toml");
     std::fs::write(&cfg, cfg_text).unwrap();
-    let (a, c) = (tmp("la"), tmp("lc"));
+    let (a, a5, c) = (tmp("la"), tmp("lb"), tmp("lc"));
     run(&cfg, &a, "2", &[]);
+    run(&cfg, &a5, "5", &[]);
+    assert_same(&a, &a5);
     run(&cfg, &c, "2", &["--length", "2day"]);
     let r = c.join("restart");
     run(&cfg, &c, "2", &["--restart", r.to_str().unwrap()]);
@@ -200,7 +204,7 @@ type = "gray_aquaplanet"
     assert!(b.iter().all(|&w| (0.0..=150.0).contains(&w)));
     assert!(land.iter().any(|&f| f >= 0.5) && land.iter().any(|&f| f < 0.5));
     assert!(ts.iter().all(|&t| t.is_finite() && t > 150.0 && t < 350.0));
-    for d in [&a, &c] {
+    for d in [&a, &a5, &c] {
         std::fs::remove_dir_all(d).ok();
     }
     std::fs::remove_file(&cfg).ok();

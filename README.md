@@ -14,7 +14,7 @@ Rust core, Godot viewer. See [`SPEC.md`](SPEC.md) for the design and milestones 
 | `crates/toyclim-headless` | the `toyclim` binary: run cases, benchmarks |
 | `crates/toyclim-godot` | GDExtension for the viewer |
 | `godot/` | Godot project (viewer) |
-| `cases/` | TOML run configs: `core/` (Part I tests), `idealized/` (Held–Suarez family, TJ16), `bench/` (published comparators), `worlds/` |
+| `cases/` | TOML run configs: `core/` (Part I tests), `idealized/` (Held–Suarez family, TJ16), `bench/` (published comparators, e.g. the APE aquaplanet gate), `worlds/`, `scm/` (single-column cases) |
 | `tools/` | Python analysis and plotting |
 | `docs/` | progress log and acceptance figures |
 
@@ -56,6 +56,19 @@ Output goes to `out/<run>/`: `meta.json` (grid, planet, config echo, git hash),
 `fields/<field>_<step:06>.npy` (float32, Gaussian grid, `[lat][lon]` or
 `[lev][lat][lon]`, row 0 = northernmost) and `diagnostics.csv`.
 
+## Single-column model and scorecards
+
+```bash
+cargo run --release --bin toyclim -- scm --config cases/scm/dry_land_diurnal.toml --out out/scm/dry_land
+```
+
+```bash
+python tools/scm_plot.py out/scm/dry_land -o out/scm/dry_land.png
+```
+
+A gate run is scored with `tools/scorecard.py <run> --suite aquaplanet` (writes
+`docs/scorecards/<milestone>_<suite>_<date>.json`).
+
 ## Plot
 
 ```bash
@@ -87,6 +100,14 @@ system:
   and `[atmosphere]` (surface pressure, gas composition → R_d and c_p).
 - `[[stations]]` where you want weather statistics.
 
+World physics (typed blocks): `[radiation] scheme = "gray"`, `[boundary_layer] scheme =
+"kprofile"` (bulk surface fluxes with Louis stability and Charnock roughness, K-profile
+boundary layer solved implicitly with the surface energy balance), `[convection] scheme =
+"sbm" | "dry" | "none"`, large-scale condensation when `[moisture]` is present, and
+`[dynamics] energy_fixer = true`. Near-surface fields `tas`, `huss`, `uas`, `vas`, `sfcwind`,
+`gust` are true 2 m / 10 m diagnostics; `t_low`, `u_low`, `v_low`, `wind_low` are the lowest
+model level; `psl` is sea-level pressure.
+
 Settings outside the supported envelope (SPEC.md §9.2 P-5) are logged as warnings. Then:
 
 ```bash
@@ -103,8 +124,9 @@ python tools/koppen.py out/myworld
 
 `tools/moist_stats.py` (precipitation/evaporation), `tools/zonal_mean.py` (circulation),
 `tools/tidally_locked.py` and `tools/plot_field.py` give more views. Physics available so
-far: dry Held–Suarez-type forcings, moist physics (large-scale condensation, simplified
-Betts–Miller convection, surface fluxes, boundary layer), gray radiation, slab ocean, land
+far: dry Held–Suarez-type forcings, the TJ16 moist Held–Suarez bundle, and world physics
+(gray radiation, K-profile boundary layer with the coupled surface solve, dry adjustment,
+simplified Betts–Miller convection, large-scale condensation), slab or fixed-SST ocean, land
 with a bucket model. See `docs/progress.md` for what is validated and what is not.
 
 ## Viewer
