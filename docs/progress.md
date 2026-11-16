@@ -1114,3 +1114,29 @@ owner before installing them.
        `docs/figures/P1/ape_{t42_sl,t63}_{zonal_mean,moist}.png`.
      - Conclusion: per the owner's decision, the row stays open for the P3/P4 retest; P2
        proceeds.
+7. **P2 bistability: one climate, with ice to ~45°** (2026-11-16; P2 acceptance 6).
+   - **What fails:** the T21 aquaplanet (slab 20 m, sea ice, seasons, 1361 W/m², 12 years)
+     reaches the same climate from both starts (`cases/bench/p2_bistability/`):
+     - global T_s 279.3 K and global sea-ice cover 0.29 in both;
+     - annual-mean sea ice reaches 42°N (concentration 0.2) and 47°S (0.55), full cover
+       poleward of ~52°.
+     - So the warm start does not stay ice-free equatorward of 50°, and the ice start does
+       not stay ice-covered (it deglaciates in ~4 years).
+     - T_s trend over the last 5 years is −0.13 / −0.07 K/yr (warm / ice start).
+   - **Figures:** `docs/figures/P2/bistability_1361.png`, `bistability_1361_ts.png`.
+   - **Likely candidates** (none tested yet):
+     - the uniform TOA reflectance 0.23 (cloud stand-in) applies over sea ice too, on top of
+       the ice albedo, so high latitudes absorb too little. Real clouds over ice add little
+       to the albedo;
+     - no ocean heat transport: the q-flux is zero in this case;
+     - gray radiation with the Earth-shaped τ(φ) and no water-vapour feedback; P3 replaces
+       it.
+   - **Options:**
+     - (a) keep the criterion and retest after P3/P4 (radiation, clouds), as for question 6;
+     - (b) diagnostic runs, not adopted as a setting: the q-flux on, and the reflectance
+       only over open ocean and land. This would be a physics change of the cloud
+       stand-in, not tuning;
+     - (c) the owner revises the criterion for the gray stand-in physics.
+   - **Recommendation:** (b) as data, then (a).
+   - **Instellation sweep** (acceptance 6 *record*): running from the warm state at 98, 96,
+     94 and 92 % (luminosity scaled), 6 years each.
