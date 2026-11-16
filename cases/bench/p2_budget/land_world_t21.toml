@@ -1,0 +1,111 @@
+# SPEC.md P2 acceptance 2–4: global water budget (d/dt of vapour + soil water + snow
+# = −(runoff + water taken by the ocean), within 1e-3 mm/day) and system energy closure
+# (within 0.5 W m⁻²) of a 3-year T21 land world; the test world heightmap with the full P2
+# surface (5-layer soil, bucket, snow, sea ice, slab 20 m) and the world physics.
+schema = 2
+description = "P2 budget: T21 land world (test world heightmap), slab 20 m, sea ice, soil, snow, 3 years"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "1096day"
+output_every = "30day"
+output_fields = ["ts", "tos", "sic", "sit", "snw", "mrso", "mrro", "precip", "tas", "land", "orog"]
+initial_condition = { case = "jw06", perturbed = true }
+station_every = "1h"
+station_fields = ["precip", "tas", "sfcwind", "uas", "vas", "ts", "ps"]
+
+[[stations]]
+name = "equator"
+lat = 0.0
+lon = 0.0
+
+[[stations]]
+name = "midlat_N"
+lat = 45.0
+lon = 0.0
+
+[[stations]]
+name = "polar_N"
+lat = 70.0
+lon = 0.0
+
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+# year: the original 365.25 days (derived: 365.256 d), kept so that results are
+# unchanged; checked against the derived value (< 1%).
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+# Earth preset: rotation rate 7.292e-5 s⁻¹ (Williamson et al. 1992).
+[planet]
+preset = "earth"
+
+# R_d and c_p: the Williamson et al. (1992) values used by the dynamical core, checked
+# against the mixture (287.04 / 1005.0 J kg⁻¹ K⁻¹).
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[radiation]
+scheme = "gray"
+# Shortwave reflected by clouds and the atmosphere, a stand-in until the P4 clouds:
+# 79 of 341.3 W m⁻² in the global energy budget of Trenberth, Fasullo & Kiehl (2009,
+# Bull. Amer. Meteor. Soc. 90, 311–323, Fig. 1). Surface albedos are per tile (P2).
+reflectance = 0.23
+
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+geography = "worlds/testworld.npy"
+
+[surface.ocean]
+model = "slab"
+mixed_layer_depth = 20.0
+initial = "tj16"
+
+[surface.land]
+# 5-layer soil, bucket, snow; band albedos (SPEC.md §9.4.5–9.4.6, P2)
+bucket_capacity = 150.0
+
+# Prototype ice-albedo switch: 0.6 below 271.15 K (ocean) / 273.15 K (land); P2 replaces it.
+[surface.sea_ice]
+enabled = true
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "1day"
+every = "6h"
+maps = ["ts", "tas", "precip", "evap", "pw", "olr", "asr", "snw", "sic", "mrso"]
