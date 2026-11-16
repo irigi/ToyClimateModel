@@ -319,6 +319,7 @@ pub fn build(
 }
 
 const GRAY_KEYS: &[&str] = &[
+    "reflectance",
     "tau_eq",
     "tau_pole",
     "f_linear",
@@ -409,6 +410,7 @@ pub fn build_world(
                 f_linear: num(&r.params, "f_linear", d.f_linear)?,
                 tau_q: num(&r.params, "tau_q", d.tau_q)?,
                 tau_sw: num(&r.params, "tau_sw", d.tau_sw)?,
+                reflectance: num(&r.params, "reflectance", d.reflectance)?,
                 albedo: num(&r.params, "albedo", d.albedo)?,
                 t_surface_default: num(&r.params, "t_surface_default", d.t_surface_default)?,
                 clouds,

@@ -248,14 +248,15 @@ SUITES = {"aquaplanet": aquaplanet}
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run")
-    ap.add_argument("--suite", required=True, choices=sorted(SUITES))
+    ap.add_argument("--suite", choices=sorted(SUITES),
+                    help="check suite; without it the world metrics are printed only")
     ap.add_argument("--milestone", default="P1")
     ap.add_argument("--no-write", action="store_true")
     a = ap.parse_args()
     run = pathlib.Path(a.run)
     meta, c, info, diag = load(run)
     m = world_metrics(run, meta, c, info, diag)
-    checks = SUITES[a.suite](run, meta, c, info, diag, m)
+    checks = SUITES[a.suite](run, meta, c, info, diag, m) if a.suite else []
     print(f"{run.name}: T{meta['truncation']}, window {m['window_days']:.0f} days "
           f"({info['count']} climatology samples)")
     skip = {"zonal_precip_mm_day", "lat_deg", "u_low_zonal"}
@@ -265,6 +266,8 @@ def main():
     ok = all(c for _, c in checks)
     for name, c in checks:
         print(f"  {'PASS' if c else 'FAIL'}  {name}")
+    if not a.suite:
+        return
     print(f"suite {a.suite}: {'PASS' if ok else 'FAIL'}")
     if not a.no_write:
         try:

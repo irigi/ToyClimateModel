@@ -179,7 +179,13 @@ impl Primitive {
             "bucket" | "mrso" => self.surface_field(|s, p| s.bucket[p]),
             // mixed-layer temperature [K], sea-ice concentration (fraction of the ocean area),
             // mean ice thickness per ocean area [m], land snow [kg m⁻²]
-            "tos" => self.surface_field(|s, p| s.t_ml[p]),
+            "tos" => self.surface_field(|s, p| {
+                if s.land_fraction[p] < 1.0 {
+                    s.t_ml[p]
+                } else {
+                    s.ts_cell(p)
+                }
+            }),
             "sic" => self.surface_field(|s, p| s.sic(p)),
             "sit" => self.surface_field(|s, p| s.ice_h[p]),
             "snw" => self.surface_field(|s, p| s.snow[p]),

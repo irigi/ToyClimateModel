@@ -6,7 +6,9 @@
 //! dU/dτ = U − B, dD/dτ = B − D, B = σ_SB T⁴, integrated exactly per layer
 //! (isothermal layers), U(surface) = σ_SB T_s⁴ (tile mean), D(top) = 0.
 //! Optionally τ grows with column water vapour (`tau_q` per kg/m² of vapour above).
-//! Shortwave: absorption optical depth τ_sw(σ) = τ_sw0 σ² along the slant path τ/μ₀
+//! Shortwave: a fraction `reflectance` of the incoming beam is reflected at the top without
+//! absorption (a stand-in for clouds and aerosols until the P4 clouds; 0 by default); the
+//! rest is absorbed with optical depth τ_sw(σ) = τ_sw0 σ² along the slant path τ/μ₀
 //! (O'Gorman & Schneider 2008 use τ_sw0 = 0.22 with daily means), surface albedo from
 //! the surface tiles (else `albedo`). The reflected beam leaves without further
 //! absorption.
@@ -32,6 +34,8 @@ pub struct GrayRadiation {
     pub tau_q: f64,
     /// SW absorption optical depth at the surface.
     pub tau_sw: f64,
+    /// Fraction of the incoming shortwave reflected at the top (cloud stand-in).
+    pub reflectance: f64,
     /// Surface albedo when the model has no surface tiles.
     pub albedo: f64,
     /// Surface temperature used when the model has no surface tiles \[K\].
@@ -72,6 +76,7 @@ impl Default for GrayRadiation {
             f_linear: 0.1,
             tau_q: 0.0,
             tau_sw: 0.22,
+            reflectance: 0.0,
             albedo: 0.3,
             t_surface_default: 288.0,
             clouds: None,
@@ -150,8 +155,8 @@ impl ColumnScheme for GrayRadiation {
         // reflection leaves to space
         let s0 = ctx.insolation;
         let mu = ctx.cos_zenith.max(0.05);
-        let mut reflected = 0.0;
-        sw[0] = s0;
+        let mut reflected = self.reflectance * s0;
+        sw[0] = s0 - reflected;
         for k in 0..l {
             let (s1, s2) = (half[k], half[k + 1]);
             let after = sw[k] * (-(self.tau_sw * (s2 * s2 - s1 * s1)) / mu).exp();
@@ -241,5 +246,43 @@ mod tests {
         let p = Planet::earth();
         let atm: f64 = dt.iter().map(|&x| x * p.cp * 1e5 / 30.0 / p.gravity).sum();
         assert!((-diag[1] - atm - sh).abs() < 1e-6);
+    }
+
+    /// The top reflectance removes its share of the beam before any absorption: absorbed
+    /// stellar flux drops by at least that share and the column budget still closes.
+    #[test]
+    fn reflectance_reduces_absorption_and_conserves() {
+        let t: Vec<f64> = (0..20).map(|k| 200.0 + 4.0 * k as f64).collect();
+        let l = t.len();
+        let half: Vec<f64> = (0..=l).map(|k| k as f64 / l as f64).collect();
+        let geo = Geometry::new(&half, 1e5);
+        let planet = Planet::earth();
+        let mut ctx = geo.ctx(&planet, None, 1800.0);
+        ctx.insolation = 400.0;
+        ctx.cos_zenith = 1.0;
+        let run = |r: f64| {
+            let mut st = ColumnState::new(l, 0);
+            st.begin(1800.0);
+            st.t.copy_from_slice(&t);
+            let mut sfc = SurfaceExchange::default();
+            sfc.tiles
+                .push(Tile::new(TileKind::Ocean, 1.0, 290.0, f64::INFINITY, 0.06));
+            let mut diag = vec![0.0; 5];
+            let g = GrayRadiation {
+                reflectance: r,
+                ..Default::default()
+            };
+            g.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(l));
+            let atm: f64 = st
+                .dt
+                .iter()
+                .map(|&x| x * planet.cp * 1e5 / 20.0 / planet.gravity)
+                .sum();
+            let toa = diag[2] - diag[1];
+            assert!((toa - atm - surface_absorbed(&sfc)).abs() < 1e-6);
+            diag[2]
+        };
+        let (a0, a1) = (run(0.0), run(0.23));
+        assert!(a1 <= (1.0 - 0.23) * a0 + 1e-9, "{a0} {a1}");
     }
 }

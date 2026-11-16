@@ -25,6 +25,7 @@ until then are reproducible; do not tune).
 | 2026-11-16 | `tau_sw` in the APE benchmark cases | 0.22 → 0 | Not tuning: the benchmark configuration follows Frierson et al. (2006, no SW absorption). With 0.22 along the slant path the gray scheme heats the polar upper troposphere by several K/day at low sun (P1 SCM diagnosis). World cases keep 0.22 until P3 replaces the radiation. |
 | 2026-11-16 | `[dynamics] tracer_transport` in the moist world and APE cases | spectral → semi_lagrangian | Not tuning: SPEC.md §9.8 remedy after the tracer-fixer trigger fired (2.3%/day of the vapour mass at T42). |
 | 2026-11-16 | Surface (P2) | prototype land 2e5 J m⁻² K⁻¹ / albedo 0.3 and the 0.6 ice switch → soil, snow, sea ice, band albedos | Not tuning: SPEC.md §9.4.5–9.4.6 schemes at their published or SPEC starting values. |
+| 2026-11-16 | `[radiation] reflectance` in the world cases | (new) 0 → 0.23 | Not fitted: observed fraction of the incoming shortwave reflected by clouds and atmosphere, 79/341.3 W m⁻² (Trenberth, Fasullo & Kiehl 2009, Fig. 1); a stand-in for the P4 clouds once the P2 surface albedos replaced the prototype's 0.3. Default 0 (APE, idealized cases unchanged). |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -59,6 +60,7 @@ until then are reproducible; do not tune).
 | Gray LW linear fraction f_l | `f_linear` | 0.1 | proto | Frierson et al. (2006) |
 | LW optical depth per kg m⁻² vapour | `tau_q` | 0 | proto | Byrne & O'Gorman (2013) form, off |
 | SW absorption optical depth τ_sw (∝ σ²) | `tau_sw` | 0.22 | proto | O'Gorman & Schneider (2008) |
+| SW reflectance at the top (cloud stand-in until P4) | `reflectance` | 0 (worlds: 0.23) | interim | Trenberth et al. (2009): 79 of 341.3 W m⁻² |
 | Surface albedo (gray) | `albedo` | 0.3 | proto | Frierson et al. (2006) |
 | SBM relaxation time τ | `tau_convection` | 2 h | knob (P1/P5) | Frierson (2007) |
 | SBM reference RH | `rh_convection` | 0.7 | knob (P1/P5) | Frierson (2007) |
