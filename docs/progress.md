@@ -33,7 +33,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M6 Performance/robustness | budget met on the laptop (1 model year in 290 s on 8 threads); f32 HS: jets OK, hemispheric asymmetry 3.19 m/s > 3 (open question 3) |
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
 | P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
-| P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails the 35–60° westerlies row at T21 and T42 (open question 6); §9.8 tracer-fixer trigger fired (2.3%/day) |
+| P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | not started |
 | P3 Radiation (multi-band two-stream, semi-gray) | not started |
 | P4 Clouds, Earth-like energy balance | not started |
@@ -917,6 +917,44 @@ T21 and T42. The criterion is not weakened; P1 is blocked on that row (open ques
 
 ---
 
+## 2026-11-16 (evening) — P1: semi-Lagrangian humidity transport, T63 resolution test
+
+**Done**:
+- §9.8 remedy for the tracer-fixer trigger: grid-point semi-Lagrangian transport of the
+  humidity (`primitive/semi_lagrangian.rs`, `[dynamics] tracer_transport =
+  "semi_lagrangian"`). It uses:
+  - Ritchie (1987) midpoint departure points on the sphere;
+  - clipped 4×4 cubic Lagrange interpolation (Bermejo & Staniforth 1992) with pole halo
+    rows;
+  - vertical flux-form MUSCL with a van Leer limiter;
+  - a global multiplicative mass fixer.
+
+  All moist world and APE cases use it. The spectral path is unchanged and byte-identical
+  (Held–Suarez, TJ16).
+- The APE gate was rerun with the new transport at T21 and T42, and at T63 with spectral
+  transport as the owner's option (b). The data is under open question 6.
+
+**Measured** (APE Control, years 2–4):
+
+| run | fixer | energy closure | P = E | G | min u 35–60° |
+|---|---|---|---|---|---|
+| T21 SL | 0.17 %/day (was 1.25) | 0.10 W/m² | 3e-5 | 1.30 | −7.06 m/s |
+| T42 SL | 0.12 %/day (was 2.29) | 0.006 W/m² | 8e-5 | 1.19 | −3.69 m/s |
+| T63 spectral | 2.42 %/day | 0.008 W/m² | 7e-5 | 1.15 | −2.55 m/s |
+
+The T63 run took 5.2 h wall on 8 threads, sharing the machine with other runs.
+
+**Notes**:
+- The scorecard's "jet" metric is the largest zonal-mean u anywhere. At T21 SL that is a
+  46 m/s equatorial stratospheric wind at σ 0.037, not the tropospheric jet. No pass/fail
+  row uses this metric.
+
+**Tuning changes**: none.
+
+**Open questions**: 6 (updated with the T63 data).
+
+**Next step**: P2 (branch `p2-surface`), with the 35–60° row open.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -981,3 +1019,24 @@ T21 and T42. The criterion is not weakened; P1 is blocked on that row (open ques
    - **Owner decision (2026-11-16): "Go ahead with b, then a".** T63 run started
      (`cases/bench/neale_hoskins2000/ape_control_t63.toml`, Δt 10 min). P2 may proceed with this
      row open; it is re-tested after P3/P4 and stays in the ratchet.
+   - **Result of (b), with the transport change (2026-11-16):** years 2–4, NH; SH within 0.5°:
+
+     | run | transport | westerlies | min u, 35–60° | u at 45° | Hadley edge | fixer |
+     |---|---|---|---|---|---|---|
+     | T21 | semi-Lagrangian | 19°–36° | −7.06 m/s at 47° | −6.05 | 16.8° | 0.17 %/day |
+     | T42 | spectral | 27°–49° | −4.17 m/s at 60° | +3.45 | 23.6° | 2.29 %/day |
+     | T42 | semi-Lagrangian | 27°–49° | −3.69 m/s at 60° | +4.17 | 24.3° | 0.12 %/day |
+     | T63 (Δt 10 min) | spectral | 27°–51° | −2.55 m/s at 59° | +4.53 | 25.4° | 2.42 %/day |
+
+     - Resolution moves the poleward edge of the surface westerlies 36° → 49° → 51° from
+       T21 to T63 and weakens the 60° easterlies. The change from T42 to T63 is small, so
+       the trend converges short of 60°: resolution alone does not close the row.
+     - At T63 the jet (41 m/s at 34.5°), the storm-track eddy-variance maximum (~40°) and
+       the Ferrel cell (~35°) are still 5–10° equatorward of comprehensive APE models.
+     - The transport change does not move the circulation; it removes the §9.8 trigger
+       (T42: 2.29 → 0.12 %/day).
+     - Every other row passes in all four runs. Scorecards:
+       `docs/scorecards/P1_aquaplanet_{t21_sl,t42_sl,t63}_2026-11-16.json`. Figures:
+       `docs/figures/P1/ape_{t42_sl,t63}_{zonal_mean,moist}.png`.
+     - Conclusion: per the owner's decision, the row stays open for the P3/P4 retest; P2
+       proceeds.
