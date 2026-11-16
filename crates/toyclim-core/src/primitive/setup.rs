@@ -133,6 +133,14 @@ fn build_surface(
     if sc.ocean_heat_transport != 0.0 {
         ocean_slab::set_qflux(&mut sfc, tr, sc.ocean_heat_transport);
     }
+    if sc.initial_ice > 0.0 && sfc.params.sea_ice {
+        let tf = sfc.params.t_freeze_sea;
+        for p in 0..sfc.len() {
+            sfc.ice_h[p] = sc.initial_ice;
+            sfc.t_ml[p] = tf;
+            sfc.ice_ts[p] = sfc.ice_ts[p].min(tf);
+        }
+    }
     Ok(sfc)
 }
 
