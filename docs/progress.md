@@ -34,7 +34,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
 | P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
-| P2 Land, snow, sea ice, precipitation phase | not started |
+| P2 Land, snow, sea ice, precipitation phase | in progress (branch `p2-surface`): acceptance 1–4 met; 5–6 runs in progress; 7 blocked (netCDF libraries, ask the owner); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | not started |
 | P4 Clouds, Earth-like energy balance | not started |
 | P5 Earth gate (prescribed ocean) | not started |
@@ -954,6 +954,80 @@ The T63 run took 5.2 h wall on 8 threads, sharing the machine with other runs.
 **Open questions**: 6 (updated with the T63 data).
 
 **Next step**: P2 (branch `p2-surface`), with the 35–60° row open.
+
+## 2026-11-16 (night) — P2 in progress: land-world crash fixed, budgets, defect 1 diagnosed (branch `p2-surface`)
+
+**Done**: phase and fall of precipitation and the tiled surface (5-layer soil, bucket,
+snow, zero-layer sea ice, two-band albedo; commits b84b4ce…59db440, described in the commit
+messages and `docs/tuning.md`).
+
+**Crash of the 3-year T21 land world at day 841, now fixed (f59dd7e).**
+- **Cause:** a positive feedback in the land melt cap. The cell (52.6°N) is 97 % sea ice
+  and 3 % land, and light snow kept a trace on the land tile after the sun warmed it above
+  T_melt.
+  - The surface solve capped a snow-covered tile at T_melt even when it started above it,
+    and evaluated the fluxes at T_melt.
+  - The surplus the trace of snow could not take went into the soil, so the soil warmed
+    further, and the gap to T_melt grew each step.
+  - The skin went 278 → ~700 → ~6000 K, the bucket reached −1.8e5 kg/m², and the state
+    became NaN at step 60562.
+- **Fix:**
+  - The melt is at most L_f S/Δt_p (`Tile::melt_max`). Beyond it the tile warms past T_max,
+    with the melt as a fixed sink.
+  - Snow fallen during the step and left on a skin above T_melt melts with the top soil
+    layer's heat.
+- **Test:** the SCM test `trace_snow_on_warm_land_stays_bounded` (old code: 9.4e7 K, then
+  NaN; fixed: peak 284.9 K).
+- **Verification:** a restart from day 835 runs through to day 850, with peak T_s 320 K
+  and no negative bucket.
+- **Runs redone with the fixed binary:** the land world and the T42 test world (stopped
+  after ~1.3 h). The buggy outputs are kept in `out/p2/buggy/`, not in the repo.
+
+**Measured** (`cases/bench/p2_budget/land_world_t21.toml`, 1096 days, window days 30–1096):
+
+| P2 acceptance | criterion | result |
+|---|---|---|
+| 2. system water budget | ≤ 1e-3 mm/day | 7.3e-4 mm/day |
+| 3. system energy closure | ≤ 0.5 W/m² | 0.11 W/m² |
+| 4. bitwise restart and thread independence | identical | `land_world_runs_and_restarts` passes; the 3-D restart from day 835 reproduced the crash step exactly |
+
+Climate of the land world, for reference: T_s 279.5 K, P 2.81 / E 2.80 mm/day, planetary
+albedo 0.35, net TOA −3.1 W/m² (still cooling in year 3), runoff 0.24 mm/day, G 1.52,
+fixer 0.20 %/day.
+
+**Defect 1, grid-point storms over tropical land (§9.1.1):** T42 test world, 455 days,
+climatology days 90–455. The defect is measured over tropical land (|φ| < 30°, land
+fraction > 0.5) as the number of cells with time-mean P > 30 mm/day and their maximum. The
+global G is also given; in five of the six runs its maximum is an ocean cell at (−15°,
+174°E) with ~3 mm/day next to drier neighbours.
+
+| run | change from the prototype | land cells > 30 mm/day | max land P | global G |
+|---|---|---|---|---|
+| E0 | prototype (main 65a5f5d) | 6 | 38 mm/day | 11.1 |
+| E0a | (a) bucket never dry (capacity 1e6) | 4 | 48 mm/day | 2.0 |
+| E0b | (b) land heat capacity ×10 (2e6) | 13 | 50 mm/day | 10.5 |
+| E0d | (d) SBM τ 2 h → 4 h | 12 | 48 mm/day | 7.5 |
+| E1 | P1 code: sequential physics (c) + implicit PBL–surface solve | 0 | 24 mm/day | 3.8 |
+| E2 | P2 code (this branch) | 0 | 20 mm/day | 2.0 |
+
+- **(a)** A wet bucket removes the dry-ocean contrast behind the large global G, but not
+  the land storms.
+- **(b) and (d)** change neither.
+- **Verdict:** the storms disappear only with the P1 physics. That points to **(c)**,
+  convection and large-scale condensation acting on the same input state. (c) is not
+  separated from the implicit surface solve that came in the same milestone. (b)'s
+  small-heat-capacity half alone does not explain it.
+
+**Tuning changes**: none.
+
+**Open questions**: none new. P2 acceptance 7 needs Python netCDF libraries; I will ask the
+owner before installing them.
+
+**Next step**:
+1. Evaluate the T42 test world, 15 years, slab 50 m (acceptance 5: equilibrium, G,
+   Köppen EF over ice-free ocean, sea ice only where `tos` is at freezing).
+2. Evaluate the bistability runs (acceptance 6), then the instellation sweep in 2 % steps.
+3. Acceptance 7, after the owner's answer on netCDF.
 
 ## Open questions for the owner
 
