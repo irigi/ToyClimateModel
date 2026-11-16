@@ -23,13 +23,21 @@ impl Primitive {
         if let Some(sf) = &self.surface {
             a.extend(sf.restart_arrays());
         }
-        (
-            a,
-            vec![
-                ("steps".to_string(), self.steps as f64),
-                ("mass_target".to_string(), self.mass_target),
-            ],
-        )
+        let mut sc = vec![
+            ("steps".to_string(), self.steps as f64),
+            ("mass_target".to_string(), self.mass_target),
+        ];
+        if self.has_budget() {
+            let b = &self.budget;
+            sc.extend([
+                ("budget_toa_net".to_string(), b.toa_net),
+                ("budget_sfc_net".to_string(), b.sfc_net),
+                ("budget_precip".to_string(), b.precip),
+                ("budget_evap".to_string(), b.evap),
+                ("budget_diffusion_ke".to_string(), b.diffusion_ke),
+            ]);
+        }
+        (a, sc)
     }
 
     pub(crate) fn load_restart(
@@ -73,6 +81,11 @@ impl Primitive {
             match k.as_str() {
                 "steps" => self.steps = *v as u64,
                 "mass_target" => self.mass_target = *v,
+                "budget_toa_net" => self.budget.toa_net = *v,
+                "budget_sfc_net" => self.budget.sfc_net = *v,
+                "budget_precip" => self.budget.precip = *v,
+                "budget_evap" => self.budget.evap = *v,
+                "budget_diffusion_ke" => self.budget.diffusion_ke = *v,
                 _ => {}
             }
         }

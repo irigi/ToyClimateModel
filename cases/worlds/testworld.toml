@@ -70,9 +70,14 @@ initial = "tj16"
 [radiation]
 scheme = "gray"
 
-# Prototype: TJ16 bulk surface fluxes and boundary-layer mixing, HS Rayleigh drag (P1 replaces it).
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
 [boundary_layer]
-scheme = "tj16"
+scheme = "kprofile"
+
+[dynamics]
+energy_fixer = true
 
 [convection]
 scheme = "sbm"

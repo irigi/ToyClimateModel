@@ -56,6 +56,21 @@ impl Primitive {
         ]
     }
 
+    /// Whether the run accumulates energy and water budgets (moist or with a surface).
+    pub(crate) fn has_budget(&self) -> bool {
+        self.surface.is_some() || self.condensable.is_some()
+    }
+
+    /// One slot of the physics exchange as a grid field.
+    fn exchange_field(&self, slot: usize) -> Vec<Real> {
+        use crate::physics::driver::Exchange as X;
+        self.physics
+            .exchange
+            .chunks(X::N)
+            .map(|e| e[slot] as Real)
+            .collect()
+    }
+
     /// Column water Σ q Δσ p_s / g of tracer 0 \[kg m⁻²\], if the model is moist.
     fn column_water(&self) -> Option<Vec<Real>> {
         let tq = self.curr.tracers.first()?;
@@ -85,6 +100,7 @@ impl Primitive {
         if !self.curr.tracers.is_empty() {
             v.extend_from_slice(&["q", "rh", "pw"]);
         }
+        v.extend_from_slice(&["t_low", "u_low", "v_low", "wind_low", "psl"]);
         if self.surface.is_some() {
             v.extend_from_slice(&["ts", "surface_heat", "land", "bucket"]);
         }
@@ -107,9 +123,8 @@ impl Primitive {
                 .map(|x| x.exp())
                 .collect()),
             "phis" => one(self.phis_grid.clone()),
-            // near-surface wind: the lowest model level [m/s] (≈ 60 m above the surface for
-            // the L26 levels; no reduction to 10 m)
-            "uas" | "vas" | "sfcwind" => {
+            // wind at the lowest model level [m/s] (≈ 60 m above the surface for L26)
+            "u_low" | "v_low" | "wind_low" => {
                 let tr = &self.tr;
                 let k = self.nlev() - 1;
                 let (u, v) = tr.uv_from_vort_div(&self.curr.vor[k], &self.curr.div[k]);
@@ -120,16 +135,16 @@ impl Primitive {
                     for i in 0..nlon {
                         let (uu, vv) = (u[j * nlon + i] * c, v[j * nlon + i] * c);
                         out.push(match name {
-                            "uas" => uu,
-                            "vas" => vv,
+                            "u_low" => uu,
+                            "v_low" => vv,
                             _ => (uu * uu + vv * vv).sqrt(),
                         });
                     }
                 }
                 one(out)
             }
-            // near-surface air temperature: the lowest model level [K]
-            "tas" => one(self
+            // air temperature at the lowest model level [K]
+            "t_low" => one(self
                 .tr
                 .synthesis(&self.curr.tmp[self.nlev() - 1])
                 .iter()
@@ -147,7 +162,11 @@ impl Primitive {
                 .map(|p| p / self.planet.gravity as Real)
                 .collect()),
             "ts" => self.surface.as_ref().and_then(|s| one(s.ts.clone())),
-            "surface_heat" if !self.surface_heat.is_empty() => one(self.surface_heat.clone()),
+            // net energy flux into the surface [W m⁻²] (last physics step)
+            "surface_heat" if !self.physics.exchange.is_empty() => {
+                one(self.exchange_field(crate::physics::driver::Exchange::SFC_NET))
+            }
+            "psl" => one(self.sea_level_pressure()),
             // precipitable water [kg m⁻² = mm]
             "pw" => self.column_water().and_then(one),
             // Pressure-level fields: <name><hPa>, e.g. t850, u850, v250, phi500.
@@ -208,12 +227,24 @@ impl Primitive {
         }
         // fixed set of names for the whole run (the CSV header is written at step 0)
         if self.surface.is_some() || !self.physics.is_empty() {
-            let sh = if self.surface_heat.is_empty() {
+            let sh = if self.physics.exchange.is_empty() {
                 0.0
             } else {
-                self.tr.integrate(&self.surface_heat) / area
+                let x = self.exchange_field(crate::physics::driver::Exchange::SFC_NET);
+                self.tr.integrate(&x) / area
             };
             v.push(("surface_heat", sh));
+        }
+        // time integrals of the global fluxes (energy and water budgets) [J], [kg]
+        if self.has_budget() {
+            let b = &self.budget;
+            v.extend([
+                ("cum_toa_net", b.toa_net),
+                ("cum_sfc_net", b.sfc_net),
+                ("cum_precip", b.precip),
+                ("cum_evap", b.evap),
+                ("cum_diffusion_ke", b.diffusion_ke),
+            ]);
         }
         // latent energy ∫ L q dm [J]
         if let (Some(cond), Some(w)) = (&self.condensable, self.column_water()) {

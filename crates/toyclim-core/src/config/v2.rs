@@ -7,13 +7,11 @@
 //! quantities and the inputs they came from are kept in [`SystemInfo`] (`config.system`
 //! in `meta.json`).
 //!
-//! The typed physics blocks describe what exists in P0: the prototype world bundle
-//! (gray radiation, TJ16 surface fluxes and boundary layer with Rayleigh drag, SBM,
-//! experimental RH clouds). Schemes of later milestones (`kprofile`, `semigray`,
-//! `diagnostic` clouds, sponge, re-evaporation) are rejected with a message until they
-//! are implemented.
+//! The typed physics blocks are passed to [`crate::physics::build_world`], which checks
+//! the scheme names and parameters; schemes of later milestones (`semigray`, `diagnostic`
+//! clouds, re-evaporation) are rejected there with a message until they are implemented.
 
-use super::{ConfigError, Duration, ModelKind};
+use super::{ConfigError, Duration, ModelKind, SchemeConfig};
 use crate::primitive::vertical::L26_HALF;
 use crate::system::derive::{self, Spin};
 use crate::system::star::Star;
@@ -95,21 +93,6 @@ pub struct AtmosphereV2 {
     pub allow_inconsistent: bool,
 }
 
-/// A typed physics block: `scheme` plus that scheme's parameters.
-#[derive(Debug, Clone, Deserialize)]
-pub struct SchemeBlock {
-    pub scheme: String,
-    #[serde(flatten)]
-    pub params: Table,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CondensationV2 {
-    #[serde(default)]
-    pub reevaporation: bool,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceV2 {
@@ -129,6 +112,8 @@ fn default_geography() -> String {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DynamicsV2 {
+    #[serde(default)]
+    pub energy_fixer: bool,
     pub sponge: Option<Table>,
 }
 
@@ -153,11 +138,11 @@ pub struct ConfigV2 {
     pub atmosphere: Option<AtmosphereV2>,
     pub moisture: Option<Value>,
     pub forcing: Option<Table>,
-    pub radiation: Option<SchemeBlock>,
-    pub boundary_layer: Option<SchemeBlock>,
-    pub convection: Option<SchemeBlock>,
-    pub condensation: Option<CondensationV2>,
-    pub clouds: Option<SchemeBlock>,
+    pub radiation: Option<SchemeConfig>,
+    pub boundary_layer: Option<SchemeConfig>,
+    pub convection: Option<SchemeConfig>,
+    pub condensation: Option<Table>,
+    pub clouds: Option<SchemeConfig>,
     pub surface: Option<SurfaceV2>,
     pub dynamics: Option<DynamicsV2>,
     pub diffusion: Option<Value>,
@@ -272,11 +257,12 @@ impl ConfigV2 {
             t.insert("surface".into(), Value::Table(physics::lower_surface(s)?));
         }
         if let Some(d) = &self.dynamics {
+            let mut dt = Table::new();
+            put(&mut dt, "energy_fixer", d.energy_fixer);
             if let Some(sp) = &d.sponge {
-                if sp.get("enabled").and_then(Value::as_bool).unwrap_or(false) {
-                    return Err(invalid("[dynamics.sponge] is not implemented yet (P1)"));
-                }
+                put(&mut dt, "sponge", Value::Table(sp.clone()));
             }
+            t.insert("dynamics".into(), Value::Table(dt));
         }
         Ok((t, system))
     }

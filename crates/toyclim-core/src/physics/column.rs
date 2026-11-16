@@ -1,83 +1,311 @@
-//! The column physics interface.
+//! The column physics contract (SPEC.md §9.3.3): a read-only context, the provisional
+//! column state that each scheme updates in place, what the atmosphere and the surface
+//! exchange, and per-worker scratch space.
 //!
-//! The model calls each scheme of a `Vec<Box<dyn ColumnPhysics>>` in a fixed order for
-//! every column (columns in parallel), and adds the accumulated tendencies to the
-//! grid-point tendencies before the spectral analysis. Schemes *add* to the output
-//! slices; they never overwrite another scheme's contribution.
+//! **Sequential (time-split) update.** The driver copies the column into a [`ColumnState`].
+//! Each scheme reads the state as left by the schemes before it and changes it over the
+//! physics step Δt_p through [`ColumnState::add_t`] / [`ColumnState::set_t`] (and the u, v,
+//! q variants). These keep the provisional value and the accumulated tendency
+//! (final − initial)/Δt_p together; the accumulated tendency is what the dynamics gets.
 //!
-//! Room for later milestones without changing call sites: tracers (humidity, M7) are a
-//! `[tracer][lev]` block, surface fields and per-scheme diagnostics (e.g. precipitation)
-//! are named slots declared by the scheme.
+//! Index 0 is the top level throughout. Column quantities are `f64` in every build.
 
+use super::condensation::Condensable;
 use crate::planet::Planet;
-use crate::Real;
+use crate::surface::Tile;
 
-/// Read-only view of one column at the physics time level. Index 0 is the top level.
-pub struct ColumnIn<'a> {
-    /// Latitude \[rad\].
-    pub lat: Real,
-    /// Longitude \[rad\].
-    pub lon: Real,
-    /// Column index (row-major Gaussian grid), for schemes with per-column state.
+/// Read-only context of one column.
+pub struct ColumnCtx<'a> {
+    /// Latitude, longitude \[rad\].
+    pub lat: f64,
+    pub lon: f64,
+    /// Column index (row-major Gaussian grid).
     pub index: usize,
-    /// Full σ levels.
-    pub sigma: &'a [Real],
-    /// Half σ levels (L+1 values, 0 at the top, 1 at the surface).
-    pub sigma_half: &'a [Real],
+    /// Full and half σ levels (L and L+1 values; half level 0 is the top, σ = 0).
+    pub sigma: &'a [f64],
+    pub sigma_half: &'a [f64],
     /// Surface pressure \[Pa\].
-    pub ps: Real,
-    /// Zonal wind \[m/s\].
-    pub u: &'a [Real],
-    /// Meridional wind \[m/s\].
-    pub v: &'a [Real],
-    /// Temperature \[K\].
-    pub t: &'a [Real],
-    /// Tracers `[tracer][lev]` flattened (empty until M7).
-    pub tracers: &'a [Real],
-    /// Surface geopotential \[m² s⁻²\].
-    pub phis: Real,
-    /// Prognostic surface temperature \[K\] if the model has a surface model, else None
-    /// (schemes then use their own prescription, e.g. a fixed SST).
-    pub t_surface: Option<Real>,
-    /// Top-of-atmosphere stellar flux on a horizontal surface \[W m⁻²\] (0 without an orbit).
-    pub insolation: Real,
-    /// Cosine of the stellar zenith angle (0 at night).
-    pub cos_zenith: Real,
-    /// Surface albedo from the surface model, if it prescribes one (else the scheme's own).
-    pub surface_albedo: Option<Real>,
-    /// Evaporation efficiency β ∈ [0, 1] of the surface (1 = open water).
-    pub wetness: Real,
-    /// Model time \[s\].
+    pub ps: f64,
+    /// Full-level pressure p_k, layer thickness Δp_k and half-level pressure \[Pa\].
+    pub p: &'a [f64],
+    pub dp: &'a [f64],
+    pub p_half: &'a [f64],
+    /// Surface geopotential Φ_s \[m² s⁻²\].
+    pub phis: f64,
+    /// Model time \[s\] and the physics step Δt_p \[s\].
     pub time: f64,
-    /// Length of the step the tendencies are applied over (2Δt for leapfrog) \[s\].
     pub dt: f64,
+    pub planet: &'a Planet,
+    /// The condensable of tracer 0, if the model is moist.
+    pub cond: Option<&'a Condensable>,
+    /// Stellar flux on a horizontal surface at the top \[W m⁻²\] and cos zenith (0 at night).
+    pub insolation: f64,
+    pub cos_zenith: f64,
 }
 
-/// Tendencies of one column, accumulated over the schemes.
-pub struct ColumnOut<'a> {
-    /// ∂u/∂t \[m s⁻²\].
-    pub du: &'a mut [Real],
-    /// ∂v/∂t \[m s⁻²\].
-    pub dv: &'a mut [Real],
-    /// ∂T/∂t \[K s⁻¹\].
-    pub dt: &'a mut [Real],
-    /// Tracer tendencies `[tracer][lev]` (empty until M7).
-    pub dtracers: &'a mut [Real],
-    /// This scheme's diagnostic slots (in the order of `diagnostic_names`).
-    pub diag: &'a mut [Real],
-    /// Net downward heat flux into the surface \[W m⁻²\], accumulated over schemes
-    /// (radiation adds, turbulent fluxes subtract). Used by the slab surface model.
-    pub surface_heat: &'a mut Real,
+/// The provisional column state and the tendencies accumulated so far.
+#[derive(Debug, Clone)]
+pub struct ColumnState {
+    pub nlev: usize,
+    /// Zonal and meridional wind \[m s⁻¹\], temperature \[K\].
+    pub u: Vec<f64>,
+    pub v: Vec<f64>,
+    pub t: Vec<f64>,
+    /// Tracers `[tracer][lev]` flattened (tracer 0 is the condensable's specific humidity).
+    pub q: Vec<f64>,
+    /// Accumulated tendencies (final − initial)/Δt_p.
+    pub du: Vec<f64>,
+    pub dv: Vec<f64>,
+    pub dt: Vec<f64>,
+    pub dq: Vec<f64>,
+    dtp: f64,
+}
+
+impl ColumnState {
+    pub fn new(nlev: usize, ntracers: usize) -> Self {
+        let z = vec![0.0; nlev];
+        let zq = vec![0.0; nlev * ntracers];
+        ColumnState {
+            nlev,
+            u: z.clone(),
+            v: z.clone(),
+            t: z.clone(),
+            q: zq.clone(),
+            du: z.clone(),
+            dv: z.clone(),
+            dt: z,
+            dq: zq,
+            dtp: 1.0,
+        }
+    }
+    /// Start a new physics step of length `dtp` (zero the accumulated tendencies).
+    pub fn begin(&mut self, dtp: f64) {
+        self.dtp = dtp;
+        for x in [&mut self.du, &mut self.dv, &mut self.dt, &mut self.dq] {
+            x.fill(0.0);
+        }
+    }
+    /// The physics step Δt_p \[s\].
+    pub fn dtp(&self) -> f64 {
+        self.dtp
+    }
+    pub fn ntracers(&self) -> usize {
+        self.q.len().checked_div(self.nlev).unwrap_or(0)
+    }
+    /// Tracer `it` (slice of L values).
+    pub fn tracer(&self, it: usize) -> &[f64] {
+        &self.q[it * self.nlev..(it + 1) * self.nlev]
+    }
+    /// Specific humidity of the condensable (tracer 0), if any.
+    pub fn humidity(&self) -> Option<&[f64]> {
+        (self.q.len() >= self.nlev && self.nlev > 0).then(|| &self.q[..self.nlev])
+    }
+
+    /// Add a temperature tendency `rate` \[K s⁻¹\] at level k (applied over Δt_p).
+    pub fn add_t(&mut self, k: usize, rate: f64) {
+        self.dt[k] += rate;
+        self.t[k] += rate * self.dtp;
+    }
+    pub fn add_u(&mut self, k: usize, rate: f64) {
+        self.du[k] += rate;
+        self.u[k] += rate * self.dtp;
+    }
+    pub fn add_v(&mut self, k: usize, rate: f64) {
+        self.dv[k] += rate;
+        self.v[k] += rate * self.dtp;
+    }
+    /// Add a tendency of tracer `it` at level k.
+    pub fn add_q(&mut self, it: usize, k: usize, rate: f64) {
+        let i = it * self.nlev + k;
+        self.dq[i] += rate;
+        self.q[i] += rate * self.dtp;
+    }
+    /// Set the temperature at level k to `new` (the change counts as a tendency).
+    pub fn set_t(&mut self, k: usize, new: f64) {
+        self.dt[k] += (new - self.t[k]) / self.dtp;
+        self.t[k] = new;
+    }
+    pub fn set_u(&mut self, k: usize, new: f64) {
+        self.du[k] += (new - self.u[k]) / self.dtp;
+        self.u[k] = new;
+    }
+    pub fn set_v(&mut self, k: usize, new: f64) {
+        self.dv[k] += (new - self.v[k]) / self.dtp;
+        self.v[k] = new;
+    }
+    pub fn set_q(&mut self, it: usize, k: usize, new: f64) {
+        let i = it * self.nlev + k;
+        self.dq[i] += (new - self.q[i]) / self.dtp;
+        self.q[i] = new;
+    }
+}
+
+/// What the atmosphere and the surface of one column trade during a physics step
+/// (SPEC.md §9.3.3). Fluxes in W m⁻² and kg m⁻² s⁻¹; signs as in §9.3.4 (turbulent fluxes
+/// positive upward, radiative fluxes positive downward).
+#[derive(Debug, Clone, Default)]
+pub struct SurfaceExchange {
+    /// Surface tiles of this cell (empty when the model has no surface; then schemes
+    /// that need one use their own prescription).
+    pub tiles: Vec<Tile>,
+    /// Friction velocity of the previous step \[m s⁻¹\] (ocean roughness, Charnock).
+    pub ustar_prev: f64,
+    // radiation → surface
+    /// Downward shortwave and longwave flux at the surface.
+    pub sw_down: f64,
+    pub lw_down: f64,
+    /// Net downward flux at the top of the atmosphere (absorbed stellar − outgoing).
+    pub toa_net: f64,
+    // condensation → surface
+    /// Rain and snow reaching the surface.
+    pub rain: f64,
+    pub snow: f64,
+    // surface → atmosphere (area means over the tiles)
+    /// Sensible heat flux, evaporation, latent heat flux.
+    pub shf: f64,
+    pub evap: f64,
+    pub lhf: f64,
+    /// Surface stress on the atmosphere's momentum (momentum flux into the surface).
+    pub taux: f64,
+    pub tauy: f64,
+    /// Friction velocity of this step \[m s⁻¹\].
+    pub ustar: f64,
+    /// Change of the surface's upward longwave emission by the implicit surface solve
+    /// (4σT_s³ΔT_s, area mean). It leaves through the top of the atmosphere, so the driver
+    /// adds it to `olr` and subtracts it from `toa_net`.
+    pub lw_up_change: f64,
+    /// Net energy flux into the surface (radiation − turbulent fluxes).
+    pub sfc_net: f64,
+}
+
+impl SurfaceExchange {
+    /// Reset the per-step fluxes (tiles are refilled by the driver).
+    pub fn begin(&mut self) {
+        let tiles = std::mem::take(&mut self.tiles);
+        *self = SurfaceExchange {
+            tiles,
+            ..Default::default()
+        };
+    }
+    /// Tile-area-weighted surface albedo (broadband).
+    pub fn albedo(&self) -> f64 {
+        self.tiles.iter().map(|t| t.frac * t.albedo).sum()
+    }
+    /// Upward longwave emission σ⟨T_s⁴⟩ of the tiles \[W m⁻²\].
+    pub fn lw_emission(&self) -> f64 {
+        use super::radiation::STEFAN_BOLTZMANN;
+        self.tiles
+            .iter()
+            .map(|t| t.frac * STEFAN_BOLTZMANN * t.ts.powi(4))
+            .sum()
+    }
+    /// Tile-mean surface temperature \[K\].
+    pub fn ts(&self) -> f64 {
+        self.tiles.iter().map(|t| t.frac * t.ts).sum()
+    }
+}
+
+/// Scratch space of one worker, allocated once at model build (no heap allocation per
+/// column). Schemes use the buffers they need; none keeps data between calls.
+#[derive(Debug, Clone)]
+pub struct Workspace {
+    /// Buffers of length 2(L + 1) at least.
+    pub buf: [Vec<f64>; 12],
+}
+
+impl Workspace {
+    pub fn new(nlev: usize) -> Self {
+        let n = 2 * (nlev + 1);
+        Workspace {
+            buf: std::array::from_fn(|_| vec![0.0; n]),
+        }
+    }
 }
 
 /// A column physics scheme.
-pub trait ColumnPhysics: Send + Sync {
-    /// Short name (for logs and diagnostics).
+pub trait ColumnScheme: Send + Sync {
+    /// Short name (logs, conservation tests).
     fn name(&self) -> &'static str;
-    /// Names of per-column diagnostics this scheme writes (e.g. "precip"); default none.
-    fn diagnostic_names(&self) -> Vec<&'static str> {
-        Vec::new()
+    /// Names of the per-column diagnostics this scheme writes, in slot order.
+    fn diagnostics(&self) -> &'static [&'static str] {
+        &[]
     }
-    /// Add this scheme's tendencies for one column to `out`.
-    fn tendencies(&self, planet: &Planet, col: &ColumnIn, out: &mut ColumnOut);
+    /// Update `state` over Δt_p = `ctx.dt`, read and write the surface exchange, and write
+    /// this scheme's diagnostics to `diag` (zeroed by the driver).
+    fn apply(
+        &self,
+        ctx: &ColumnCtx,
+        state: &mut ColumnState,
+        sfc: &mut SurfaceExchange,
+        diag: &mut [f64],
+        work: &mut Workspace,
+    );
+}
+
+/// Height of the lowest full level above the surface, R T_v/g · ln(p_s / p_L) \[m\].
+pub fn lowest_level_height(ctx: &ColumnCtx, tv: f64) -> f64 {
+    let l = ctx.p.len();
+    ctx.planet.gas_constant * tv / ctx.planet.gravity * (ctx.ps / ctx.p[l - 1]).ln()
+}
+
+/// Test helpers: a column context with its pressure arrays.
+#[cfg(test)]
+pub mod testing {
+    use super::*;
+
+    /// Pressure arrays of a column on σ half levels `half` at surface pressure `ps`.
+    pub struct Geometry {
+        pub sigma: Vec<f64>,
+        pub half: Vec<f64>,
+        pub p: Vec<f64>,
+        pub dp: Vec<f64>,
+        pub ph: Vec<f64>,
+        pub ps: f64,
+    }
+
+    impl Geometry {
+        pub fn new(half: &[f64], ps: f64) -> Self {
+            let lev = crate::primitive::vertical::SigmaLevels::from_half(half.to_vec());
+            let p = lev.full.iter().map(|s| s * ps).collect();
+            let dp = lev.dsigma.iter().map(|d| d * ps).collect();
+            let ph = half.iter().map(|s| s * ps).collect();
+            Geometry {
+                sigma: lev.full,
+                half: half.to_vec(),
+                p,
+                dp,
+                ph,
+                ps,
+            }
+        }
+        /// L26 levels at 1000 hPa.
+        pub fn l26() -> Self {
+            Self::new(&crate::primitive::vertical::L26_HALF, 1.0e5)
+        }
+        pub fn ctx<'a>(
+            &'a self,
+            planet: &'a Planet,
+            cond: Option<&'a Condensable>,
+            dt: f64,
+        ) -> ColumnCtx<'a> {
+            ColumnCtx {
+                lat: 0.0,
+                lon: 0.0,
+                index: 0,
+                sigma: &self.sigma,
+                sigma_half: &self.half,
+                ps: self.ps,
+                p: &self.p,
+                dp: &self.dp,
+                p_half: &self.ph,
+                phis: 0.0,
+                time: 0.0,
+                dt,
+                planet,
+                cond,
+                insolation: 0.0,
+                cos_zenith: 0.0,
+            }
+        }
+    }
 }

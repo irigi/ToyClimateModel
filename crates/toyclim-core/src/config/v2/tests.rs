@@ -147,7 +147,7 @@ fn inconsistent_overrides_are_rejected() {
 }
 
 #[test]
-fn typed_physics_blocks_lower_to_the_prototype_bundle() {
+fn typed_physics_blocks_lower_to_the_world_physics() {
     let c = Config::parse(&base(
         r#"
 initial_condition = { case = "jw06" }
@@ -157,8 +157,8 @@ condensable = "water"
 scheme = "gray"
 albedo = 0.25
 [boundary_layer]
-scheme = "tj16"
-drag_time = "1day"
+scheme = "kprofile"
+ri_crit = 1.0
 [convection]
 scheme = "sbm"
 tau = "2h"
@@ -172,11 +172,15 @@ enabled = false
 "#,
     ))
     .unwrap();
-    let f = c.forcing.as_ref().unwrap();
-    assert_eq!(f["type"].as_str(), Some("gray_aquaplanet"));
-    assert_eq!(f["albedo"].as_float(), Some(0.25));
-    assert_eq!(f["convection"].as_str(), Some("sbm"));
-    assert_eq!(f["tau_friction"].as_str(), Some("1day"));
+    assert!(c.forcing.is_none());
+    let p = c.physics.as_ref().unwrap();
+    assert_eq!(p.radiation.scheme, "gray");
+    assert_eq!(p.radiation.params["albedo"].as_float(), Some(0.25));
+    assert_eq!(p.boundary_layer.scheme, "kprofile");
+    assert_eq!(
+        p.convection.as_ref().unwrap().params["tau"].as_str(),
+        Some("2h")
+    );
     let s = c.surface.as_ref().unwrap();
     assert_eq!(s.mixed_layer_depth, 50.0);
     assert!(s.ice_albedo < 0.0 && s.heightmap.is_none());
@@ -187,9 +191,10 @@ enabled = false
 #[test]
 fn unknown_and_unimplemented_keys_are_errors() {
     for bad in [
-        "[radiation]\nscheme = \"gray\"\nbogus = 1\n[boundary_layer]\nscheme = \"tj16\"\n",
-        "[radiation]\nscheme = \"semigray\"\n[boundary_layer]\nscheme = \"tj16\"\n",
-        "[radiation]\nscheme = \"gray\"\n[boundary_layer]\nscheme = \"kprofile\"\n",
+        "[radiation]\nscheme = \"gray\"\nbogus = 1\n[boundary_layer]\nscheme = \"kprofile\"\n",
+        "[radiation]\nscheme = \"semigray\"\n[boundary_layer]\nscheme = \"kprofile\"\n",
+        "[radiation]\nscheme = \"gray\"\n[boundary_layer]\nscheme = \"tj16\"\n",
+        "[radiation]\nscheme = \"gray\"\n[boundary_layer]\nscheme = \"kprofile\"\nbogus = 2\n",
         "[forcing]\ntype = \"held_suarez\"\n[radiation]\nscheme = \"gray\"\n",
         "[orbit]\nsemi_major_axis = 1.0\nbogus = 2\n",
         "[surface.ocean]\nmodel = \"wind_driven\"\n",

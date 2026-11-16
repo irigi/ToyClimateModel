@@ -98,4 +98,46 @@ impl Primitive {
         }
         Some(out)
     }
+
+    /// Sea-level pressure \[Pa\] by the ECMWF reduction (Trenberth, Berry & Buja 1993,
+    /// NCAR TN-396): T* = T_L (p_s/p_L)^{R γ/g} from the lowest level with γ = 6.5 K/km,
+    /// T₀ = T* + γ z_s; if T* < 255 K, T* ← (T* + 255)/2; if T₀ > 290.5 K, γ ← (290.5 − T*)/z_s
+    /// (or γ = 0 and T* ← (290.5 + T*)/2 when T* > 290.5 K); then
+    /// p_msl = p_s exp[β (1 − αβ/2 + (αβ)²/3)], β = Φ_s/(R T*), α = R γ / g.
+    pub(crate) fn sea_level_pressure(&self) -> Vec<Real> {
+        let tr = &self.tr;
+        let l = self.nlev();
+        let (g, r) = (self.planet.gravity, self.planet.gas_constant);
+        let ps = tr.synthesis(&self.curr.lnps);
+        let tl = tr.synthesis(&self.curr.tmp[l - 1]);
+        let sig_l = self.levels.full[l - 1];
+        let tref = self.planet.t_ref;
+        (0..tr.ngrid())
+            .map(|q| {
+                let p_s = (ps[q] as f64).exp();
+                let phis = self.phis_grid[q] as f64;
+                if phis.abs() < 1e-3 {
+                    return p_s as Real;
+                }
+                let zs = phis / g;
+                let mut gamma = 6.5e-3;
+                let mut tstar = (tl[q] as f64 + tref) * (1.0 / sig_l).powf(r * gamma / g);
+                if tstar < 255.0 {
+                    tstar = 0.5 * (tstar + 255.0);
+                }
+                let t0 = tstar + gamma * zs;
+                if t0 > 290.5 {
+                    if tstar > 290.5 {
+                        gamma = 0.0;
+                        tstar = 0.5 * (290.5 + tstar);
+                    } else {
+                        gamma = (290.5 - tstar) / zs;
+                    }
+                }
+                let beta = phis / (r * tstar);
+                let ab = r * gamma / g * beta;
+                (p_s * (beta * (1.0 - 0.5 * ab + ab * ab / 3.0)).exp()) as Real
+            })
+            .collect()
+    }
 }
