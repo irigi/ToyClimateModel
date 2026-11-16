@@ -22,6 +22,7 @@ until then are reproducible; do not tune).
 |---|---|---|---|
 | 2026-11-15 | — | — | Register created in P0 from the prototype code (commit 0f7d33a). No values changed. |
 | 2026-11-16 | P1 surface exchange and boundary layer | new | Defaults from Louis (1979), Frierson et al. (2006) and SPEC.md §9.4.2–9.4.3; not tuned (tuning is P4–P6). World cases: TJ16 exchange and Rayleigh drag removed. |
+| 2026-11-16 | `tau_sw` in the APE benchmark cases | 0.22 → 0 | Not tuning: the benchmark configuration follows Frierson et al. (2006, no SW absorption). With 0.22 along the slant path the gray scheme heats the polar upper troposphere by several K/day at low sun (P1 SCM diagnosis). World cases keep 0.22 until P3 replaces the radiation. |
 
 ## Dynamical core (Part I; frozen regression base)
 
