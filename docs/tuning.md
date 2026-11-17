@@ -9,8 +9,9 @@ Rules (from P-4):
 - **Never tune on an exoplanet benchmark.** A failing exoplanet gate is fixed by physics or
   recorded as an open question.
 - A knob may not be a function of latitude, longitude or planet name. (The gray scheme's
-  τ₀(φ) violates this; it is a prototype prescription kept for idealized comparators and
-  becomes an Earth-only option in P3, SPEC.md §9.1.1 item 4.)
+  τ₀(φ) violates this; it is a prototype prescription kept for idealized comparators; since
+  P3 it is the option `latitude_dependence`, on only in Earth-like idealized cases, SPEC.md
+  §9.1.1 item 4.)
 
 Status columns: **fixed** = taken from a paper and not to be tuned; **knob** = tunable within
 the range; **proto** = prototype parameter that Phase 2 replaces (listed so that world runs
@@ -27,6 +28,8 @@ until then are reproducible; do not tune).
 | 2026-11-16 | Surface (P2) | prototype land 2e5 J m⁻² K⁻¹ / albedo 0.3 and the 0.6 ice switch → soil, snow, sea ice, band albedos | Not tuning: SPEC.md §9.4.5–9.4.6 schemes at their published or SPEC starting values. |
 | 2026-11-16 | `[radiation] reflectance` in the world cases | (new) 0 → 0.23 | Not fitted: observed fraction of the incoming shortwave reflected by clouds and atmosphere, 79/341.3 W m⁻² (Trenberth, Fasullo & Kiehl 2009, Fig. 1); a stand-in for the P4 clouds once the P2 surface albedos replaced the prototype's 0.3. Default 0 (APE, idealized cases unchanged). |
 | 2026-11-17 | `[surface.ocean] model = "prescribed"` (Earth AMIP case) | (new) | Not tuning: AMIP-style boundary condition for P2 item 7 and P5; observed monthly SST and ice concentration (OISST v2, 1991–2020) with floe thickness 2 m / 1 m from the CICE prescribed-ice mode. |
+| 2026-11-17 | Semi-gray radiation (P3), all knobs | (new) | Fitted, not tuned on climate: `tools/calibrate_radiation.py` fits the semi-gray knobs to RRTMG clear-sky fluxes (climlab 0.9.2) for 630 longwave and 2 × 144 shortwave columns (docs/radiation/calibration.md). Starting values Geen et al. (2016) via the Isca documentation. Earth configuration adds the fitted ozone column. |
+| 2026-11-17 | Gray `latitude_dependence` | (new) implicit on → off by default | SPEC.md §9.6 P3 / defect 4: the Earth-shaped τ₀(φ) is now an option; every Earth-like gray case sets it on (results unchanged, regress), the tidally locked cases leave it off (results change on purpose). |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -153,3 +156,30 @@ marked **[knob]** there).
 |---|---|---|---|---|
 | Dry adjustment | `[convection] scheme = "dry"` or with `"sbm"` | on | fixed | SPEC.md §9.4.3 |
 | SBM τ, RH_ref | `[convection] tau`, `rh_ref` | 2 h, 0.7 | knob (P5) | Frierson (2007) |
+
+### Radiation (P3, `[radiation] scheme = "semigray"`; SPEC.md §9.4.1)
+
+Fitted values from `tools/calibrate_radiation.py` (2026-11-17); residuals in
+`docs/radiation/calibration.md`. Refit only with that tool (against RRTMG), never on a
+climate target.
+
+| Parameter | Key | Default | Range | Status | Source |
+|---|---|---|---|---|---|
+| Visible / near-IR edge | `vis_edge` | 0.75 µm | — | fixed | SPEC.md §9.4.1 |
+| Share of the near-IR flux in `nir_weak` | `nir_weak_share` | 0.718 | 0.05–0.95 | fitted | RRTMG fit |
+| Rayleigh column τ (vis, nir_weak, nir_strong) | `rayleigh` | 0.187, 0, 0.02 | near-IR ≤ 0.02 | fitted | RRTMG fit (near-IR bounded by the physical value, τ_R ≈ 0.008 at 1 µm) |
+| Well-mixed near-IR absorption (weak, strong) | `dry_abs` | 0, 0.406 | — | fitted | RRTMG fit (O₂, CO₂, CH₄; not in SPEC.md) |
+| Vapour mass absorption (weak, strong) | `k_wv` | 0.00246, 0.238 m² kg⁻¹ | — | fitted | RRTMG fit |
+| Vapour/dry SW pressure exponent | `wv_n` | 0.372 | 0–2 | fitted | RRTMG fit |
+| Ozone column τ, centre, width | `ozone_tau`, `ozone_p`, `ozone_width` | 0 (off), 1000 Pa, 1 | — | fitted (Earth: 0.02425, 6430 Pa) | RRTMG fit with climlab's ozone profile |
+| LW rest band, weak part a, b, c, d | `lw_rest` | 0.533, 24.6, 518, 0 | — | fitted | RRTMG fit; Geen et al. (2016) form |
+| LW rest band, strong part a, b, c, d | `lw_rest_strong` | 7.84, 30.9, 1.93e4, 3.84 | — | fitted | RRTMG fit (pseudo-band split, not in SPEC.md) |
+| Strong share of the rest band | `lw_strong_share` | 0.427 | 0–0.95 | fitted | RRTMG fit |
+| LW window a_w, b_w, c_w, d_w | `lw_window` | 0, 346, 2047, 0.0659 | — | fitted | RRTMG fit; Geen et al. (2016) form |
+| Window edges | (code) | 8–14 µm | — | fixed | Geen et al. (2016) |
+| LW line pressure exponent n, p_ref | `lw_n`, `lw_p_ref` | 0.453, 1e5 Pa | 0–2 | fitted | RRTMG fit (SPEC.md §9.4.1 knob n) |
+| CO₂ pressure exponent, curvature κ | `lw_n_co2`, `lw_co2_curvature` | 0, 0.224 | — | fitted | RRTMG fit |
+| Diffusivity factor | (code) | 1.66 | — | fixed | SPEC.md §9.4.1 |
+| Two-stream method | (code) | δ-scaled PIFM | — | fixed | Joseph et al. (1976); Zdunkowski et al. (1980); RRTMG_SW default |
+| Smallest cos zenith of the beam | (code) | 0.05 | — | fixed | as the gray scheme |
+| Top reflectance (cloud stand-in) / forced planetary albedo | `reflectance`, `planetary_albedo` | 0 / none | — | case setting | P3 acceptance 3; replaced by P4 clouds |

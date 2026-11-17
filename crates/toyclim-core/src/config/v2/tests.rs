@@ -192,7 +192,8 @@ enabled = false
 fn unknown_and_unimplemented_keys_are_errors() {
     for bad in [
         "[radiation]\nscheme = \"gray\"\nbogus = 1\n[boundary_layer]\nscheme = \"kprofile\"\n",
-        "[radiation]\nscheme = \"semigray\"\n[boundary_layer]\nscheme = \"kprofile\"\n",
+        "[radiation]\nscheme = \"semigray\"\nbogus = 1\n[boundary_layer]\nscheme = \"kprofile\"\n",
+        "[radiation]\nscheme = \"semigray\"\nlw_rest = [1.0, 2.0]\n[boundary_layer]\nscheme = \"kprofile\"\n",
         "[radiation]\nscheme = \"gray\"\n[boundary_layer]\nscheme = \"tj16\"\n",
         "[radiation]\nscheme = \"gray\"\n[boundary_layer]\nscheme = \"kprofile\"\nbogus = 2\n",
         "[forcing]\ntype = \"held_suarez\"\n[radiation]\nscheme = \"gray\"\n",

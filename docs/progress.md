@@ -61,6 +61,12 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
   reference data of §9.5.3 for the `earth_amip` scorecard. Installed in the git-ignored
   `.venv/` (`python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt`).
   The Rust crates are unaffected.
+- Radiation calibration (P3): RRTMG through `climlab` 0.9.2 + `climlab-rrtmg` (MIT), which
+  exist only on conda-forge (owner approval 2026-11-17: micromamba environment). micromamba
+  2.10.0 in `~/.local/bin`, environment in the git-ignored `.rrtmg/`:
+  `micromamba create -p ./.rrtmg -c conda-forge python=3.12 climlab climlab-rrtmg numpy scipy
+  matplotlib-base cycler pillow kiwisolver fonttools pyparsing python-dateutil contourpy`.
+  Used only by `tools/calibrate_radiation.py`; the model does not depend on it.
 
 ---
 

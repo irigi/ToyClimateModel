@@ -142,7 +142,13 @@ impl Config {
         }
         match &self.physics {
             Some(pc) => {
-                crate::physics::build_world(pc, sponge, cond.as_ref()).map_err(inv)?;
+                crate::physics::build_world(
+                    pc,
+                    sponge,
+                    cond.as_ref(),
+                    &crate::physics::RadiationEnv::from_system(self.system.as_ref()),
+                )
+                .map_err(inv)?;
             }
             None => {
                 if sponge.is_some() {

@@ -1,0 +1,94 @@
+# SPEC.md P3 acceptance 4: T21 aquaplanet with a 20 m slab ocean and sea ice, seasons and a
+# diurnal cycle at 1361 W m⁻², 400 ppm, the semi-gray radiation (calibrated against RRTMG,
+# docs/radiation/) with the Earth ozone column, and the open-ocean albedo raised to stand in
+# for clouds (no top reflectance). Must be stable for 10 years with energy closure within
+# 0.5 W m⁻² and G ≤ 2.0. Otherwise as the P2 bistability case (warm start). Statistics
+# over years 6–10.
+schema = 2
+description = "P3 acceptance 4: T21 aquaplanet, slab 20 m + sea ice, semi-gray radiation, 400 ppm, raised ocean albedo"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "3652.5day"
+output_every = "365.25day"
+output_fields = ["ts", "tos", "sic", "sit", "snw", "precip", "tas"]
+initial_condition = { case = "jw06", perturbed = true }
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+# year: the original 365.25 days (derived: 365.256 d), kept so that results are
+# unchanged; checked against the derived value (< 1%).
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+# Earth preset: rotation rate 7.292e-5 s⁻¹ (Williamson et al. 1992).
+[planet]
+preset = "earth"
+
+# R_d and c_p: the Williamson et al. (1992) values used by the dynamical core, checked
+# against the mixture (287.04 / 1005.0 J kg⁻¹ K⁻¹).
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[radiation]
+scheme = "semigray"
+# Earth ozone column of the calibration (docs/radiation/calibration.md)
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+geography = "aquaplanet"
+
+[surface.ocean]
+model = "slab"
+# raised from 0.06 to stand in for clouds (SPEC.md P3 acceptance 4): gives a planetary
+# albedo of 0.29 for the global-mean clear column (288 K, 25 kg m⁻² water, cos zenith 0.5;
+# offline with toyclim radiation, P3 progress entry)
+albedo = 0.38
+mixed_layer_depth = 20.0
+initial = "tj16"
+
+# Zero-layer sea-ice thermodynamics with band albedos (P2).
+[surface.sea_ice]
+enabled = true
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "1826.25day"
+every = "1day"
+maps = ["ts", "tos", "sic", "sit", "tas", "precip"]

@@ -2,7 +2,8 @@
 //! comparators; SPEC.md §9.1, replaced as the world default in P3).
 //!
 //! Longwave (Frierson, Held & Zurita-Gotor 2006, J. Atmos. Sci. 63, 2548–2566, eqs. 4–7):
-//! optical depth τ(σ) = τ₀(φ) [f_l σ + (1 − f_l) σ⁴], τ₀ = τ_e + (τ_p − τ_e) sin²φ;
+//! optical depth τ(σ) = τ₀(φ) [f_l σ + (1 − f_l) σ⁴], τ₀ = τ_e + (τ_p − τ_e) sin²φ with
+//! `latitude_dependence` (else τ₀ = τ_e);
 //! dU/dτ = U − B, dD/dτ = B − D, B = σ_SB T⁴, integrated exactly per layer
 //! (isothermal layers), U(surface) = σ_SB T_s⁴ (tile mean), D(top) = 0.
 //! Optionally τ grows with column water vapour (`tau_q` per kg/m² of vapour above).
@@ -18,16 +19,17 @@
 //! atmosphere and the surface), `rsds`, `rlds` (downward shortwave and longwave at the
 //! surface) \[W m⁻²\]; `clt` (total cloud cover) with the experimental clouds.
 
-use super::column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
-use super::condensation::Condensable;
-
-/// Stefan–Boltzmann constant \[W m⁻² K⁻⁴\] (CODATA 2018).
-pub const STEFAN_BOLTZMANN: f64 = 5.670374e-8;
+use super::STEFAN_BOLTZMANN;
+use crate::physics::column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
+use crate::physics::condensation::Condensable;
 
 pub struct GrayRadiation {
-    /// LW optical depth at the equator and the poles.
+    /// LW optical depth at the equator and the poles; `tau_pole` applies only with
+    /// `latitude_dependence` (an Earth-shaped prescription, on only in Earth-like idealized
+    /// cases, SPEC.md §9.6 P3); otherwise τ₀ = `tau_eq` everywhere.
     pub tau_eq: f64,
     pub tau_pole: f64,
+    pub latitude_dependence: bool,
     /// Linear (well-mixed) fraction f_l.
     pub f_linear: f64,
     /// Additional LW optical depth per kg m⁻² of water vapour (0 = none).
@@ -73,6 +75,7 @@ impl Default for GrayRadiation {
         GrayRadiation {
             tau_eq: 6.0,
             tau_pole: 1.5,
+            latitude_dependence: false,
             f_linear: 0.1,
             tau_q: 0.0,
             tau_sw: 0.22,
@@ -106,7 +109,11 @@ impl ColumnScheme for GrayRadiation {
         let l = st.nlev;
         let g = ctx.planet.gravity;
         let half = ctx.sigma_half;
-        let tau0 = self.tau_eq + (self.tau_pole - self.tau_eq) * ctx.lat.sin().powi(2);
+        let tau0 = if self.latitude_dependence {
+            self.tau_eq + (self.tau_pole - self.tau_eq) * ctx.lat.sin().powi(2)
+        } else {
+            self.tau_eq
+        };
         let [tau, cf, b, down, up, sw, sw_abs, ..] = &mut work.buf;
         for k in 0..l {
             cf[k] = self.clouds.as_ref().map_or(0.0, |c| c.fraction(ctx, st, k));

@@ -36,6 +36,62 @@ use surface_flux::ExchangeParams;
 /// A list of schemes in call order.
 pub type Schemes = Vec<Box<dyn ColumnScheme>>;
 
+/// What the radiation needs from the star and the atmosphere.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RadiationEnv {
+    /// Effective temperature of the star \[K\].
+    pub t_eff: f64,
+    /// CO₂ volume mixing ratio \[ppm\].
+    pub co2_ppm: f64,
+}
+
+impl Default for RadiationEnv {
+    /// The Sun and 400 ppm (cases without `[star]` / `[atmosphere]` blocks).
+    fn default() -> Self {
+        RadiationEnv {
+            t_eff: 5772.0,
+            co2_ppm: 400.0,
+        }
+    }
+}
+
+impl RadiationEnv {
+    /// From the derived system information of a schema-2 config: the star's T_eff and the
+    /// CO₂ of the composition (0 if the composition has none).
+    pub fn from_system(sys: Option<&crate::config::v2::SystemInfo>) -> Self {
+        let d = RadiationEnv::default();
+        let Some(s) = sys else { return d };
+        RadiationEnv {
+            t_eff: s.star.t_eff,
+            co2_ppm: s
+                .composition
+                .as_ref()
+                .map_or(d.co2_ppm, |c| c.get("CO2").copied().unwrap_or(0.0) * 1e6),
+        }
+    }
+}
+
+fn array<const N: usize>(
+    t: &toml::Table,
+    key: &str,
+    default: [f64; N],
+) -> Result<[f64; N], String> {
+    match t.get(key) {
+        None => Ok(default),
+        Some(toml::Value::Array(a)) if a.len() == N => {
+            let mut out = [0.0; N];
+            for (o, v) in out.iter_mut().zip(a) {
+                *o = v
+                    .as_float()
+                    .or_else(|| v.as_integer().map(|i| i as f64))
+                    .ok_or_else(|| format!("{key} must be an array of {N} numbers"))?;
+            }
+            Ok(out)
+        }
+        Some(_) => Err(format!("{key} must be an array of {N} numbers")),
+    }
+}
+
 fn num(t: &toml::Table, key: &str, default: f64) -> Result<f64, String> {
     match t.get(key) {
         None => Ok(default),
@@ -123,6 +179,7 @@ const GRAY_FORCING_KEYS: &[&str] = &[
     "type",
     "tau_eq",
     "tau_pole",
+    "latitude_dependence",
     "f_linear",
     "tau_q",
     "tau_sw",
@@ -270,6 +327,13 @@ pub fn build(
             }
             let cond = moisture.ok_or("forcing gray_aquaplanet needs a [moisture] block")?;
             let mut rad = toml::Table::new();
+            // an Earth-like idealized bundle: the Earth-shaped τ₀(φ) unless switched off
+            rad.insert(
+                "latitude_dependence".into(),
+                f.get("latitude_dependence")
+                    .cloned()
+                    .unwrap_or(toml::Value::Boolean(true)),
+            );
             for (from, to) in [
                 ("tau_eq", "tau_eq"),
                 ("tau_pole", "tau_pole"),
@@ -310,7 +374,7 @@ pub fn build(
                 clouds: boolean(f, "clouds", false)?
                     .then(|| SchemeConfig::new("rh_prototype", clouds)),
             };
-            build_world(&pc, None, Some(cond))
+            build_world(&pc, None, Some(cond), &RadiationEnv::default())
         }
         other => Err(format!(
             "unknown forcing type {other:?} (none, held_suarez, tidally_locked, moist_held_suarez, gray_aquaplanet)"
@@ -322,6 +386,7 @@ const GRAY_KEYS: &[&str] = &[
     "reflectance",
     "tau_eq",
     "tau_pole",
+    "latitude_dependence",
     "f_linear",
     "tau_q",
     "tau_sw",
@@ -366,12 +431,49 @@ pub fn kprofile(t: &toml::Table) -> Result<KProfile, String> {
     })
 }
 
+/// The semi-gray opacities of a `[radiation] scheme = "semigray"` block.
+pub fn semigray(p: &toml::Table, co2_ppm: f64) -> Result<radiation::semigray::SemiGray, String> {
+    check_keys("[radiation]", p, radiation::semigray::KEYS)?;
+    let d = radiation::semigray::SemiGray::default();
+    let sg = radiation::semigray::SemiGray {
+        vis_edge: num(p, "vis_edge", d.vis_edge)?,
+        nir_weak_share: num(p, "nir_weak_share", d.nir_weak_share)?,
+        rayleigh: array(p, "rayleigh", d.rayleigh)?,
+        k_wv: array(p, "k_wv", d.k_wv)?,
+        dry_abs: array(p, "dry_abs", d.dry_abs)?,
+        wv_p_ref: num(p, "wv_p_ref", d.wv_p_ref)?,
+        wv_n: num(p, "wv_n", d.wv_n)?,
+        ozone_tau: num(p, "ozone_tau", d.ozone_tau)?,
+        ozone_p: num(p, "ozone_p", d.ozone_p)?,
+        ozone_width: num(p, "ozone_width", d.ozone_width)?,
+        lw_rest: array(p, "lw_rest", d.lw_rest)?,
+        lw_window: array(p, "lw_window", d.lw_window)?,
+        lw_rest_strong: array(p, "lw_rest_strong", d.lw_rest_strong)?,
+        lw_strong_share: num(p, "lw_strong_share", d.lw_strong_share)?,
+        window: d.window,
+        lw_n: num(p, "lw_n", d.lw_n)?,
+        lw_p_ref: num(p, "lw_p_ref", d.lw_p_ref)?,
+        lw_n_co2: num(p, "lw_n_co2", d.lw_n_co2)?,
+        lw_co2_curvature: num(p, "lw_co2_curvature", d.lw_co2_curvature)?,
+        co2_ppm,
+        ..d
+    };
+    if !(0.0..=1.0).contains(&sg.lw_strong_share) {
+        return Err("[radiation] lw_strong_share must be in [0, 1]".into());
+    }
+    if !(0.0..=1.0).contains(&sg.nir_weak_share) {
+        return Err("[radiation] nir_weak_share must be in [0, 1]".into());
+    }
+    Ok(sg)
+}
+
 /// Build the world physics of the typed blocks (SPEC.md §9.3.2) in the order of §9.3.3.
 /// `sponge`: the `[dynamics.sponge]` table if enabled.
 pub fn build_world(
     pc: &PhysicsConfig,
     sponge: Option<&toml::Table>,
     moisture: Option<&Condensable>,
+    env: &RadiationEnv,
 ) -> Result<Schemes, String> {
     let mut schemes: Schemes = Vec::new();
     // 1. radiation (with the experimental clouds inside the gray scheme)
@@ -407,6 +509,11 @@ pub fn build_world(
             schemes.push(Box::new(GrayRadiation {
                 tau_eq: num(&r.params, "tau_eq", d.tau_eq)?,
                 tau_pole: num(&r.params, "tau_pole", d.tau_pole)?,
+                latitude_dependence: boolean(
+                    &r.params,
+                    "latitude_dependence",
+                    d.latitude_dependence,
+                )?,
                 f_linear: num(&r.params, "f_linear", d.f_linear)?,
                 tau_q: num(&r.params, "tau_q", d.tau_q)?,
                 tau_sw: num(&r.params, "tau_sw", d.tau_sw)?,
@@ -422,9 +529,35 @@ pub fn build_world(
             }
         }
         "semigray" => {
-            return Err("radiation scheme \"semigray\" is not implemented yet (P3)".into())
+            if clouds.is_some() {
+                return Err("the rh_prototype clouds work only inside the gray scheme".into());
+            }
+            let sg = semigray(&r.params, env.co2_ppm)?;
+            let p = &r.params;
+            let mut ts = radiation::TwoStream::new(Box::new(sg), env.t_eff);
+            let a = num(p, "albedo", ts.albedo[0])?;
+            ts.albedo = [a, a];
+            ts.t_surface_default = num(p, "t_surface_default", ts.t_surface_default)?;
+            ts.reflectance = num(p, "reflectance", 0.0)?;
+            if let Some(a) = p.get("planetary_albedo") {
+                let a = a
+                    .as_float()
+                    .ok_or("[radiation] planetary_albedo must be a number")?;
+                if !(0.0..1.0).contains(&a) {
+                    return Err("[radiation] planetary_albedo must be in [0, 1)".into());
+                }
+                ts.planetary_albedo = Some(a);
+            }
+            if !(0.0..1.0).contains(&ts.reflectance) {
+                return Err("[radiation] reflectance must be in [0, 1)".into());
+            }
+            schemes.push(Box::new(ts));
         }
-        other => return Err(format!("unknown radiation scheme {other:?} (gray, none)")),
+        other => {
+            return Err(format!(
+                "unknown radiation scheme {other:?} (gray, semigray, none)"
+            ))
+        }
     }
     // 2. surface fluxes + boundary layer + surface energy balance
     let b = &pc.boundary_layer;

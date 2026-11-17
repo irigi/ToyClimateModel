@@ -66,6 +66,9 @@ pub struct ScmSettings {
     pub snow: f64,
     pub ice_thickness: f64,
     pub ice_snow: f64,
+    /// Fixed stellar flux on a horizontal surface \[W m⁻²\] and cos zenith (e.g. global-mean
+    /// conditions S/4 at 0.5); replaces the orbit's when given.
+    pub insolation: Option<(f64, f64)>,
 }
 
 fn get_num(t: &toml::Table, k: &str, d: f64) -> Result<f64, String> {
@@ -91,6 +94,8 @@ impl ScmSettings {
             "wind",
             "wind_mode",
             "surface",
+            "insolation",
+            "cos_zenith",
         ];
         if let Some(k) = t.keys().find(|k| !KEYS.contains(&k.as_str())) {
             return Err(format!("unknown key {k:?} in [scm]"));
@@ -177,6 +182,13 @@ impl ScmSettings {
             fixed_wind,
             land,
             surface,
+            insolation: match t.get("insolation") {
+                None => None,
+                Some(_) => Some((
+                    get_num(t, "insolation", 0.0)?,
+                    get_num(t, "cos_zenith", 0.5)?,
+                )),
+            },
             beta: get_num(s, "beta", 1.0)?,
             t_surface: get_num(s, "t_initial", t_air)?,
             snow: get_num(s, "snow", 0.0)?,
@@ -263,7 +275,12 @@ impl Scm {
             .as_ref()
             .ok_or("an scm case needs the typed physics blocks")?;
         let sponge = cfg.dynamics.as_ref().and_then(|d| d.sponge.as_ref());
-        let schemes = crate::physics::build_world(pc, sponge, cond.as_ref())?;
+        let schemes = crate::physics::build_world(
+            pc,
+            sponge,
+            cond.as_ref(),
+            &crate::physics::RadiationEnv::from_system(cfg.system.as_ref()),
+        )?;
         let levels = match (&cfg.sigma_half, cfg.levels) {
             (Some(h), _) => SigmaLevels::from_half(h.clone()),
             (None, Some(n)) => SigmaLevels::equal(n),
@@ -355,15 +372,16 @@ impl Scm {
     pub fn step_with(&mut self, which: &[usize]) -> ScmRecord {
         let st = &self.settings;
         let dt = st.dt;
-        let (insolation, cos_zenith) = match &self.orbit {
-            Some(o) => {
+        let (insolation, cos_zenith) = match (&self.orbit, st.insolation) {
+            (_, Some(x)) => x,
+            (Some(o), None) => {
                 let sun = o.sun(self.time);
                 (
                     o.insolation(&sun, st.lat, st.lon),
                     o.cos_zenith(&sun, st.lat, st.lon),
                 )
             }
-            None => (0.0, 0.0),
+            (None, None) => (0.0, 0.0),
         };
         let ctx = ColumnCtx {
             lat: st.lat,
@@ -416,9 +434,12 @@ impl Scm {
         ex[X::USTAR] = sfc.ustar;
         ex[X::RAIN] = sfc.rain;
         ex[X::SNOW] = sfc.snow;
-        let radiation = which
-            .iter()
-            .any(|&i| self.schemes[i].name() == "gray_radiation");
+        let radiation = which.iter().any(|&i| {
+            matches!(
+                self.schemes[i].name(),
+                "gray_radiation" | "two_stream_radiation"
+            )
+        });
         let coupled = which
             .iter()
             .any(|&i| self.schemes[i].name() == "kprofile_boundary_layer");

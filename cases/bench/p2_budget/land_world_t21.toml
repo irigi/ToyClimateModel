@@ -65,6 +65,8 @@ initial = "tj16"
 
 [radiation]
 scheme = "gray"
+# Earth-shaped optical depth τ₀(φ) (Frierson et al. 2006), on only in Earth-like idealized cases (P3)
+latitude_dependence = true
 # Shortwave reflected by clouds and the atmosphere, a stand-in until the P4 clouds:
 # 79 of 341.3 W m⁻² in the global energy budget of Trenberth, Fasullo & Kiehl (2009,
 # Bull. Amer. Meteor. Soc. 90, 311–323, Fig. 1). Surface albedos are per tile (P2).

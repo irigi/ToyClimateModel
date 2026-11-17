@@ -49,6 +49,8 @@ cp = 1004.64
 
 [radiation]
 scheme = "gray"
+# Earth-shaped optical depth τ₀(φ) (Frierson et al. 2006), on only in Earth-like idealized cases (P3)
+latitude_dependence = true
 
 [boundary_layer]
 scheme = "kprofile"

@@ -195,7 +195,12 @@ pub fn from_config(cfg: &Config) -> Result<Primitive, String> {
     };
     let sponge = cfg.dynamics.as_ref().and_then(|d| d.sponge.as_ref());
     let physics = match &cfg.physics {
-        Some(pc) => crate::physics::build_world(pc, sponge, moisture.as_ref())?,
+        Some(pc) => crate::physics::build_world(
+            pc,
+            sponge,
+            moisture.as_ref(),
+            &crate::physics::RadiationEnv::from_system(cfg.system.as_ref()),
+        )?,
         None => {
             if sponge.is_some() {
                 return Err("[dynamics.sponge] needs the typed world physics".into());

@@ -59,6 +59,15 @@ enum Cmd {
         #[arg(long)]
         length: Option<String>,
     },
+    /// Evaluate clear-sky columns with the semi-gray radiation (for
+    /// `tools/calibrate_radiation.py`): reads `[radiation]` knobs (TOML) and a JSON list of
+    /// columns, writes the fluxes as JSON to stdout.
+    Radiation {
+        #[arg(long)]
+        knobs: PathBuf,
+        #[arg(long)]
+        columns: PathBuf,
+    },
     /// List the configs in a cases directory.
     ListCases {
         #[arg(long, default_value = "cases")]
@@ -104,6 +113,17 @@ fn main() -> Result<()> {
             run_scm(&c, &out)
         }
         Cmd::ListCases { dir } => list_cases(&dir),
+        Cmd::Radiation { knobs, columns } => {
+            let k: toml::Table = toml::from_str(&fs::read_to_string(&knobs)?)
+                .with_context(|| format!("reading {}", knobs.display()))?;
+            let cols: Vec<toyclim_core::physics::radiation::offline::Column> =
+                serde_json::from_str(&fs::read_to_string(&columns)?)
+                    .with_context(|| format!("reading {}", columns.display()))?;
+            let r = toyclim_core::physics::radiation::offline::evaluate(&k, &cols)
+                .map_err(anyhow::Error::msg)?;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
     }
 }
 
