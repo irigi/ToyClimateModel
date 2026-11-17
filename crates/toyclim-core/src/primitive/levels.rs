@@ -4,7 +4,9 @@ use super::Primitive;
 use crate::Real;
 
 /// 2D fields interpolated to pressure levels.
-pub const PRESSURE_FIELDS: &[&str] = &["t850", "u850", "v850", "t500", "phi500", "u250", "vor850"];
+pub const PRESSURE_FIELDS: &[&str] = &[
+    "t850", "u850", "v850", "t500", "phi500", "u250", "u200", "vor850",
+];
 
 impl Primitive {
     /// Interpolate a 3D field (`[lev][lat][lon]`) to pressure `p` \[Pa\], linear in ln p

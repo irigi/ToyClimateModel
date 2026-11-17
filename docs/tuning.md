@@ -26,6 +26,7 @@ until then are reproducible; do not tune).
 | 2026-11-16 | `[dynamics] tracer_transport` in the moist world and APE cases | spectral → semi_lagrangian | Not tuning: SPEC.md §9.8 remedy after the tracer-fixer trigger fired (2.3%/day of the vapour mass at T42). |
 | 2026-11-16 | Surface (P2) | prototype land 2e5 J m⁻² K⁻¹ / albedo 0.3 and the 0.6 ice switch → soil, snow, sea ice, band albedos | Not tuning: SPEC.md §9.4.5–9.4.6 schemes at their published or SPEC starting values. |
 | 2026-11-16 | `[radiation] reflectance` in the world cases | (new) 0 → 0.23 | Not fitted: observed fraction of the incoming shortwave reflected by clouds and atmosphere, 79/341.3 W m⁻² (Trenberth, Fasullo & Kiehl 2009, Fig. 1); a stand-in for the P4 clouds once the P2 surface albedos replaced the prototype's 0.3. Default 0 (APE, idealized cases unchanged). |
+| 2026-11-17 | `[surface.ocean] model = "prescribed"` (Earth AMIP case) | (new) | Not tuning: AMIP-style boundary condition for P2 item 7 and P5; observed monthly SST and ice concentration (OISST v2, 1991–2020) with floe thickness 2 m / 1 m from the CICE prescribed-ice mode. |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -96,6 +97,7 @@ tests only).
 | Ice, snow density | (code) | 917, 330 kg m⁻³ | — | fixed | CAM6 §8.2 table |
 | Latent heat of fusion, T_freeze | (condensable) | 3.34e5 J kg⁻¹, 273.15 K | — | fixed | CAM6 §8.2 table |
 | Sea-ice concentration scale h₀ | `[surface.sea_ice] h0` | 0.5 m | 0.2–1 | knob | SPEC.md §9.4.5 |
+| Prescribed sea-ice floe thickness, NH / SH (AMIP ocean) | `[surface.ocean] ice_thickness` | 2 m / 1 m | 0.5–3 m | knob (P5) | CICE prescribed-ice mode (CICE documentation for CESM 1.0, Hunke & Lipscomb); the CAM6 Scientific Guide §8 gives 2 m / 0.5 m |
 | Sea-ice thickness cap | `max_thickness` | 50 m | — | fixed | SPEC.md §9.4.5 |
 | Ice fraction ramp of condensate | (condensable `ice_ramp`) | 20 K below T_freeze | 10–40 | knob | SPEC.md §9.4.4 |
 

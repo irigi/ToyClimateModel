@@ -30,6 +30,29 @@ Suite `aquaplanet` (SPEC.md §9.6 P1, item 5) adds:
 - energy closure of the atmosphere within 0.5 W m⁻²;
 - G ≤ 2.0;
 - recorded: zonal-mean precipitation, Hadley cell strength and edge, jets.
+
+Suite `earth_amip` (SPEC.md §9.6 P5; recorded without thresholds in P2, item 7: use
+`--record`) compares against the reference data of tools/fetch_reference.py
+(reference/derived/t<N>/, the run's truncation). Land = cells with land fraction ≥ 0.5;
+correlations are area-weighted and centred; seasons from the monthly climatology
+(DJF = Dec, Jan, Feb):
+- global-mean precipitation; zonal-mean annual precipitation vs GPCP (correlation over
+  latitude, tropical peak 10°S–12°N, subtropical minima 10–40° per hemisphere); annual
+  precipitation map pattern correlation;
+- annual-mean land 2 m temperature RMSE after a 6.5 K/km lapse-rate correction from the
+  model orography to the NCEP/NCAR reanalysis orography of the reference;
+- July − January land 2 m temperature: pattern correlation and amplitude ratio (ratio of
+  the area-weighted RMS of the difference, model / reference);
+- sea-level pressure DJF and JJA, 60°S–60°N: pattern correlation;
+- winter jets at 200 hPa: maximum zonal-mean u200 at 15–70° (DJF north, JJA south);
+- monsoon: JJA − DJF precipitation over 10–25°N, 70–90°E;
+- Köppen (tools/koppen.py rules on the monthly tas and precip) vs Beck et al. (2018):
+  main-group and 30-class agreement by land area; majority main group in the named boxes;
+- diurnal 2 m range from hourly stations `sahara` and `tropical_pacific` (mean daily
+  max − min of the window);
+- NH snow cover extent in February and August: Σ area × land fraction × S/(S + S_c) of
+  the monthly-mean snow (S_c = 15 kg m⁻²), against Σ area × the Rutgers cover;
+- G and the closures from the world metrics; cost from the run log, if given.
 """
 import argparse
 import csv
@@ -242,7 +265,216 @@ def aquaplanet(run, meta, c, info, diag, m):
     return checks
 
 
-SUITES = {"aquaplanet": aquaplanet}
+def wcorr(a, b, w):
+    """Area-weighted centred pattern correlation over the finite cells of w."""
+    sel = np.isfinite(a) & np.isfinite(b) & (w > 0)
+    a, b, w = a[sel], b[sel], w[sel]
+    a = a - np.average(a, weights=w)
+    b = b - np.average(b, weights=w)
+    return float(np.sum(w * a * b) / np.sqrt(np.sum(w * a * a) * np.sum(w * b * b)))
+
+
+def season(x, months):
+    return x[list(months)].mean(axis=0)
+
+
+DJF, JJA = (11, 0, 1), (5, 6, 7)
+
+# boxes: (lat0, lat1, lon0, lon1) in degrees east 0-360, expected main group
+NAMED_REGIONS = [
+    ("Sahara", (18, 30, 350, 30), "B"), ("Arabia", (18, 28, 42, 55), "B"),
+    ("central Australia", (-30, -20, 120, 140), "B"), ("Amazon", (-10, 0, 290, 305), "A"),
+    ("Congo", (-5, 5, 15, 28), "A"), ("Borneo/Sumatra", (-5, 5, 100, 118), "A"),
+    ("central Siberia", (55, 65, 90, 120), "D"), ("Greenland interior", (65, 80, 310, 330), "E"),
+    ("Antarctica", (-90, -70, 0, 360), "E"),
+]
+
+
+def in_box(latd, lond, box):
+    la0, la1, lo0, lo1 = box
+    lat_ok = (latd >= la0) & (latd <= la1)
+    lon_ok = (lond >= lo0) & (lond <= lo1) if lo0 <= lo1 else (lond >= lo0) | (lond <= lo1)
+    return lat_ok[:, None] & lon_ok[None, :]
+
+
+def earth_amip(run, meta, c, info, diag, m):
+    import koppen
+
+    lat = np.asarray(meta["grid"]["lat"])
+    latd = np.degrees(lat)
+    nlon = len(meta["grid"]["lon"])
+    lond = np.degrees(np.asarray(meta["grid"]["lon"]))
+    wts = area_weights(lat, nlon)
+    ref = ROOT / "reference" / "derived" / f"t{meta['truncation']}"
+    if not ref.exists():
+        raise SystemExit(f"{ref} missing: run tools/fetch_reference.py")
+    R = lambda k: np.load(ref / f"{k}.npy").astype(float)  # noqa: E731
+    M = lambda k: np.load(c / f"monthly_{k}.npy")  # noqa: E731
+    land = R("land")
+    lm = land >= 0.5
+    a = meta["planet"]["radius"]
+    cell_area = wts * 4 * np.pi * a * a
+    rec = {}
+
+    # precipitation [mm/day]
+    pm = M("precip") * 86400
+    pr = R("pr")
+    pa, ra = pm.mean(0), pr.mean(0)
+    zm, zr = pa.mean(1), ra.mean(1)
+    rec["global_precip_mm_day"] = gmean(pa, wts)
+    rec["global_precip_ref_mm_day"] = gmean(ra, wts)
+    wl = wts[:, 0]
+    rec["zonal_precip_corr"] = wcorr(zm, zr, wl)
+    trop = (latd >= -10) & (latd <= 12)
+    j = np.where(trop)[0][np.argmax(zm[trop])]
+    rec["tropical_peak"] = {"mm_day": float(zm[j]), "lat": float(latd[j])}
+    jr = np.where(trop)[0][np.argmax(zr[trop])]
+    rec["tropical_peak_ref"] = {"mm_day": float(zr[jr]), "lat": float(latd[jr])}
+    for h, sel in [("NH", (latd > 10) & (latd < 40)), ("SH", (latd < -10) & (latd > -40))]:
+        rec[f"subtropical_min_{h}_mm_day"] = float(zm[sel].min())
+        rec[f"subtropical_min_{h}_ref_mm_day"] = float(zr[sel].min())
+    rec["precip_map_corr"] = wcorr(pa, ra, wts)
+    rec["zonal_precip_ref_mm_day"] = [float(x) for x in zr]
+
+    # land 2 m temperature [K]
+    tm, tr_ = M("tas"), R("tas")
+    orog_f = sorted(run.glob("fields/orog_*.npy"))
+    zmod = np.load(orog_f[0]) if orog_f else R("orog")
+    corr_lapse = 0.0065 * (zmod - R("orog_tas_ref"))
+    wland = wts * lm
+    d = tm.mean(0) + corr_lapse - tr_.mean(0)
+    rec["land_tas_rmse_K"] = float(np.sqrt(np.sum(wland * d * d) / wland.sum()))
+    rec["land_tas_bias_K"] = float(np.sum(wland * d) / wland.sum())
+    sm, sr = tm[6] - tm[0], tr_[6] - tr_[0]
+    rec["land_tas_jul_jan_corr"] = wcorr(np.where(lm, sm, np.nan), sr, wts)
+    rms = lambda x: np.sqrt(np.sum(wland * x * x) / wland.sum())  # noqa: E731
+    rec["land_tas_jul_jan_amplitude_ratio"] = float(rms(sm) / rms(sr))
+
+    # sea-level pressure, 60S-60N
+    band = (np.abs(latd) <= 60)[:, None] * np.ones((1, nlon))
+    for nm, ms in [("DJF", DJF), ("JJA", JJA)]:
+        rec[f"psl_{nm}_corr"] = wcorr(season(M("psl"), ms), season(R("psl"), ms), wts * band)
+
+    # 200 hPa winter jets
+    for h, ms, sel in [("NH_DJF", DJF, (latd > 15) & (latd < 70)),
+                       ("SH_JJA", JJA, (latd < -15) & (latd > -70))]:
+        for tag, f in [("", M("u200")), ("_ref", R("ua200"))]:
+            z = season(f, ms).mean(1)
+            j = np.where(sel)[0][np.argmax(z[sel])]
+            rec[f"jet200_{h}{tag}"] = {"u": float(z[j]), "lat": float(latd[j])}
+
+    # monsoon
+    box = in_box(latd, lond, (10, 25, 70, 90))
+    for tag, f in [("", pm), ("_ref", pr)]:
+        dj = season(f, JJA) - season(f, DJF)
+        rec[f"monsoon_jja_minus_djf_mm_day{tag}"] = float(np.sum(wts * box * dj) / np.sum(wts * box))
+
+    # Köppen
+    month_s = meta["calendar"]["year"] / len(meta["calendar"]["months"])
+    T = tm - 273.15
+    P = M("precip") * month_s
+    codes = np.zeros(land.shape, int)
+    for j in range(len(lat)):
+        for i in range(nlon):
+            codes[j, i] = koppen.CODE[koppen.classify(T[:, j, i], P[:, j, i])] + 1
+    beck = R("koppen_beck").astype(int)
+    group = lambda x: np.array([" ABCDE"[0] if v == 0 else koppen.CLASSES[v - 1][0][0]  # noqa: E731
+                                for v in x.ravel()]).reshape(x.shape)
+    gm, gr = group(codes), group(beck)
+    valid = (beck > 0) & lm
+    wv = wts * land * valid
+    rec["koppen_main_group_agreement"] = float(np.sum(wv * (gm == gr)) / wv.sum())
+    rec["koppen_30class_agreement"] = float(np.sum(wv * (codes == beck)) / wv.sum())
+    regions = {}
+    for name, bx, want in NAMED_REGIONS:
+        sel = in_box(latd, lond, bx) & lm
+        if not sel.any():
+            regions[name] = {"expected": want, "model": None}
+            continue
+        votes = {}
+        for g, w in zip(gm[sel], (wts * land)[sel]):
+            votes[g] = votes.get(g, 0.0) + w
+        maj = max(votes, key=votes.get)
+        regions[name] = {"expected": want, "model": maj, "cells": int(sel.sum())}
+    rec["named_regions"] = regions
+    np.save(c / "koppen_earth_amip.npy", codes)
+
+    # diurnal 2 m range from hourly stations
+    st = run / "stations"
+    if (st / "tas.npy").exists():
+        names = [s["name"] for s in json.loads((st / "stations.json").read_text())["stations"]]
+        tas = np.load(st / "tas.npy")
+        t = np.load(st / "time.npy")
+        sel = t >= info["start_s"]
+        day = np.floor(t[sel] / 86400.0).astype(int)
+        for nm in ("sahara", "tropical_pacific"):
+            if nm in names:
+                x = tas[sel, names.index(nm)]
+                rng = [x[day == dd].max() - x[day == dd].min() for dd in np.unique(day)
+                       if (day == dd).sum() >= 20]
+                rec[f"diurnal_range_{nm}_K"] = float(np.mean(rng))
+
+    # NH snow cover extent [million km2]
+    snw = M("snw")
+    fs = snw / (snw + 15.0)
+    snc = np.nan_to_num(R("snc"))
+    nh = (latd > 0)[:, None]
+    for nm, mo in [("Feb", 1), ("Aug", 7)]:
+        rec[f"nh_snow_extent_{nm}_Mkm2"] = float(np.sum(cell_area * land * fs[mo] * nh) / 1e12)
+        rec[f"nh_snow_extent_{nm}_ref_Mkm2"] = float(np.sum(cell_area * snc[mo] * nh) / 1e12)
+
+    # cost from the run log (if it sits next to the run as <run>.log)
+    log = run.parent / f"{run.name}.log"
+    if log.exists():
+        import re
+        mt = re.findall(r"done: ([0-9.]+) model days in ([0-9.]+) s wall", log.read_text())
+        if mt:
+            days, wall = map(float, mt[-1])
+            rec["cost_min_per_model_year"] = wall / 60 / (days / 365.25)
+    m["earth_amip"] = rec
+
+    rg = rec["named_regions"]
+    checks = [
+        ("global-mean precipitation 2.4–3.4 mm/day", 2.4 <= rec["global_precip_mm_day"] <= 3.4),
+        ("zonal-mean precipitation vs GPCP: correlation ≥ 0.85", rec["zonal_precip_corr"] >= 0.85),
+        ("tropical peak 5–9 mm/day between 10°S and 12°N",
+         5 <= rec["tropical_peak"]["mm_day"] <= 9),
+        ("subtropical minima < 2.5 mm/day in both hemispheres",
+         max(rec["subtropical_min_NH_mm_day"], rec["subtropical_min_SH_mm_day"]) < 2.5),
+        ("annual precipitation map pattern correlation ≥ 0.60", rec["precip_map_corr"] >= 0.60),
+        ("land 2 m temperature RMSE ≤ 4.5 K (lapse-rate corrected)", rec["land_tas_rmse_K"] <= 4.5),
+        ("July − January land 2 m temperature: correlation ≥ 0.90",
+         rec["land_tas_jul_jan_corr"] >= 0.90),
+        ("July − January land 2 m temperature: amplitude ratio 0.75–1.3",
+         0.75 <= rec["land_tas_jul_jan_amplitude_ratio"] <= 1.3),
+        ("sea-level pressure DJF and JJA, 60°S–60°N: correlation ≥ 0.60 each",
+         min(rec["psl_DJF_corr"], rec["psl_JJA_corr"]) >= 0.60),
+        ("winter jets at 200 hPa: 30–55 m/s at 25–45° in each hemisphere",
+         all(30 <= rec[k]["u"] <= 55 and 25 <= abs(rec[k]["lat"]) <= 45
+             for k in ("jet200_NH_DJF", "jet200_SH_JJA"))),
+        ("monsoon: JJA − DJF precipitation 10–25°N, 70–90°E ≥ 3 mm/day",
+         rec["monsoon_jja_minus_djf_mm_day"] >= 3),
+        ("Köppen main group vs Beck et al.: ≥ 60% of land area agrees",
+         rec["koppen_main_group_agreement"] >= 0.60),
+        ("named regions have their majority class",
+         all(r["model"] == r["expected"] for r in rg.values())),
+        ("diurnal 2 m range: Sahara 10–22 K, open tropical ocean < 1.5 K",
+         10 <= rec.get("diurnal_range_sahara_K", -1) <= 22
+         and rec.get("diurnal_range_tropical_pacific_K", 99) < 1.5),
+        ("NH snow cover: February 35–58 million km², August < 10 million km²",
+         35 <= rec["nh_snow_extent_Feb_Mkm2"] <= 58 and rec["nh_snow_extent_Aug_Mkm2"] < 10),
+        ("G ≤ 2.0", m.get("storm_index_G", 99) <= 2.0),
+        ("energy closure (atmosphere) within 0.5 W/m²",
+         m.get("energy_closure_atm_W_m2", 99) < 0.5),
+        ("water closure within 1e-3 mm/day",
+         m.get("water_closure_system_mm_day", 99) < 1e-3),
+        ("cost ≤ 30 min per model year (T42 L26, 8 threads)",
+         rec.get("cost_min_per_model_year", 99) <= 30),
+    ]
+    return checks
+
+
+SUITES = {"aquaplanet": aquaplanet, "earth_amip": earth_amip}
 
 
 def main():
@@ -252,6 +484,9 @@ def main():
                     help="check suite; without it the world metrics are printed only")
     ap.add_argument("--milestone", default="P1")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--record", action="store_true",
+                    help="record only: thresholds are reported, not applied (exit 0)")
+    ap.add_argument("--tag", default=None, help="appended to the scorecard file name")
     a = ap.parse_args()
     run = pathlib.Path(a.run)
     meta, c, info, diag = load(run)
@@ -259,16 +494,25 @@ def main():
     checks = SUITES[a.suite](run, meta, c, info, diag, m) if a.suite else []
     print(f"{run.name}: T{meta['truncation']}, window {m['window_days']:.0f} days "
           f"({info['count']} climatology samples)")
-    skip = {"zonal_precip_mm_day", "lat_deg", "u_low_zonal"}
+    skip = {"zonal_precip_mm_day", "lat_deg", "u_low_zonal", "zonal_precip_ref_mm_day"}
     for k, v in m.items():
-        if k not in skip:
+        if k == "earth_amip":
+            for kk, vv in v.items():
+                if kk not in skip:
+                    print(f"  {kk}: {vv}")
+        elif k not in skip:
             print(f"  {k}: {v}")
     ok = all(c for _, c in checks)
+    word = ("would pass", "would fail") if a.record else ("PASS", "FAIL")
     for name, c in checks:
-        print(f"  {'PASS' if c else 'FAIL'}  {name}")
+        print(f"  {word[0] if c else word[1]:10s}  {name}")
     if not a.suite:
         return
-    print(f"suite {a.suite}: {'PASS' if ok else 'FAIL'}")
+    if a.record:
+        print(f"suite {a.suite}: recorded ({sum(c for _, c in checks)} of {len(checks)} "
+              f"rows would pass; thresholds not applied)")
+    else:
+        print(f"suite {a.suite}: {'PASS' if ok else 'FAIL'}")
     if not a.no_write:
         try:
             git = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ROOT,
@@ -277,14 +521,16 @@ def main():
             git = None
         out = ROOT / "docs" / "scorecards"
         out.mkdir(parents=True, exist_ok=True)
-        f = out / f"{a.milestone}_{a.suite}_{datetime.date.today().isoformat()}.json"
+        tag = f"_{a.tag}" if a.tag else ""
+        f = out / f"{a.milestone}_{a.suite}{tag}_{datetime.date.today().isoformat()}.json"
         f.write_text(json.dumps({
             "run": str(run), "run_git_hash": meta.get("git_hash"), "tool_git_hash": git,
-            "truncation": meta["truncation"], "suite": a.suite, "pass": ok,
+            "truncation": meta["truncation"], "suite": a.suite,
+            "pass": None if a.record else ok, "record_only": a.record,
             "checks": [{"name": n, "pass": bool(c)} for n, c in checks], "metrics": m,
         }, indent=1))
         print(f)
-    raise SystemExit(0 if ok else 1)
+    raise SystemExit(0 if ok or a.record else 1)
 
 
 if __name__ == "__main__":
