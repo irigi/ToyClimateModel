@@ -174,7 +174,7 @@ impl Primitive {
             spare: None,
             timers: None,
             sl: (!init.state.gq.is_empty())
-                .then(|| semi_lagrangian::SemiLagrangian::new(&tr.grid, tr.radius)),
+                .then(|| semi_lagrangian::SemiLagrangian::new(&tr.grid, tr.radius as f64)),
             sl_target: Vec::new(),
             q_high_steps: 0,
             isol: Vec::new(),
@@ -370,7 +370,7 @@ impl Primitive {
     /// (from ∫|∇ψ|² dA = ∫ ψ(−∇²ψ) dA and ζ = −ℓ(ℓ+1)ψ/a²).
     fn spectral_ke(&self, s: &PeState) -> f64 {
         let lay = &self.tr.layout;
-        let a2 = self.tr.radius * self.tr.radius;
+        let a2 = (self.tr.radius as f64).powi(2);
         let mut ke = 0.0;
         for k in 0..self.nlev() {
             let mut lev = 0.0;
