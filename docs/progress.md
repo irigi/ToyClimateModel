@@ -1138,5 +1138,22 @@ owner before installing them.
        stand-in, not tuning;
      - (c) the owner revises the criterion for the gray stand-in physics.
    - **Recommendation:** (b) as data, then (a).
-   - **Instellation sweep** (acceptance 6 *record*): running from the warm state at 98, 96,
-     94 and 92 % (luminosity scaled), 6 years each.
+   - **Instellation sweep** (acceptance 6 *record*): from the warm state (year 12) at 98, 96,
+     94 and 92 % (luminosity scaled), 6 years each, climatology over years 15–18
+     (`out/p2/sweep/`, binary f59dd7e). Ice edge = most equatorward latitude with
+     annual-mean concentration ≥ 0.15:
+
+     | Instellation | Global T_s | Global ice cover | Ice edge N / S | T_s trend, last 5 yr |
+     |---|---|---|---|---|
+     | 100 % (bistab_warm) | 279.3 K | 0.29 | 41.5° / 41.5° | −0.19 K/yr |
+     | 98 % | 277.5 K | 0.30 | 41.5° / 41.5° | −0.01 K/yr |
+     | 96 % | 275.4 K | 0.33 | 41.5° / 41.5° | −0.24 K/yr |
+     | 94 % | 272.8 K | 0.37 | 36.0° / 36.0° | −0.44 K/yr |
+     | 92 % | 270.3 K | 0.40 | 36.0° / 36.0° | −0.70 K/yr |
+
+     - No run reaches a snowball within 6 years, and the tropics stay ice-free in all of
+       them. The 94 % and 92 % runs are still cooling fast, so the freeze point is not
+       found. It lies at or above 92 % if those runs keep going, and is undetermined
+       otherwise.
+     - Recording the transition would need longer runs (≥ 15 years) at 94–90 %. These are
+       not started: question 7 is open and its physics may change.
