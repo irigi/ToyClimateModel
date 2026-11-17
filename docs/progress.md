@@ -34,7 +34,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
 | P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
-| P2 Land, snow, sea ice, precipitation phase | in progress (branch `p2-surface`): acceptance 1–4 met; 5–6 runs in progress; 7 blocked (netCDF libraries, ask the owner); defect 1 diagnosed |
+| P2 Land, snow, sea ice, precipitation phase | 2026-11-17 (branch `p2-surface`): acceptance 1–4 and 7 met (Earth scorecard recorded: 11 of 19 P5 rows would pass at T42); 5 and 6 fail, open questions 7 and 8; defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | not started |
 | P4 Clouds, Earth-like energy balance | not started |
 | P5 Earth gate (prescribed ocean) | not started |
@@ -1076,6 +1076,111 @@ its sweep table. No snowball down to 92 % within 6 years.
 **Open questions**: 8 (new).
 
 **Next step**: owner decisions on questions 7 and 8, and on netCDF for acceptance 7.
+
+## 2026-11-17 — P2 acceptance 7: Earth scorecard recorded (branch `p2-surface`)
+
+**What was built** (commits a29d6cc, 472fa5d and this one):
+- `tools/fetch_reference.py`: fetches and regrids the §9.5.3 reference data to T21 and T42
+  (`reference/derived/`, sources and licences in `reference/derived/SOURCES.md`):
+  - GPCP precipitation; NCEP/NCAR 2 m temperature, sea-level pressure, 200 hPa wind and
+    surface height; OISST v2 SST, sea ice and land mask; Rutgers NH snow cover; ETOPO5;
+    Beck et al. (2018) Köppen;
+  - checks: GPCP 2.69 mm/day, NCEP 2 m T 287.4 K, land fraction 0.282, NH sea ice
+    14.1 / 4.7 million km² (March / September), NH snow 46.2 / 4.3 million km²
+    (February / August);
+  - figure `docs/figures/P2/reference_earth_t42.png`.
+- Ocean model `"prescribed"` (`surface/prescribed.rs`): monthly SST and sea-ice
+  concentration, linear between mid-months. Floes 2 m (NH) and 1 m (SH), the CICE
+  prescribed-ice mode; the knob is logged in `docs/tuning.md`. Integration test: thread
+  independence, bitwise restart and the interpolated values.
+- **Restart bug fixed:** serde_json read the restart scalars (budget totals) back off by
+  1 ulp, so even fixed-SST runs did not reproduce `diagnostics.csv` bitwise after a
+  restart. Fixed with the `float_roundtrip` feature.
+- Cases `cases/bench/earth_amip/earth_amip_{t42,t21}.toml`: gray radiation with top
+  reflectance 0.23, K-profile boundary layer, SBM convection, ETOPO5 geography, 400 ppm,
+  Earth orbit. T42 L26 1 + 5 years; T21 1 + 2 years.
+- `tools/scorecard.py --suite earth_amip --record`: every P5 row, reported as "would
+  pass / fail" with no thresholds applied.
+  - Ceiling: the reference itself agrees with Beck only 0.862 (main group) / 0.730
+    (30 classes) at T21, because of regridding and the climatology periods.
+- `tools/earth_maps.py`: the model-vs-reference figure.
+- Regression check `scripts/regress --against 6822614 --threads "1 2"`: PASS, all cases
+  byte-identical.
+
+**Runs** (binary from a29d6cc + u200; T21 on 4 threads, T42 on 8):
+
+| Row (P5 threshold) | T21 | T42 | Reference |
+|---|---|---|---|
+| Global precipitation (2.4–3.4 mm/day) | 3.44 ✗ | 3.75 ✗ | 2.69 |
+| Zonal precipitation correlation (≥ 0.85) | 0.82 ✗ | 0.82 ✗ | |
+| Tropical peak (5–9 mm/day, 10°S–12°N) | 6.9 at 8°N ✓ | 6.8 at 7°N ✓ | 5.8 at 7°N |
+| Subtropical minima (< 2.5 mm/day, N / S) | 3.3 / 3.2 ✗ | 3.4 / 3.4 ✗ | 1.7 / 1.9 |
+| Precipitation map correlation (≥ 0.60) | 0.62 ✓ | 0.65 ✓ | |
+| Land 2 m T RMSE (≤ 4.5 K) / bias | 4.10 ✓ / −1.39 | 3.38 ✓ / −0.46 | |
+| July − January: correlation (≥ 0.90) / amplitude ratio (0.75–1.3) | 0.96 / 0.82 ✓ | 0.97 / 0.78 ✓ | |
+| Sea-level pressure correlation, DJF / JJA (≥ 0.60) | 0.76 / 0.67 ✓ | 0.79 / 0.69 ✓ | |
+| Winter jets at 200 hPa (30–55 m/s at 25–45°): NH DJF / SH JJA | 25.5 at 47° / 27.6 at −58° ✗ | 26.1 at 43° / 27.2 at −63° ✗ | 41.8 at 32° / 40.2 at −29° |
+| Monsoon, JJA − DJF (≥ 3 mm/day) | 6.5 ✓ | 10.9 ✓ | 8.2 |
+| Köppen main group (≥ 60 %) / 30 classes | 57.9 % ✗ / 29.2 % | 61.1 % ✓ / 36.5 % | ceiling 86 / 73 % at T21 |
+| Named regions | central Australia C ✗ | Arabia C, central Australia C ✗ | |
+| Diurnal 2 m range: Sahara (10–22 K) / tropical Pacific (< 1.5 K) | 6.7 ✗ / 0.51 | 6.5 ✗ / 0.57 | |
+| NH snow (February 35–58, August < 10 million km²) | 29.8 ✗ / 6.4 | 30.8 ✗ / 5.9 | 46.3 / 4.3 |
+| G (≤ 2.0) | 1.94 ✓ | 2.53 ✗ (4°S 67.5°W, Amazon) | |
+| Energy (atmosphere) / water closure | 0.21 W/m² ✓ / 2.4e-4 mm/day ✓ | 0.21 ✓ / 2.2e-4 ✓ | |
+| Cost (≤ 30 min per model year) | 11.6 min (4 threads) | 24.4 min (8 threads) ✓ | |
+
+Rows that would pass: 11 of 19 at both resolutions. Other numbers (T42):
+- global T_s 286.7 K;
+- planetary albedo 0.296;
+- net TOA −15.9 W/m² (fixed SST, so not constrained);
+- fixer 0.084 %/day;
+- runoff 0.24 mm/day.
+
+Scorecards: `docs/scorecards/P2_earth_amip_{t21,t42}_2026-11-17.json`.
+
+**Figures** `docs/figures/P2/earth_amip_{t42,t21}.png`. Rows: precipitation, land 2 m T,
+Köppen main group (model vs reference), and zonal means.
+- **Precipitation:**
+  - the ITCZ is in the right place (peak 7°N);
+  - the subtropics are too wet: 3.4 mm/day against 1.7–1.9, with a broad secondary
+    maximum near ±35° instead of the reference's dry minimum near ±25°;
+  - the land precipitation is patchy;
+  - the Amazon at T42 is a cell-scale mosaic of 1–10 mm/day against a uniform 7–9 in
+    GPCP. This is where G = 2.53 sits, so a weaker form of defect 1 survives over the
+    Amazon at T42;
+  - the maritime continent and the West Pacific are too wet (single cells up to
+    19.6 mm/day against a reference maximum of 11.3).
+- **Land 2 m temperature:** close to NCEP. The Arctic and Siberia are too cold: the
+  zonal mean is ~5 K low poleward of 70°N.
+- **Köppen:**
+  - the Sahara and the Siberian D zone are right;
+  - Australia, southern Africa, Arabia and the US Great Plains are C instead of B, which
+    is the too-wet subtropics again;
+  - E (tundra) reaches too far south in northern Siberia and Canada.
+- **Jets at 200 hPa:** single eddy-driven jets at 43–63°. The subtropical jets (30°,
+  40 m/s in the reference) are missing in both hemispheres. This matches the P1
+  westerlies row (question 6) and points at the tropical heating and Hadley-cell
+  structure under gray radiation, which P3/P4 replace.
+
+**Reading:** all failures except snow and the diurnal range trace to the subtropics
+being too wet and the Hadley circulation being too weak.
+- These are the radiation/convection items that P3–P4 address.
+- The snow deficit (31 against 46 million km² in February) and the small Sahara diurnal
+  range (6.5 against 10–22 K) are land-surface and boundary-layer items to look at in P5,
+  together with the gray longwave (no window: the night-time cooling of dry air is too
+  weak).
+
+**Question 7 diagnostic** (recommended option (b), as data only, not adopted): the
+bistability pair with the ocean heat transport on (`heat_transport = 50.0`, as in the
+test world). Running in `out/p2/q7/` (binary 472fa5d, 4 threads); results in the next
+entry.
+
+**Tuning changes**: none (the floe thickness is a new knob at its literature value).
+
+**Open questions**: none new. Question 4 (Earth-gate thresholds) now has its first data
+for the owner.
+
+**Next step**: P3 radiation. P2 acceptance 5 and 6 stay open (questions 7 and 8).
 
 ## Open questions for the owner
 

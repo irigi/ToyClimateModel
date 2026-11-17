@@ -298,6 +298,9 @@ def in_box(latd, lond, box):
 
 
 def earth_amip(run, meta, c, info, diag, m):
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))  # works under python -I
     import koppen
 
     lat = np.asarray(meta["grid"]["lat"])
