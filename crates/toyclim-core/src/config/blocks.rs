@@ -353,6 +353,22 @@ pub struct SurfaceConfig {
     /// Earth-like value 50; default 0 (off).
     #[serde(default)]
     pub ocean_heat_transport: f64,
+    /// Prescribed monthly SST \[K\]: `.npy` of shape (12, nlat, nlon) on the model's
+    /// Gaussian grid (rows north to south, column k at longitude 2πk/nlon), interpolated
+    /// linearly between mid-months of the calendar. Needs `fixed = true`; replaces
+    /// `initial` for the ocean.
+    pub prescribed_sst: Option<String>,
+    /// Prescribed monthly sea-ice concentration (fraction of the ocean area), same layout.
+    /// Needs `prescribed_sst`.
+    pub prescribed_sic: Option<String>,
+    /// Floe thickness of prescribed sea ice \[m\], (northern, southern) hemisphere
+    /// (default 2 and 1, the CICE prescribed-ice mode; see `surface::prescribed`).
+    #[serde(default = "default_prescribed_ice_h")]
+    pub prescribed_ice_thickness: [f64; 2],
+}
+
+fn default_prescribed_ice_h() -> [f64; 2] {
+    [2.0, 1.0]
 }
 
 fn default_soil_cv() -> f64 {

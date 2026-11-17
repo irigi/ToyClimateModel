@@ -311,3 +311,111 @@ type = "gray_aquaplanet"
     std::fs::remove_dir_all(&out).ok();
     std::fs::remove_file(&cfg).ok();
 }
+
+/// Prescribed monthly SST and sea ice (AMIP-style ocean) with land: bitwise across thread
+/// counts and restarts, and the output concentration and SST are the files' values
+/// interpolated linearly between mid-months.
+#[test]
+fn prescribed_ocean_runs_and_restarts() {
+    use toyclim_core::io::npy;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let hm = root.join("worlds/testworld.npy");
+    let (nlat, nlon) = (32usize, 64usize);
+    let (x, _) = gauss_mu(nlat);
+    // SST: 300 K at the equator falling to 271 K at the poles, +2 K × month index in the
+    // north; sea ice: full poleward of 65° in month 0, none in month 6 (linear in between)
+    let mut sst = Vec::new();
+    let mut sic = Vec::new();
+    for m in 0..12 {
+        for mu in &x {
+            let lat = mu.asin();
+            let s = 271.0 + 29.0 * lat.cos().powi(2) + if lat > 0.0 { 2.0 * m as f64 } else { 0.0 };
+            let ph = (m as f64 / 6.0 * std::f64::consts::PI).cos() * 0.5 + 0.5;
+            let a = if lat.abs() > 65f64.to_radians() {
+                ph
+            } else {
+                0.0
+            };
+            for _ in 0..nlon {
+                sst.push(s as f32);
+                sic.push(a as f32);
+            }
+        }
+    }
+    let (fs, fi) = (tmp("p_sst.npy"), tmp("p_sic.npy"));
+    npy::write(&fs, &sst, &[12, nlat, nlon]).unwrap();
+    npy::write(&fi, &sic, &[12, nlat, nlon]).unwrap();
+    let cfg_text = format!(
+        r#"
+model = "primitive"
+truncation = 21
+levels = 10
+dt = "30min"
+length = "4day"
+output_every = "2day"
+output_fields = ["ts", "tos", "sic", "sit", "precip", "snw", "land"]
+initial_condition = {{ case = "rest", temperature = 280.0 }}
+[moisture]
+condensable = "water"
+[orbit]
+diurnal = true
+[surface]
+heightmap = "{}"
+fixed = true
+prescribed_sst = "{}"
+prescribed_sic = "{}"
+[planet]
+preset = "earth"
+[forcing]
+type = "gray_aquaplanet"
+"#,
+        hm.display(),
+        fs.display(),
+        fi.display()
+    );
+    let cfg = tmp("presc.toml");
+    std::fs::write(&cfg, cfg_text).unwrap();
+    let (a, b, c) = (tmp("pa"), tmp("pb"), tmp("pc"));
+    run(&cfg, &a, "1", &[]);
+    run(&cfg, &b, "4", &[]);
+    assert_same(&a, &b);
+    run(&cfg, &c, "2", &["--length", "2day"]);
+    let r = c.join("restart");
+    run(&cfg, &c, "3", &["--restart", r.to_str().unwrap()]);
+    assert_same(&a, &c);
+    // the fields of step 192 (4 days) were set by the last physics step, at step 191
+    let t: f64 = 191.0 * 1800.0;
+    let xm = (t / 31_557_600.0) * 12.0 - 0.5;
+    let w = xm - xm.floor(); // weight of January (m1 = 0, m0 = 11)
+    let (out_sic, _) = npy::read::<f32>(&a.join("fields/sic_000192.npy")).unwrap();
+    let (out_tos, _) = npy::read::<f32>(&a.join("fields/tos_000192.npy")).unwrap();
+    let (land, _) = npy::read::<f32>(&a.join("fields/land_000000.npy")).unwrap();
+    for p in 0..nlat * nlon {
+        if land[p] >= 1.0 {
+            continue; // tos is the skin temperature there
+        }
+        let e_sic = (1.0 - w) * sic[11 * nlat * nlon + p] as f64 + w * sic[p] as f64;
+        let e_sst = (1.0 - w) * sst[11 * nlat * nlon + p] as f64 + w * sst[p] as f64;
+        assert!((out_sic[p] as f64 - e_sic).abs() < 1e-5, "sic at {p}");
+        assert!(
+            (out_tos[p] as f64 - e_sst).abs() < 1e-3,
+            "tos at {p}: {} {e_sst}",
+            out_tos[p]
+        );
+    }
+    assert!(out_sic.iter().any(|&s| s > 0.5), "no prescribed ice");
+    let (ts, _) = npy::read::<f32>(&a.join("fields/ts_000192.npy")).unwrap();
+    assert!(ts.iter().all(|&t| t.is_finite() && t > 150.0 && t < 350.0));
+    for d in [&a, &b, &c] {
+        std::fs::remove_dir_all(d).ok();
+    }
+    for f in [&cfg, &fs, &fi] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+/// Gaussian latitudes μ, north to south, and weights.
+fn gauss_mu(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let g = toyclim_core::grid::GaussianGrid::new(n, 2 * n);
+    (g.lat.iter().map(|l| l.sin()).collect(), vec![])
+}

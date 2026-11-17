@@ -58,9 +58,17 @@ pub fn step(s: &mut Surface, p: usize, o: &OceanFluxes, frac: f64, dt: f64) -> O
     let a = s.sic(p);
     let w = 1.0 - a;
     if pr.fixed {
-        let e = o.open.map_or(0.0, |x| x.1);
+        // the ocean takes any flux; prescribed ice (super::prescribed) is part of it:
+        // its skin temperature moves, snow and sublimation exchange with the reservoir
+        let e = w * o.open.map_or(0.0, |x| x.1);
+        let mut up = o.rain + o.snow - e;
+        if a > 0.0 {
+            let fx = o.ice.expect("ice fluxes for an ice-covered cell");
+            up -= a * fx.evap;
+            s.ice_ts[p] = (s.ice_ts[p] + frac * fx.dts).min(pr.t_melt);
+        }
         return OceanResult {
-            uptake: o.rain + o.snow - e,
+            uptake: up,
             ice_cap: 0.0,
         };
     }

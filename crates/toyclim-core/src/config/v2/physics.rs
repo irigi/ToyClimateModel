@@ -73,6 +73,20 @@ pub(super) fn lower_surface(s: &SurfaceV2) -> Result<Table, ConfigError> {
     match ocean.get("model").and_then(Value::as_str).unwrap_or("slab") {
         "slab" => {}
         "fixed_sst" => put(&mut t, "fixed", true),
+        "prescribed" => {
+            // AMIP-style: monthly SST and sea-ice concentration from files
+            put(&mut t, "fixed", true);
+            if !ocean.contains_key("sst") {
+                return Err(invalid(
+                    "ocean model \"prescribed\" needs `sst` (a .npy path)",
+                ));
+            }
+            ocean_map.extend([
+                ("sst", "prescribed_sst"),
+                ("sea_ice", "prescribed_sic"),
+                ("ice_thickness", "prescribed_ice_thickness"),
+            ]);
+        }
         "wind_driven" => {
             return Err(invalid(
                 "ocean model \"wind_driven\" is not implemented yet (P6)",

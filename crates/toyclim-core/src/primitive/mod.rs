@@ -304,6 +304,9 @@ impl Primitive {
         } else {
             2.0 * self.settings.dt
         };
+        if let Some(sfc) = self.surface.as_mut() {
+            sfc.prescribe(self.steps as f64 * self.settings.dt);
+        }
         let cx = DriverCtx {
             tr: &self.tr,
             planet: &self.planet,

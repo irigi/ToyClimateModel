@@ -30,6 +30,7 @@ pub mod albedo;
 pub mod geography;
 pub mod land;
 pub mod ocean_slab;
+pub mod prescribed;
 pub mod sea_ice;
 pub mod soil;
 
@@ -216,6 +217,10 @@ pub struct Surface {
     pub ustar: Vec<f64>,
     /// Fluxes of the last step.
     pub fluxes: SurfaceFluxes,
+    /// Prescribed monthly SST and sea ice (AMIP-style; needs `params.fixed`).
+    pub prescribed: Option<prescribed::PrescribedOcean>,
+    /// Sea-ice concentration set by [`Self::prescribe`] (empty without a prescribed ocean).
+    pub sic_prescribed: Vec<f64>,
 }
 
 impl Surface {
@@ -242,6 +247,8 @@ impl Surface {
                 ice_cap: z.clone(),
                 qflux: z,
             },
+            prescribed: None,
+            sic_prescribed: Vec::new(),
             t_ml: ts,
         }
     }
@@ -256,6 +263,33 @@ impl Surface {
         }
     }
 
+    /// Use a prescribed ocean: sets the SST, concentration and ice for time 0.
+    pub fn set_prescribed(&mut self, o: prescribed::PrescribedOcean) {
+        self.sic_prescribed = vec![0.0; self.len()];
+        self.prescribed = Some(o);
+        self.prescribe(0.0);
+    }
+
+    /// Set SST, sea-ice concentration and ice (concentration × floe thickness) of the
+    /// prescribed ocean at time t \[s\]. Ice appearing in a cell starts with its skin at
+    /// the freezing point. No-op without a prescribed ocean.
+    pub fn prescribe(&mut self, t: f64) {
+        let Some(o) = &self.prescribed else {
+            return;
+        };
+        let w = o.weights(t);
+        let tf = self.params.t_freeze_sea;
+        for p in 0..self.t_ml.len() {
+            let (sst, a) = o.at(p, w);
+            self.t_ml[p] = sst;
+            if a > 0.0 && self.ice_h[p] <= 0.0 {
+                self.ice_ts[p] = tf;
+            }
+            self.sic_prescribed[p] = a;
+            self.ice_h[p] = a * o.floe[p];
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.t_ml.len()
     }
@@ -265,6 +299,9 @@ impl Surface {
 
     /// Sea-ice concentration (fraction of the ocean area).
     pub fn sic(&self, p: usize) -> f64 {
+        if !self.sic_prescribed.is_empty() {
+            return self.sic_prescribed[p];
+        }
         if self.ice_h[p] <= 0.0 {
             0.0
         } else {
@@ -443,6 +480,12 @@ impl Surface {
             let x: Vec<f64> = self.soil_t.iter().map(|t| t[k]).collect();
             v.push((format!("grid_soil_t{k}"), pack(&x)));
         }
+        if !self.sic_prescribed.is_empty() {
+            v.push((
+                "grid_sic_prescribed".to_string(),
+                pack(&self.sic_prescribed),
+            ));
+        }
         v
     }
 
@@ -469,6 +512,9 @@ impl Surface {
             for (t, v) in self.soil_t.iter_mut().zip(&x) {
                 t[k] = *v;
             }
+        }
+        if !self.sic_prescribed.is_empty() {
+            get("grid_sic_prescribed", &mut self.sic_prescribed)?;
         }
         Ok(())
     }

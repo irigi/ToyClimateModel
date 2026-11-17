@@ -97,6 +97,7 @@ fn build_surface(
     tr: &Transform,
     planet: &crate::planet::Planet,
     init: &mut PeInitial,
+    year: Option<f64>,
 ) -> Result<Surface, String> {
     let ts: Vec<f64> = match &sc.initial {
         None => tj16_sst_grid(tr),
@@ -132,6 +133,40 @@ fn build_surface(
     }
     if sc.ocean_heat_transport != 0.0 {
         ocean_slab::set_qflux(&mut sfc, tr, sc.ocean_heat_transport);
+    }
+    if let Some(path) = &sc.prescribed_sst {
+        if !sc.fixed {
+            return Err("surface.prescribed_sst needs fixed = true".into());
+        }
+        let year = year.ok_or("a prescribed ocean needs an [orbit] (its year)")?;
+        let read = |p: &str| -> Result<Vec<f64>, String> {
+            let (d, shape) = crate::io::npy::read::<f32>(std::path::Path::new(p))
+                .map(|(d, s)| (d.iter().map(|&x| x as f64).collect::<Vec<_>>(), s))
+                .or_else(|_| crate::io::npy::read::<f64>(std::path::Path::new(p)))
+                .map_err(|e| format!("{p}: {e}"))?;
+            if shape != [12, tr.grid.nlat, tr.grid.nlon] {
+                return Err(format!(
+                    "{p}: shape {shape:?}, expected [12, {}, {}]",
+                    tr.grid.nlat, tr.grid.nlon
+                ));
+            }
+            Ok(d)
+        };
+        let sst = read(path)?;
+        let sic = sc.prescribed_sic.as_deref().map(read).transpose()?;
+        let lat: Vec<f64> = (0..tr.ngrid())
+            .map(|p| tr.grid.lat[p / tr.grid.nlon])
+            .collect();
+        let o = crate::surface::prescribed::PrescribedOcean::new(
+            &sst,
+            sic.as_deref(),
+            &lat,
+            sc.prescribed_ice_thickness,
+            year,
+        )?;
+        sfc.set_prescribed(o);
+    } else if sc.prescribed_sic.is_some() {
+        return Err("surface.prescribed_sic needs prescribed_sst".into());
     }
     if sc.initial_ice > 0.0 && sfc.params.sea_ice {
         let tf = sfc.params.t_freeze_sea;
@@ -228,7 +263,8 @@ pub fn from_config(cfg: &Config) -> Result<Primitive, String> {
             let lf = moisture.as_ref().map_or(0.0, |c| c.latent_heat_fusion);
             let t_eff = cfg.system.as_ref().map_or(5772.0, |s| s.star.t_eff);
             let params = surface_params(sc, lf, t_eff, solar_day_frequency(orbit.as_ref()));
-            Some(build_surface(sc, params, &tr, &planet, &mut init)?)
+            let year = orbit.as_ref().map(|o| o.year);
+            Some(build_surface(sc, params, &tr, &planet, &mut init, year)?)
         }
     };
     let mut m = Primitive::new(tr, planet, settings, levels, init, physics);
