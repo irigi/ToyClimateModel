@@ -57,7 +57,10 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 
 ## Dependencies beyond the SPEC.md §2 allow-list
 
-None.
+- Python tools: `netCDF4` and `xarray` (owner approval 2026-11-17), to read the netCDF
+  reference data of §9.5.3 for the `earth_amip` scorecard. Installed in the git-ignored
+  `.venv/` (`python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt`).
+  The Rust crates are unaffected.
 
 ---
 
