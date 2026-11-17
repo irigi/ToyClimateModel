@@ -1029,6 +1029,51 @@ owner before installing them.
 2. Evaluate the bistability runs (acceptance 6), then the instellation sweep in 2 % steps.
 3. Acceptance 7, after the owner's answer on netCDF.
 
+## 2026-11-17 (early morning) — P2 acceptance 5 and 6 evaluated (branch `p2-surface`)
+
+**Acceptance 5: T42 test world, 15 years, slab 50 m** (`cases/bench/p2_testworld/testworld_t42_slab50.toml`,
+binary f59dd7e, 6 threads, 8.8 h wall; climatology over years 10–15):
+
+| criterion | result | |
+|---|---|---|
+| equilibrated (`tools/equilibrium.py`) | T_s trend +0.004 K/yr; TOA − closure residual −0.79 W/m² | pass |
+| G ≤ 2.0 | **2.18**, an ocean cell at 18.1°N 75.9°E (0.8 mm/day, neighbours ~0.37) | **fail** |
+| no EF over ice-free ocean | 0 EF cells over ocean with annual sea ice ≤ 0.15 (2801 EF ocean cells, all with ice) | pass |
+| sea ice only where annual-mean `tos` is at freezing | 3233 ocean cells with annual ice > 0.15; **589** have annual-mean `tos` > T_f + 0.1 K (up to 277.1 K) | **fail as written** |
+
+- **G:** only one cell exceeds 2.0; the next is 1.76, and the largest over land is 1.71.
+  - It is a dry subtropical ocean cell next to a desert coast, not a storm: the ratio
+    of small numbers.
+  - The tropical land storms (defect 1) are absent.
+- **Sea ice and `tos`:** the 589 cells are seasonal ice between 46°S and 49°S and between
+  ~40°N and 46°N. Their annual sea ice has a median of 0.40, and their minimum monthly ice
+  is ~0.
+  - Their annual-mean `tos` is above freezing because the water is open and warm in
+    summer.
+  - Within a month, ice above 0.15 coexists with `tos` > T_f + 0.5 K in 487 of 36117
+    cell-months (1.3 %), at most 273.8 K: the months in which ice forms or melts.
+  - Where the annual ice is ≥ 0.95, `tos` ≤ 271.37 K.
+  - So there is no ice over persistently warm water, which was the prototype's
+    defect. But seasonal ice fails the annual-mean wording. See open question 8.
+- **Climate:**
+  - global T_s 274.4 K, T_as 273.3 K, P = E = 2.73 mm/day, planetary albedo 0.35;
+  - Köppen EF on 30 % of the area: sea ice poleward of ~45° in both hemispheres, the
+    same excess ice as the bistability runs (question 7);
+  - energy closure 0.17 W/m² (system and atmosphere), water closure 1.2e-3 mm/day,
+    fixer 0.37 %/day, runoff 0.19 mm/day.
+- **Figure:** `docs/figures/P2/testworld_t42_koppen.png`. Köppen classes: EF (grey)
+  poleward of ~45° and ET in a ~8° band equatorward of it; Af and Aw along the equator;
+  BWh and BSh deserts at 10–30° on the continents; Cfb across the mid-latitude oceans.
+
+**Acceptance 6** (bistability and the instellation sweep): fails, see open question 7 and
+its sweep table. No snowball down to 92 % within 6 years.
+
+**Tuning changes**: none.
+
+**Open questions**: 8 (new).
+
+**Next step**: owner decisions on questions 7 and 8, and on netCDF for acceptance 7.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -1157,3 +1202,19 @@ owner before installing them.
        otherwise.
      - Recording the transition would need longer runs (≥ 15 years) at 94–90 %. These are
        not started: question 7 is open and its physics may change.
+8. **P2 acceptance 5: G and seasonal sea ice in the test world** (2026-11-17).
+   - **G = 2.18 against ≤ 2.0:** one dry ocean cell (0.8 mm/day against ~0.37 in its
+     neighbours) at 18°N, off a desert coast. Every other cell is ≤ 1.76.
+     - The criterion is a ratio, so it trips in near-dry regions without any storm.
+     - Options:
+       - (a) keep it, and retest after P3/P4 changes the subtropics;
+       - (b) the owner adds a precipitation floor to G (e.g. only cells with neighbour
+         mean > 1 mm/day).
+   - **"Sea ice only where the annual-mean `tos` is at freezing":** seasonal ice breaks
+     this wording, with 589 cells failing. Monthly, ice coexists with water above
+     freezing only in the months it forms or melts (1.3 % of cell-months, ≤ 273.8 K).
+     - Options:
+       - (a) keep the wording;
+       - (b) the owner restates it per month, or for perennial ice (annual ice ≥ 0.95,
+         which passes).
+   - I have not changed either criterion.
