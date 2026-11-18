@@ -1,0 +1,59 @@
+# Single column over dry land at 20°N, perpetual equinox, clear sky (SPEC.md P1 acceptance 3).
+# Gray radiation (Frierson et al. 2006 optical depths; prototype SW absorption), K-profile
+# boundary layer with Louis (1979) surface exchange, dry convective adjustment, no moisture.
+# Land: heat capacity 2e5 J m⁻² K⁻¹ (the prototype land value, ≈ 0.1 m of soil at
+# 2e6 J m⁻³ K⁻¹; soil layers arrive in P2), albedo 0.3, roughness 0.1 m.
+schema = 2
+description = "SCM: dry land diurnal cycle at 20°N, equinox"
+model = "scm"
+truncation = 21
+levels = "L26"
+length = "10day"
+output_every = "30min"
+
+[scm]
+lat = 20.0
+lon = 0.0
+dt = "30min"
+t_air = 300.0
+lapse_rate = 6.5
+t_tropopause = 200.0
+wind = [5.0, 0.0]
+wind_mode = "geostrophic"
+
+[scm.surface]
+kind = "land"
+heat_capacity = 2.0e5
+albedo = 0.3
+beta = 0.0
+t_initial = 300.0
+
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0
+obliquity = 0.0
+spin = "free"
+diurnal = true
+
+[planet]
+preset = "earth"
+
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[radiation]
+scheme = "gray"
+
+[boundary_layer]
+scheme = "kprofile"
+
+[convection]
+scheme = "dry"

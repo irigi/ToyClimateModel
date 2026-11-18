@@ -9,9 +9,7 @@
 //!   T_eq = max{T_min, [T_n + ΔT_d max(0, cos φ cos(λ−λ_ss)) − Δθ_z ln(p/p₀)] (p/p₀)^κ}
 //!   with cos⁴φ in k_T replaced by max(0, cos φ cos(λ−λ_ss))⁴ (zero on the night side).
 
-use super::{ColumnIn, ColumnOut, ColumnPhysics};
-use crate::planet::Planet;
-use crate::Real;
+use crate::physics::column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
 
 const DAY: f64 = 86400.0;
 
@@ -44,17 +42,18 @@ impl Damping {
         ((sigma - self.sigma_b) / (1.0 - self.sigma_b)).max(0.0)
     }
     /// Rayleigh friction on u, v and Newtonian cooling of T with latitude weight `w4`
-    /// (cos⁴φ for HS) towards `teq(p)`.
-    fn apply(&self, col: &ColumnIn, out: &mut ColumnOut, w4: f64, teq: impl Fn(f64) -> f64) {
-        for k in 0..col.t.len() {
-            let sigma = col.sigma[k] as f64;
+    /// (cos⁴φ for HS) towards `teq(p)`. Rates from the provisional state (forward Euler).
+    fn apply(&self, ctx: &ColumnCtx, st: &mut ColumnState, w4: f64, teq: impl Fn(f64) -> f64) {
+        for k in 0..st.nlev {
+            let sigma = ctx.sigma[k];
             let bl = self.bl(sigma);
             let kv = self.kf * bl;
             let kt = self.ka + (self.ks - self.ka) * bl * w4;
-            let p = sigma * col.ps as f64;
-            out.du[k] -= (kv * col.u[k] as f64) as Real;
-            out.dv[k] -= (kv * col.v[k] as f64) as Real;
-            out.dt[k] -= (kt * (col.t[k] as f64 - teq(p))) as Real;
+            let p = sigma * ctx.ps;
+            let (du, dv, dt) = (-(kv * st.u[k]), -(kv * st.v[k]), -(kt * (st.t[k] - teq(p))));
+            st.add_u(k, du);
+            st.add_v(k, dv);
+            st.add_t(k, dt);
         }
     }
 }
@@ -101,17 +100,24 @@ impl HeldSuarez {
     }
 }
 
-impl ColumnPhysics for HeldSuarez {
+impl ColumnScheme for HeldSuarez {
     fn name(&self) -> &'static str {
         "held_suarez"
     }
-    fn tendencies(&self, planet: &Planet, col: &ColumnIn, out: &mut ColumnOut) {
-        let kappa = planet.kappa();
-        let lat = col.lat as f64;
+    fn apply(
+        &self,
+        ctx: &ColumnCtx,
+        st: &mut ColumnState,
+        _sfc: &mut SurfaceExchange,
+        _diag: &mut [f64],
+        _work: &mut Workspace,
+    ) {
+        let kappa = ctx.planet.kappa();
+        let lat = ctx.lat;
         let w4 = lat.cos().powi(4);
         let (s2, c2) = (lat.sin().powi(2), lat.cos().powi(2));
         self.damping
-            .apply(col, out, w4, |p| self.t_eq_sc(kappa, s2, c2, p));
+            .apply(ctx, st, w4, |p| self.t_eq_sc(kappa, s2, c2, p));
     }
 }
 
@@ -160,17 +166,23 @@ impl TidallyLocked {
     }
 }
 
-impl ColumnPhysics for TidallyLocked {
+impl ColumnScheme for TidallyLocked {
     fn name(&self) -> &'static str {
         "tidally_locked"
     }
-    fn tendencies(&self, planet: &Planet, col: &ColumnIn, out: &mut ColumnOut) {
-        let kappa = planet.kappa();
-        let (lat, lon) = (col.lat as f64, col.lon as f64);
-        let mu = self.mu_star(lat, lon);
+    fn apply(
+        &self,
+        ctx: &ColumnCtx,
+        st: &mut ColumnState,
+        _sfc: &mut SurfaceExchange,
+        _diag: &mut [f64],
+        _work: &mut Workspace,
+    ) {
+        let kappa = ctx.planet.kappa();
+        let mu = self.mu_star(ctx.lat, ctx.lon);
         let w4 = mu.powi(4);
         self.damping
-            .apply(col, out, w4, |p| self.t_eq_mu(kappa, mu, p));
+            .apply(ctx, st, w4, |p| self.t_eq_mu(kappa, mu, p));
     }
 }
 

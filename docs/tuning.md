@@ -21,6 +21,9 @@ until then are reproducible; do not tune).
 | Date | Parameter | Old → new | Reason, evidence |
 |---|---|---|---|
 | 2026-11-15 | — | — | Register created in P0 from the prototype code (commit 0f7d33a). No values changed. |
+| 2026-11-16 | P1 surface exchange and boundary layer | new | Defaults from Louis (1979), Frierson et al. (2006) and SPEC.md §9.4.2–9.4.3; not tuned (tuning is P4–P6). World cases: TJ16 exchange and Rayleigh drag removed. |
+| 2026-11-16 | `tau_sw` in the APE benchmark cases | 0.22 → 0 | Not tuning: the benchmark configuration follows Frierson et al. (2006, no SW absorption). With 0.22 along the slant path the gray scheme heats the polar upper troposphere by several K/day at low sun (P1 SCM diagnosis). World cases keep 0.22 until P3 replaces the radiation. |
+| 2026-11-16 | `[dynamics] tracer_transport` in the moist world and APE cases | spectral → semi_lagrangian | Not tuning: SPEC.md §9.8 remedy after the tracer-fixer trigger fired (2.3%/day of the vapour mass at T42). |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -58,9 +61,6 @@ until then are reproducible; do not tune).
 | Surface albedo (gray) | `albedo` | 0.3 | proto | Frierson et al. (2006) |
 | SBM relaxation time τ | `tau_convection` | 2 h | knob (P1/P5) | Frierson (2007) |
 | SBM reference RH | `rh_convection` | 0.7 | knob (P1/P5) | Frierson (2007) |
-| Surface exchange C_H = C_E | `c_h`, `c_e` | 0.0044 | proto | TJ16; replaced by bulk formulas (P1) |
-| Boundary-layer mixing p_pbl, p_strato | `p_pbl`, `p_strato` | 850, 100 hPa | proto | TJ16; replaced by K-profile (P1) |
-| Rayleigh drag k_f, σ_b | `tau_friction`, `sigma_b` | 1 d, 0.7 | proto | HS94; removed from worlds in P1 |
 | Clouds RH_c, SW reflect, LW τ | `cloud_rh_crit`, `cloud_sw_reflect`, `cloud_lw_tau` | 0.8, 0.25, 3 | proto (experimental) | none (untuned); replaced in P4 |
 
 ## Prototype surface (`[surface]`; replaced in P2)
@@ -89,3 +89,43 @@ until then are reproducible; do not tune).
 
 Added here with their defaults and sources as each scheme is implemented (SPEC.md §9.4,
 marked **[knob]** there).
+
+### Surface exchange and boundary layer (P1, `[boundary_layer] scheme = "kprofile"`)
+
+| Parameter | Key | Default | Range | Status | Source |
+|---|---|---|---|---|---|
+| Gustiness w_g | `gustiness` | 1 m s⁻¹ | 0–3 | knob | SPEC.md §9.4.2 |
+| Charnock constant α | `charnock` | 0.018 | 0.011–0.035 | knob | SPEC.md §9.4.2 (common NWP value) |
+| Minimum ocean roughness | `z0_ocean_min` | 1.5e-5 m | — | knob | SPEC.md §9.4.2 |
+| Land roughness (no map) | `z0_land` | 0.1 m | 0.01–1 | knob | SPEC.md §9.4.2 |
+| Sea-ice and snow roughness | `z0_ice` | 1e-3 m | — | knob | SPEC.md §9.4.2 |
+| z₀h / z₀m over land and ice | `z0h_ratio` | 0.1 | 0.01–1 | knob | SPEC.md §9.4.2 |
+| Gust factors (unstable, stable) | `gust_unstable`, `gust_stable` | 3, 1 | — | knob (P8 calibrates) | SPEC.md §9.4.2 placeholder |
+| Critical Richardson number Ri_c | `ri_crit` | 1 | 0.25–1 | knob | Frierson et al. (2006) Table 1 |
+| Surface-layer fraction f_b | `surface_layer_fraction` | 0.1 | — | fixed | Frierson et al. (2006) Table 1 |
+| Background diffusivity above h | `background_k` | 0 m² s⁻¹ | 0–1 | knob | SPEC.md §9.4.3; 0 as in Frierson et al. (2006) |
+| Frictional heating | `frictional_heating` | true | — | fixed | SPEC.md §9.4.3 |
+| von Kármán κ | (code) | 0.4 | — | fixed | SPEC.md §9.4.2 |
+| Louis b, b′, C*_m, C*_h | (code) | 9.4, 4.7, 7.4, 5.3 | — | fixed | Louis (1979) eqs. 14–15, 20 |
+| Businger γ_m, γ_h, β, R (2 m/10 m diagnostics) | (code) | 15, 9, 4.7, 0.74 | — | fixed | Businger et al. (1971) via Louis (1979) eqs. 6–9 |
+
+### Dynamics (P1, `[dynamics]`)
+
+| Parameter | Key | Default | Range | Status | Source |
+|---|---|---|---|---|---|
+| Hyperdiffusion energy fixer | `energy_fixer` | false (worlds: true) | — | fixed | SPEC.md §9.4.3 |
+| Sponge on/off | `sponge.enabled` | false | — | decision rule §9.8 | SPEC.md §9.4.3 |
+| Sponge bottom σ | `sponge.sigma_top` | 0.02 | — | knob | SPEC.md §9.4.3 |
+| Sponge time at the top level | `sponge.tau` | 1 day | — | knob | SPEC.md §9.4.3 |
+| Tracer transport | `tracer_transport` | `"spectral"` (moist worlds and APE: `"semi_lagrangian"`) | — | decision rule §9.8 (fired in P1) | SPEC.md §9.8 |
+| SL midpoint iterations | (code) | 3 | — | fixed | Ritchie (1987) |
+| SL interpolation | (code) | cubic Lagrange 4×4, clipped to the 2×2 range | — | fixed | Bermejo & Staniforth (1992) |
+| SL vertical Courant number per sub-step | (code) | 0.5 | — | fixed | numerical (MUSCL, van Leer limiter) |
+| Time filter of grid-point tracers | (code) | Robert–Asselin, ν as `[time_filter]`, α = 1 | — | fixed | positivity (all weights ≥ 0) |
+
+### Convection (P1)
+
+| Parameter | Key | Default | Status | Source |
+|---|---|---|---|---|
+| Dry adjustment | `[convection] scheme = "dry"` or with `"sbm"` | on | fixed | SPEC.md §9.4.3 |
+| SBM τ, RH_ref | `[convection] tau`, `rh_ref` | 2 h, 0.7 | knob (P5) | Frierson (2007) |

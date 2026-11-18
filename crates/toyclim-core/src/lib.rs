@@ -20,6 +20,7 @@ pub mod physics;
 pub mod planet;
 pub mod primitive;
 pub mod runtime;
+pub mod scm;
 pub mod shallow_water;
 pub mod spectral;
 pub mod stations;

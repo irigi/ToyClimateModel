@@ -13,15 +13,3 @@ impl Surface {
         }
     }
 }
-
-/// Bucket update on land points: W ← clamp(W + Δt (P − E), 0, W_max); water above the
-/// capacity runs off and leaves the system.
-pub(super) fn bucket_step(s: &mut Surface, dt: f64, precip: &[Real], evap: &[Real]) {
-    let cap = s.bucket_capacity as Real;
-    for p in 0..s.bucket.len() {
-        if s.land_fraction[p] >= 0.5 {
-            let w = s.bucket[p] + dt as Real * (precip[p] - evap[p]);
-            s.bucket[p] = w.clamp(0.0, cap);
-        }
-    }
-}

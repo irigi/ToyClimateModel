@@ -13,6 +13,8 @@ pub enum ModelKind {
     Dummy,
     ShallowWater,
     Primitive,
+    /// Single-column model (`toyclim scm`, SPEC.md §9.5.1).
+    Scm,
 }
 
 impl ModelKind {
@@ -20,6 +22,7 @@ impl ModelKind {
         match self {
             ModelKind::Dummy => "dummy",
             ModelKind::ShallowWater => "shallow_water",
+            ModelKind::Scm => "scm",
             ModelKind::Primitive => "primitive",
         }
     }
@@ -201,11 +204,10 @@ fn default_initial_q() -> String {
 }
 
 impl MoistureConfig {
-    pub fn resolve(&self) -> Result<crate::physics::moist::Condensable, ConfigError> {
-        let mut c =
-            crate::physics::moist::Condensable::preset(&self.condensable).ok_or_else(|| {
-                ConfigError::Invalid(format!("unknown condensable {:?}", self.condensable))
-            })?;
+    pub fn resolve(&self) -> Result<crate::physics::Condensable, ConfigError> {
+        let mut c = crate::physics::Condensable::preset(&self.condensable).ok_or_else(|| {
+            ConfigError::Invalid(format!("unknown condensable {:?}", self.condensable))
+        })?;
         if let Some(v) = self.latent_heat {
             c.latent_heat = v;
         }
@@ -393,4 +395,48 @@ pub struct StationConfig {
     pub lat: f64,
     /// Longitude \[degrees east\].
     pub lon: f64,
+}
+
+/// A typed physics block: `scheme` plus that scheme's parameters (checked when the
+/// physics is built).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemeConfig {
+    pub scheme: String,
+    #[serde(flatten)]
+    pub params: toml::Table,
+}
+
+impl SchemeConfig {
+    pub fn new(scheme: &str, params: toml::Table) -> Self {
+        SchemeConfig {
+            scheme: scheme.into(),
+            params,
+        }
+    }
+}
+
+/// World physics from the typed blocks of config schema 2 (SPEC.md §9.3.2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PhysicsConfig {
+    pub radiation: SchemeConfig,
+    pub boundary_layer: SchemeConfig,
+    pub convection: Option<SchemeConfig>,
+    pub condensation: Option<toml::Table>,
+    pub clouds: Option<SchemeConfig>,
+}
+
+/// Dynamical-core options of Phase 2 (`[dynamics]`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicsConfig {
+    /// Return the kinetic energy removed by hyperdiffusion as a uniform heating
+    /// (SPEC.md §9.4.3; off for Part I cases).
+    #[serde(default)]
+    pub energy_fixer: bool,
+    /// `[dynamics.sponge]`: `enabled`, `sigma_top` (0.02), `tau` ("1day").
+    pub sponge: Option<toml::Table>,
+    /// Tracer (humidity) transport: `"spectral"` (default; Part I and the idealized
+    /// comparators) or `"semi_lagrangian"` (grid-point, SPEC.md §9.8).
+    pub tracer_transport: Option<String>,
 }

@@ -56,8 +56,15 @@ pub struct Config {
     pub initial_condition: InitialCondition,
     #[serde(default)]
     pub planet: PlanetConfig,
-    /// Forcing block (free-form until M5 defines it).
+    /// Idealized physics bundle (`type = "held_suarez" | "tidally_locked" |
+    /// "moist_held_suarez"`, or the schema-1 alias `"gray_aquaplanet"`).
     pub forcing: Option<toml::Table>,
+    /// World physics from the typed blocks of schema 2.
+    pub physics: Option<PhysicsConfig>,
+    /// Dynamical-core options (energy fixer, sponge).
+    pub dynamics: Option<DynamicsConfig>,
+    /// Single-column settings (`model = "scm"`), see `crate::scm`.
+    pub scm: Option<toml::Table>,
     #[serde(default)]
     pub diffusion: DiffusionConfig,
     #[serde(default)]
@@ -117,6 +124,38 @@ impl Config {
         Ok(c)
     }
 
+    /// Build the physics once to check scheme names and parameters.
+    fn validate_physics(&self) -> Result<(), ConfigError> {
+        let inv = |e: String| ConfigError::Invalid(e);
+        let cond = self.moisture.as_ref().map(|m| m.resolve()).transpose()?;
+        let sponge = self.dynamics.as_ref().and_then(|d| d.sponge.as_ref());
+        if let Some(t) = self
+            .dynamics
+            .as_ref()
+            .and_then(|d| d.tracer_transport.as_deref())
+        {
+            if !matches!(t, "spectral" | "semi_lagrangian") {
+                return Err(inv(format!(
+                    "[dynamics] tracer_transport = \"{t}\": expected \"spectral\" or \"semi_lagrangian\""
+                )));
+            }
+        }
+        match &self.physics {
+            Some(pc) => {
+                crate::physics::build_world(pc, sponge, cond.as_ref()).map_err(inv)?;
+            }
+            None => {
+                if sponge.is_some() {
+                    return Err(inv("[dynamics.sponge] needs the typed world physics".into()));
+                }
+                let planet = self.planet.resolve()?;
+                crate::physics::build(self.forcing.as_ref(), &planet, cond.as_ref())
+                    .map_err(inv)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Read, parse and validate a TOML file.
     pub fn from_file(path: &Path) -> Result<Self, ConfigError> {
         let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
@@ -155,6 +194,10 @@ impl Config {
                 }
             }
         }
+        if self.forcing.is_some() && self.physics.is_some() {
+            return bad("use either [forcing] (an idealized bundle) or the typed physics blocks");
+        }
+        self.validate_physics()?;
         if let Some(se) = self.station_every {
             let r = se.0 / self.dt.0;
             if se.0 <= 0.0 || (r - r.round()).abs() > 1e-9 * r.max(1.0) {
@@ -169,9 +212,17 @@ impl Config {
                 return bad("station names must be non-empty and contain no slashes");
             }
         }
-        if self.model == ModelKind::Primitive && self.levels.is_none() && self.sigma_half.is_none()
+        if matches!(self.model, ModelKind::Primitive | ModelKind::Scm)
+            && self.levels.is_none()
+            && self.sigma_half.is_none()
         {
             return bad("primitive model needs `levels` or `sigma_half`");
+        }
+        if (self.model == ModelKind::Scm) != self.scm.is_some() {
+            return bad("an [scm] block goes with model = \"scm\" (and only there)");
+        }
+        if let Some(s) = &self.scm {
+            crate::scm::ScmSettings::parse(s).map_err(ConfigError::Invalid)?;
         }
         self.planet.resolve()?;
         Ok(())

@@ -1,8 +1,9 @@
-//! Lowering of the typed physics and surface blocks of schema 2 to the prototype bundle
-//! (`[forcing] type = "gray_aquaplanet"`) and the schema-1 `[surface]` table.
+//! Lowering of the typed physics and surface blocks of schema 2 to the internal
+//! [`crate::config::PhysicsConfig`] and the schema-1 `[surface]` table.
 
 use super::{copy_params, invalid, put, ConfigV2, SurfaceV2};
 use crate::config::ConfigError;
+use crate::config::SchemeConfig;
 use toml::{Table, Value};
 
 pub(super) fn lower_physics(c: &ConfigV2, t: &mut Table) -> Result<(), ConfigError> {
@@ -23,92 +24,33 @@ pub(super) fn lower_physics(c: &ConfigV2, t: &mut Table) -> Result<(), ConfigErr
     if !typed {
         return Ok(());
     }
-    let not_yet = |what: &str| invalid(format!("{what} is not implemented yet"));
-    let mut f = Table::new();
-    put(&mut f, "type", "gray_aquaplanet");
-    let rad = c
-        .radiation
-        .as_ref()
-        .ok_or_else(|| invalid("world physics needs a [radiation] block"))?;
-    match rad.scheme.as_str() {
-        "gray" => copy_params(
-            "radiation",
-            &rad.params,
-            &[
-                ("tau_eq", "tau_eq"),
-                ("tau_pole", "tau_pole"),
-                ("f_linear", "f_linear"),
-                ("tau_q", "tau_q"),
-                ("tau_sw", "tau_sw"),
-                ("albedo", "albedo"),
-                ("t_surface_default", "sst_uniform"),
-            ],
-            &mut f,
-        )?,
-        "semigray" => return Err(not_yet("radiation scheme \"semigray\" (P3)")),
-        other => return Err(invalid(format!("unknown radiation scheme {other:?}"))),
+    let block = |b: &Option<SchemeConfig>| {
+        b.as_ref().map(|b| {
+            let mut x = b.params.clone();
+            x.insert("scheme".into(), Value::from(b.scheme.as_str()));
+            Value::Table(x)
+        })
+    };
+    let mut p = Table::new();
+    p.insert(
+        "radiation".into(),
+        block(&c.radiation).ok_or_else(|| invalid("world physics needs a [radiation] block"))?,
+    );
+    p.insert(
+        "boundary_layer".into(),
+        block(&c.boundary_layer)
+            .ok_or_else(|| invalid("world physics needs a [boundary_layer] block"))?,
+    );
+    if let Some(v) = block(&c.convection) {
+        p.insert("convection".into(), v);
     }
-    let bl = c
-        .boundary_layer
-        .as_ref()
-        .ok_or_else(|| invalid("world physics needs a [boundary_layer] block"))?;
-    match bl.scheme.as_str() {
-        "tj16" => copy_params(
-            "boundary_layer",
-            &bl.params,
-            &[
-                ("c_h", "c_h"),
-                ("c_e", "c_e"),
-                ("p_pbl", "p_pbl"),
-                ("p_strato", "p_strato"),
-                ("drag_time", "tau_friction"),
-                ("drag_sigma_b", "sigma_b"),
-            ],
-            &mut f,
-        )?,
-        "kprofile" => return Err(not_yet("boundary_layer scheme \"kprofile\" (P1)")),
-        other => return Err(invalid(format!("unknown boundary_layer scheme {other:?}"))),
+    if let Some(v) = block(&c.clouds) {
+        p.insert("clouds".into(), v);
     }
-    match &c.convection {
-        None => put(&mut f, "convection", "none"),
-        Some(c) => match c.scheme.as_str() {
-            "sbm" | "none" => {
-                put(&mut f, "convection", c.scheme.as_str());
-                copy_params(
-                    "convection",
-                    &c.params,
-                    &[("tau", "tau_convection"), ("rh_ref", "rh_convection")],
-                    &mut f,
-                )?
-            }
-            "dry" => return Err(not_yet("convection scheme \"dry\" (P1)")),
-            other => return Err(invalid(format!("unknown convection scheme {other:?}"))),
-        },
+    if let Some(cd) = &c.condensation {
+        put(&mut p, "condensation", Value::Table(cd.clone()));
     }
-    if c.condensation.as_ref().is_some_and(|c| c.reevaporation) {
-        return Err(not_yet("condensation.reevaporation (P2)"));
-    }
-    if let Some(c) = &c.clouds {
-        match c.scheme.as_str() {
-            "none" => {}
-            "rh_prototype" => {
-                put(&mut f, "clouds", true);
-                copy_params(
-                    "clouds",
-                    &c.params,
-                    &[
-                        ("rh_crit", "cloud_rh_crit"),
-                        ("sw_reflect", "cloud_sw_reflect"),
-                        ("lw_tau", "cloud_lw_tau"),
-                    ],
-                    &mut f,
-                )?
-            }
-            "diagnostic" => return Err(not_yet("clouds scheme \"diagnostic\" (P4)")),
-            other => return Err(invalid(format!("unknown clouds scheme {other:?}"))),
-        }
-    }
-    t.insert("forcing".into(), Value::Table(f));
+    t.insert("physics".into(), Value::Table(p));
     Ok(())
 }
 
