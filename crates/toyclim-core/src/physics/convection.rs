@@ -234,6 +234,8 @@ impl ColumnScheme for SimplifiedBettsMiller {
         sfc.rain += rain;
         sfc.snow += snow;
         diag[0] += precip;
+        st.conv_precip += precip;
+        st.conv_top = st.conv_top.min(top);
     }
 }
 

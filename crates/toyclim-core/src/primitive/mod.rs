@@ -512,6 +512,13 @@ impl Model for Primitive {
         }
         let mut curr = std::mem::replace(&mut self.curr, next);
         if !first {
+            // water mass of the grid-point tracers before the filter (the filters of ln p_s
+            // and of q both change ∫ q dp; restored below)
+            let gq_mass: Vec<f64> = curr
+                .gq
+                .iter()
+                .map(|q| self.grid_tracer_mass(q, &curr.lnps))
+                .collect();
             let f = self.settings.filter;
             let (p, c) = (&self.prev, &mut self.curr);
             f.apply(
@@ -544,6 +551,21 @@ impl Model for Primitive {
                 let (pq, nq) = (p.gq[it].as_slice(), c.gq[it].as_slice());
                 for ((x, a), b) in curr.gq[it].as_mut_slice().iter_mut().zip(pq).zip(nq) {
                     *x += h * (*a - 2.0 * *x + *b);
+                }
+            }
+            // The filter is not mass-conserving: it changes the global tracer mass by the
+            // time second difference of the mass, which the physics' 2Δt noise feeds (P4
+            // diagnosis: 1.8e-3 mm/day of water at T21 with semigray radiation, the whole
+            // water-closure residual). Restore the pre-filter mass multiplicatively; the
+            // local smoothing stays.
+            for (it, &m0) in gq_mass.iter().enumerate() {
+                let m1 = self.grid_tracer_mass(&curr.gq[it], &curr.lnps);
+                if m1 > 0.0 {
+                    let scale = (m0 / m1) as Real;
+                    curr.gq[it]
+                        .as_mut_slice()
+                        .iter_mut()
+                        .for_each(|x| *x *= scale);
                 }
             }
         }
