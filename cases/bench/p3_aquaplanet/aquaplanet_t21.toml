@@ -73,10 +73,14 @@ geography = "aquaplanet"
 
 [surface.ocean]
 model = "slab"
-# raised from 0.06 to stand in for clouds (SPEC.md P3 acceptance 4): gives a planetary
-# albedo of 0.29 for the global-mean clear column (288 K, 25 kg m⁻² water, cos zenith 0.5;
-# offline with toyclim radiation, P3 progress entry)
-albedo = 0.38
+# raised from 0.06 to stand in for clouds (SPEC.md P3 acceptance 4). Clear-sky radiation
+# has no cloud greenhouse effect, so the stand-in carries the net cloud effect: the value
+# puts the warm start (global T_s 285 K) in top-of-atmosphere balance. Measured in 60-day
+# runs from this start (P3 progress entry, 2026-11-18): ocean albedo 0.22 / 0.26 / 0.30 →
+# planetary albedo 0.225 / 0.252 / 0.279, net TOA +5.3 / −2.3 / −11.0 W m⁻². The first
+# choice, 0.38 (planetary albedo 0.29 from one offline global-mean column), froze the
+# planet over in 10 years.
+albedo = 0.25
 mixed_layer_depth = 20.0
 initial = "tj16"
 
