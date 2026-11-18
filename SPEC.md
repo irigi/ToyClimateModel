@@ -1438,6 +1438,50 @@ tunable) on an Earth-like aquaplanet and on the Earth AMIP configuration of P5.
    2×CO₂ equilibrium warming 1.5–6 K (*record* the value).
 5. Energy closure within 0.5 W m⁻².
 
+**Completion plan (added 2026-11-18, after the first full P4 runs; the criteria above are
+unchanged).** Evidence: `docs/progress.md`, entry "P4 first full evaluation", and open
+question 11. Do the steps in this order, because each one can change what the next measures.
+
+1. **Measure equilibrium properly.** §9.5.2 asks for a 5-year T_s trend, but
+   `tools/equilibrium.py` fits six instantaneous yearly values, whose weather noise
+   (standard deviation ≈ 0.2 K) swamps the 0.02 K/yr limit. Write the diagnostics at an
+   interval independent of `output_every`, compute annual means, and keep the limit. Extend
+   both slab runs by 5 years from their year-30 restarts. In the same step, make the
+   scorecard's `planetary_albedo` use the climatology maps, and restrict its jet metric to
+   the troposphere (it now reports the model-top level).
+2. **Attribute the 2×CO₂ warming (6.87 K against 1.5–6 K).**
+   - Repeat the 400/800 ppm pair with `[surface.sea_ice] enabled = false`, 12 years. This
+     is a diagnostic pair, not a case to accept.
+   - Measure the global 2×CO₂ instantaneous forcing on saved model states, and compare with
+     RRTMG on the same columns. The calibration column gives 4.91 against 4.12 W m⁻².
+3. **Act on the result of step 2, by cause.**
+   - Forcing too strong: correct the CO₂ term of the semi-gray calibration against RRTMG and
+     rerun the P3 radiation tests. This is a radiation fix.
+   - Sea ice dominant: check the ice scheme against §9.4.5 and its sources. Ice knobs may
+     move within `docs/tuning.md` only for an Earth target (for example, the observed
+     sea-ice extent).
+   - Neither: record it under question 11.
+   - **Never choose a knob value because it brings the 2×CO₂ warming into range.**
+4. **Fix the zonal cloud shape (criterion 3).** Cover rises toward the North Pole (0.87) and
+   the northern storm track is not a local maximum. First explore the RH_c knobs within
+   their ranges at T21, against the Earth targets. If that fails, treat it as a physics
+   change: find the published treatment of cold, dry polar air, implement it with
+   single-column tests, and log it. Less polar cloud can strengthen the ice-albedo feedback,
+   so recheck step 2 afterwards.
+5. **Freeze the cloud knobs and rerun the gate:** Earth AMIP T42 (1 + 5 years) and the
+   400/800 ppm slab pair, then `scripts/regress`.
+6. **Retest with the frozen physics:** the APE Control T42 gate (open question 6) and the
+   P2 bistability pair with clouds (open question 7), then the P2 instellation sweep
+   (*record*). Their results go to the owner; they do not change the P4 criteria.
+
+**Placement relative to P5.** Steps 1, 2, 4 and 5 and any radiation fix from step 3 come
+before P5, because P5 must score frozen clouds and radiation. If only the 2×CO₂ row remains
+open after step 3, it stays with the owner (§10 item 3) and P5 may start: P5 prescribes SST
+and sea ice, so it does not depend on that row. P6 does not start until the owner has ruled
+on it, because a coupled ocean and interactive ice depend on these feedbacks. P5 rows that
+concern precipitation, snow and cost stay in P5 (first reading in `docs/progress.md`); they
+are not reasons to retune clouds in P4. Measure the P5 cost on an otherwise idle machine.
+
 #### P5 — Earth gate (atmosphere and land, prescribed ocean)
 
 Earth topography and land fraction, observed monthly SST and sea-ice climatology
