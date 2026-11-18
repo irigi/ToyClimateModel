@@ -4,7 +4,9 @@
 
 **The plan is `SPEC.md`.** Part I (M0–M6) is accepted. Part II (§9) defines Phase 2,
 milestones **P0–P11**, and replaces the old sketch of M7–M12. Continue at the lowest unmet
-milestone in SPEC.md §9.6 — currently **P1** (P0 done 2026-11-15; P1 blocked on one APE gate row, question 6; owner decision open, question 3).
+milestone in SPEC.md §9.6. P1–P3 each carry an open row that the owner sent to a retest
+after P4 (questions 6, 7, 10), so the current work is **the P4 completion plan** (SPEC.md §9.6,
+P4). PRs #5–#7 (P1–P3) are proposed for merging; #8 (P4) stays a draft.
 
 - The physics, surface and tools built on 2026-11-04/05 as "M7–M11 first steps" are a
   **prototype** (SPEC.md §9.1): they run and conserve energy and water, but have no
@@ -36,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | not started |
+| P4 Clouds, Earth-like energy balance | 2026-11-18 (PR #8, draft): acceptance 1, 2 and 5 met; 3 fails on the zonal cloud shape (cover 0.56 passes); 4: T_s 286.5 K passes, 2×CO₂ warming 6.87 K fails (limit 6), the equilibrium test fails on snapshot noise. Completion plan in SPEC.md §9.6 P4; question 11 |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -1398,6 +1400,65 @@ do not apply).
 **Next step**: P4 clouds. Acceptance 1 and 2 wait for the owner (question 9), and 4 for
 question 10. The water-closure defect is to diagnose early in P4.
 
+## 2026-11-18 — P4 first full evaluation (branch `p4-clouds`)
+
+**Runs** (binary of 8952c80's physics, recorded as `21f46f8-dirty`; no change under `crates/`
+since, except formatting; cloud knobs untuned, at their `docs/tuning.md` defaults):
+- `out/p4/aquaplanet_t21`, `out/p4/aquaplanet_t21_800`: T21 L26, Δt 20 min, slab 20 m, sea ice,
+  seasons, diurnal cycle, 1361 W m⁻², 400 and 800 ppm, 30 years; climatology over years 26–30.
+- `out/p4/earth_amip_t42`: T42 L26, Δt 15 min, 1 + 5 years.
+- No NaN; all three exited normally. No figures were produced for this entry.
+
+**Acceptance:**
+
+| # | Criterion | Measured | State |
+|---|---|---|---|
+| 1 | Albedo 0.27–0.33; OLR 228–250; net TOA ±8 | 0.294; 241.9 W m⁻²; −1.77 W m⁻² | met |
+| 2 | SW CRE −30 to −60; LW CRE +15 to +35 | −49.6; +20.7 W m⁻² | met |
+| 3 | Cover 0.5–0.75; ITCZ and storm-track maxima, subtropical minima | 0.561; NH cover rises to 0.87 at the pole, storm track not a local maximum | **not met** (shape) |
+| 4 | Equilibrated, T_s 283–293 K, 2×CO₂ +1.5–6 K | 286.53 K; 293.40 K at 800 ppm: **+6.87 K**; 5-year trend −0.043 / −0.049 K/yr | **not met** |
+| 5 | Energy closure ≤ 0.5 W m⁻² | Earth 0.31; aquaplanet 0.10 / 0.05 | met |
+
+**Equilibrium.** Net TOA over the last 5 years is −0.17 / −0.16 W m⁻² (400 / 800 ppm); TOA minus
+the closure residual is −0.08 / −0.11 W m⁻². The trend test fails, but it fits six instantaneous
+yearly values with a standard deviation of 0.24 / 0.18 K. Over all 5-year windows after year
+10, only 6 % / 12 % pass. The 20-year trends are −0.004 / +0.004 K/yr.
+
+**The 2×CO₂ response** (years 26–30, 800 minus 400 ppm):
+- Sea-ice cover 0.131 → 0.021. Annual ice edge (concentration ≥ 0.15) at about 58° at 400 ppm;
+  the P3 stand-in run reached 41.5°.
+- Warming by band: 5.9 K at 0–30°, 4.0 K at 30–50°, 12.4 K at 50–90°.
+- Global TOA changes (W m⁻²): clear-sky ASR +9.65, clear-sky OLR +4.61, SW CRE −3.79,
+  LW CRE −1.06. Poleward of 50° supplies +9.11 of the clear-sky ASR and −5.0 of the SW CRE
+  (cloud masking of the lost ice).
+- At 0–30°: SW CRE +2.6 and LW CRE −2.2 W m⁻² as global contributions, so nearly cancelling;
+  cloud cover −0.06.
+- The calibration column has a 2×CO₂ forcing of 4.91 W m⁻² against RRTMG's 4.12 (P3 entry). The
+  global forcing has not been measured, so its share of the warming is unknown.
+
+**Slab aquaplanet climate** (400 / 800 ppm): albedo 0.330 / 0.313 from the maps (the scorecard's
+0.321 / 0.307 averages six snapshots); precipitation 2.79 / 3.33 mm/day; G 1.21 / 1.29;
+tropospheric jet (σ > 0.1) 32 / 50.5 m/s at 25°; lowest-level westerlies peak at 64° / 42°;
+spectral Courant 0.60 / 0.69. The six APE rows would pass in both runs, but these are T21 slab
+runs, not the APE Control gate.
+
+**Earth AMIP scored against P5 (record only):** 16 of 19 rows would pass. The three failures:
+- zonal precipitation correlation 0.813 (≥ 0.85);
+- NH February snow 23.1 million km² (35–58);
+- cost 71.7 min per model year (≤ 30). The two aquaplanet runs shared the machine until the
+  last 34 minutes, so this is not a clean measurement. The last year, mostly alone, took
+  50 min, so the row may still fail on an idle machine.
+Water closure is 4.5e-7 mm/day and G 1.81.
+
+**Scorecards:** `docs/scorecards/P4_earth_energy_2026-11-18.json`,
+`P4_earth_amip_2026-11-18.json`, `P4_aquaplanet_slab_400ppm_2026-11-18.json`,
+`P4_aquaplanet_slab_800ppm_2026-11-18.json`. The last three are record-only.
+
+**Tuning changes:** none. **Open questions:** 11 (new); 6, 7 and 10 updated.
+
+**Next step:** the P4 completion plan in SPEC.md §9.6, starting with the equilibrium measurement
+and the attribution of the 2×CO₂ warming.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -1488,6 +1549,21 @@ question 10. The water-closure defect is to diagnose early in P4.
        `docs/figures/P1/ape_{t42_sl,t63}_{zonal_mean,moist}.png`.
      - Conclusion: per the owner's decision, the row stays open for the P3/P4 retest; P2
        proceeds.
+   - **P3 retest (2026-11-18):** T42 semi-Lagrangian with the semi-gray radiation and the
+     Earth ozone column, the top reflectance tuned to 0.165 (planetary albedo 0.256), years
+     2–4 (`docs/scorecards/P1_aquaplanet_t42_semigray_2026-11-18.json`):
+     - surface westerlies span 24°–46° (peak 8.5 m/s at 35°), easterlies from 49°, minimum
+       −6.1 m/s at 60°. That is worse than gray (−3.69 m/s); the jet is at 32° (55 m/s)
+       and the Hadley edge at 23.5°.
+     - The other five rows pass (G 1.16, P = E to 0.03 %, energy closure 0.05 W m⁻²).
+     - Radiation is therefore not the cause. Clear-sky semi-gray radiation sharpens the
+       jet and keeps it equatorward. The row stays open for the P4 retest with clouds.
+       Clouds are the last candidate named under "Likely candidates"; if they do not move
+       the westerlies, the remaining option is (c).
+   - **P4 note (2026-11-18):** the T21 slab aquaplanets with clouds have westerlies at every
+     latitude 35–60° (minimum +4.1 m/s at 400 ppm). This is not the retest: the APE Control
+     gate (T42, prescribed SST) has not been run with clouds. It is step 6 of the P4
+     completion plan. The row stays open.
 7. **P2 bistability: one climate, with ice to ~45°** (2026-11-16; P2 acceptance 6).
    - **What fails:** the T21 aquaplanet (slab 20 m, sea ice, seasons, 1361 W/m², 12 years)
      reaches the same climate from both starts (`cases/bench/p2_bistability/`):
@@ -1541,6 +1617,9 @@ question 10. The water-closure defect is to diagnose early in P4.
      - the heat transport is ruled out as the cause.
      - Under semigray radiation without a top reflectance, the P3 aquaplanet has the same
        41.5° edge but then slides colder (question 10).
+   - **P4 note (2026-11-18):** with clouds, the 400 ppm slab aquaplanet keeps its annual ice
+     edge near 58°, which is what the warm branch needs. The ice-covered start has not been
+     run with clouds, so acceptance 6 stays open until step 6 of the P4 completion plan.
 8. **P2 acceptance 5: G and seasonal sea ice in the test world** (2026-11-17).
    - **G = 2.18 against ≤ 2.0:** one dry ocean cell (0.8 mm/day against ~0.37 in its
      neighbours) at 18°N, off a desert coast. Every other cell is ≤ 1.76.
@@ -1620,3 +1699,19 @@ question 10. The water-closure defect is to diagnose early in P4.
     - I have not changed the criterion.
     - **Owner decision (2026-11-18): (b).** "Stable" means a steady climate; acceptance 4
       stays open and is retested in P4 with clouds.
+    - **P4 retest (2026-11-18):** the T21 slab aquaplanet with clouds holds a steady climate for
+      30 years: T_s 286.5 K, 20-year trend −0.004 K/yr, net TOA −0.17 W m⁻², closure
+      0.10 W m⁻², G 1.21. **Proposal: the owner closes this question.** It rests on PR #8's
+      clouds, so P3 alone does not show it. The formal §9.5.2 trend test is question 11.
+11. **P4 acceptance 4: 2×CO₂ warming 6.87 K, and the equilibrium trend test** (2026-11-18).
+    - **Evidence:** the entry "P4 first full evaluation".
+    - **Warming:** 6.87 K against the 1.5–6 K range. Sea ice is the largest amplifier, but the
+      tropics also warm 5.9 K. The cause is not separated yet.
+    - **Trend test:** both runs fail 0.02 K/yr over 5 years (−0.043 / −0.049 K/yr), probably
+      because the test uses single-moment yearly values. Annual means may still miss the
+      limit if interannual variability is large; that will be measured.
+    - **Plan:** SPEC.md §9.6, P4 completion plan, steps 1–3. I have not changed either
+      criterion and will not pick knob values to bring the warming into range.
+    - **Owner decision needed only if** the warming is still above 6 K after step 3, or the
+      trend test still fails with annual means. P5 may start in the first case; P6 waits for
+      the ruling.

@@ -10,6 +10,7 @@
 //!   balance, dry adjustment, moist convection, large-scale condensation, sponge.
 
 pub mod boundary_layer;
+pub mod clouds;
 pub mod column;
 pub mod condensation;
 pub mod convection;
@@ -30,6 +31,7 @@ use convection::{DryAdjustment, SimplifiedBettsMiller};
 use damping::Sponge;
 use idealized::held_suarez::{Damping, HeldSuarez, TidallyLocked};
 use idealized::tj16::{SurfaceTemperature, Tj16BoundaryLayer, Tj16SurfaceFluxes};
+use radiation::cloud_optics::CloudOpticsParams;
 use radiation::GrayRadiation;
 use surface_flux::ExchangeParams;
 
@@ -477,6 +479,7 @@ pub fn build_world(
 ) -> Result<Schemes, String> {
     let mut schemes: Schemes = Vec::new();
     // 1. radiation (with the experimental clouds inside the gray scheme)
+    let mut diagnostic: Option<(clouds::DiagnosticClouds, CloudOpticsParams)> = None;
     let clouds = match &pc.clouds {
         None => None,
         Some(c) => match c.scheme.as_str() {
@@ -492,11 +495,12 @@ pub fn build_world(
                 })
             }
             "diagnostic" => {
-                return Err("clouds scheme \"diagnostic\" is not implemented yet (P4)".into())
+                diagnostic = Some(diagnostic_clouds(&c.params, moisture, env)?);
+                None
             }
             other => {
                 return Err(format!(
-                    "unknown clouds scheme {other:?} (none, rh_prototype)"
+                    "unknown clouds scheme {other:?} (none, diagnostic, rh_prototype)"
                 ))
             }
         },
@@ -505,6 +509,11 @@ pub fn build_world(
     match r.scheme.as_str() {
         "gray" => {
             check_keys("[radiation]", &r.params, GRAY_KEYS)?;
+            if diagnostic.is_some() {
+                return Err(
+                    "[clouds] scheme \"diagnostic\" needs [radiation] scheme \"semigray\"".into(),
+                );
+            }
             let d = GrayRadiation::default();
             schemes.push(Box::new(GrayRadiation {
                 tau_eq: num(&r.params, "tau_eq", d.tau_eq)?,
@@ -524,7 +533,7 @@ pub fn build_world(
             }))
         }
         "none" => {
-            if clouds.is_some() {
+            if clouds.is_some() || diagnostic.is_some() {
                 return Err("[clouds] needs radiation".into());
             }
         }
@@ -551,6 +560,7 @@ pub fn build_world(
             if !(0.0..1.0).contains(&ts.reflectance) {
                 return Err("[radiation] reflectance must be in [0, 1)".into());
             }
+            ts.clouds = diagnostic.as_ref().map(|d| d.1.clone());
             schemes.push(Box::new(ts));
         }
         other => {
@@ -610,6 +620,10 @@ pub fn build_world(
         schemes.push(Box::new(LargeScaleCondensation { cond: cond.clone() }));
         schemes.push(Box::new(PrecipitationFall { cond: cond.clone() }));
     }
+    // 6. cloud diagnosis (for the next radiation call)
+    if let Some((d, _)) = diagnostic {
+        schemes.push(Box::new(d));
+    }
     // 7. sponge
     if let Some(s) = sponge {
         check_keys("[dynamics.sponge]", s, &["enabled", "sigma_top", "tau"])?;
@@ -622,6 +636,70 @@ pub fn build_world(
         }
     }
     Ok(schemes)
+}
+
+/// Knobs of `[clouds] scheme = "diagnostic"` (SPEC.md §9.4.7; docs/tuning.md).
+pub const CLOUD_KEYS: &[&str] = &[
+    "rh_crit_surface",
+    "rh_crit_upper",
+    "rh_crit_exponent",
+    "conv_coef",
+    "conv_max",
+    "water_ratio",
+    "water_max",
+    "sigma_min",
+    "r_liquid",
+    "r_ice",
+    "k_lw_liquid",
+];
+
+fn diagnostic_clouds(
+    p: &toml::Table,
+    moisture: Option<&Condensable>,
+    env: &RadiationEnv,
+) -> Result<(clouds::DiagnosticClouds, CloudOpticsParams), String> {
+    check_keys("[clouds]", p, CLOUD_KEYS)?;
+    let cond = moisture.ok_or("[clouds] needs a [moisture] block")?;
+    let d = clouds::DiagnosticClouds::new(cond.clone());
+    let c = clouds::DiagnosticClouds {
+        rh_crit_surface: num(p, "rh_crit_surface", d.rh_crit_surface)?,
+        rh_crit_upper: num(p, "rh_crit_upper", d.rh_crit_upper)?,
+        rh_crit_exponent: num(p, "rh_crit_exponent", d.rh_crit_exponent)?,
+        conv_coef: num(p, "conv_coef", d.conv_coef)?,
+        conv_max: num(p, "conv_max", d.conv_max)?,
+        water_ratio: num(p, "water_ratio", d.water_ratio)?,
+        water_max: num(p, "water_max", d.water_max)?,
+        sigma_min: num(p, "sigma_min", d.sigma_min)?,
+        ..d
+    };
+    for (k, v) in [
+        ("rh_crit_surface", c.rh_crit_surface),
+        ("rh_crit_upper", c.rh_crit_upper),
+    ] {
+        if !(0.0..1.0).contains(&v) {
+            return Err(format!("[clouds] {k} must be in [0, 1)"));
+        }
+    }
+    for (k, v) in [
+        ("conv_coef", c.conv_coef),
+        ("conv_max", c.conv_max),
+        ("water_ratio", c.water_ratio),
+        ("water_max", c.water_max),
+    ] {
+        if v.is_nan() || v < 0.0 {
+            return Err(format!("[clouds] {k} must be ≥ 0"));
+        }
+    }
+    if c.conv_max > 1.0 {
+        return Err("[clouds] conv_max must be ≤ 1".into());
+    }
+    let optics = CloudOpticsParams::new(
+        num(p, "r_liquid", 10.0)?,
+        num(p, "r_ice", 30.0)?,
+        num(p, "k_lw_liquid", 0.090361)?,
+        env.t_eff,
+    );
+    Ok((c, optics))
 }
 
 /// Whether `schemes` couple to a surface model (the K-profile surface solve).

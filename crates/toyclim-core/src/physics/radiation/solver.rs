@@ -90,6 +90,10 @@ pub struct Fluxes {
     pub lw_down: Vec<f64>,
     /// Total cloud cover used.
     pub cloud_cover: f64,
+    /// Clear-sky shortwave reflected to space and outgoing longwave (the clear column of
+    /// the two-column solve; equal to the all-sky values without clouds).
+    pub clear_sw_up_top: f64,
+    pub clear_olr: f64,
 }
 
 /// Inputs of a column solve besides the optics.
@@ -276,6 +280,8 @@ pub fn solve(
     out.sw_down_sfc.clear();
     out.sw_down_sfc.resize(gas.nsw, 0.0);
     out.sw_up_top = 0.0;
+    out.clear_sw_up_top = 0.0;
+    out.clear_olr = 0.0;
     let cc = clouds.map_or(0.0, |c| cloud_cover(&c.frac));
     out.cloud_cover = cc;
     let columns: &[(f64, bool)] = if cc > 0.0 {
@@ -284,17 +290,19 @@ pub fn solve(
         &[(1.0, false)]
     };
     for &(wcol, cloudy) in columns {
-        if wcol <= 0.0 {
+        // the clear column is always solved: it gives the clear-sky fluxes
+        if wcol <= 0.0 && cloudy {
             continue;
         }
         let cl = if cloudy { clouds } else { None };
         // shortwave
         if b.s0 > 0.0 && b.mu0 > 0.0 {
             for band in 0..gas.nsw {
-                let scale = wcol * b.s0 * b.sw_weights[band];
-                if scale == 0.0 {
+                let unit = b.s0 * b.sw_weights[band];
+                if unit == 0.0 {
                     continue;
                 }
+                let scale = wcol * unit;
                 s.tau.clear();
                 s.ssa.clear();
                 s.g.clear();
@@ -324,6 +332,9 @@ pub fn solve(
                 s.lay = lay;
                 out.sw_up_top += scale * top;
                 out.sw_down_sfc[band] += scale * dn;
+                if !cloudy {
+                    out.clear_sw_up_top += unit * top;
+                }
             }
         }
         // longwave
@@ -351,6 +362,9 @@ pub fn solve(
                 let t = s.trs[k];
                 up = up * t + src[k] * (1.0 - t);
                 out.lw_up[k] += wcol * up;
+            }
+            if !cloudy {
+                out.clear_olr += up;
             }
         }
     }

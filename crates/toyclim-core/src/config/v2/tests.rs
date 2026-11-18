@@ -223,3 +223,50 @@ fn envelope_warnings_fire_outside_the_envelope() {
     // retrograde rotation from a negative period
     assert!(c.planet.resolve().unwrap().rotation_rate < 0.0);
 }
+
+/// P4: `[clouds] scheme = "diagnostic"` builds with semigray radiation and moisture; bad
+/// knobs, gray radiation or no moisture are errors.
+#[test]
+fn diagnostic_clouds_config() {
+    let ok = r#"
+initial_condition = { case = "jw06" }
+[moisture]
+condensable = "water"
+[radiation]
+scheme = "semigray"
+[clouds]
+scheme = "diagnostic"
+rh_crit_surface = 0.92
+r_liquid = 12.0
+[boundary_layer]
+scheme = "kprofile"
+[surface]
+geography = "aquaplanet"
+"#;
+    let c = Config::parse(&base(ok)).unwrap();
+    let m = crate::primitive::from_config(&c).unwrap();
+    let names: Vec<_> = m.physics.schemes.iter().map(|s| s.name()).collect();
+    let (r, d) = (
+        names
+            .iter()
+            .position(|n| *n == "two_stream_radiation")
+            .unwrap(),
+        names
+            .iter()
+            .position(|n| *n == "diagnostic_clouds")
+            .unwrap(),
+    );
+    assert!(r < d, "clouds must follow condensation: {names:?}");
+    assert_eq!(*names.last().unwrap(), "diagnostic_clouds");
+    for bad in [
+        ok.replace("r_liquid = 12.0", "bogus = 1"),
+        ok.replace("rh_crit_surface = 0.92", "rh_crit_surface = 1.2"),
+        ok.replace("scheme = \"semigray\"", "scheme = \"gray\""),
+        ok.replace("[moisture]\ncondensable = \"water\"\n", ""),
+    ] {
+        let built = Config::parse(&base(&bad))
+            .ok()
+            .and_then(|c| crate::primitive::from_config(&c).ok());
+        assert!(built.is_none(), "accepted:\n{bad}");
+    }
+}

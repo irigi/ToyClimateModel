@@ -485,7 +485,77 @@ def earth_amip(run, meta, c, info, diag, m):
     return checks
 
 
-SUITES = {"aquaplanet": aquaplanet, "earth_amip": earth_amip}
+def earth_energy(run, meta, c, info, diag, m):
+    """SPEC.md P4 acceptance 1-3 and 5 (Earth AMIP with clouds): global radiation, cloud
+    radiative effects, total cloud cover and its zonal shape."""
+    lat = np.asarray(meta["grid"]["lat"])
+    latd = np.degrees(lat)
+    nlon = len(meta["grid"]["lon"])
+    wts = area_weights(lat, nlon)
+
+    def g(k):
+        f = c / f"mean_{k}.npy"
+        if not f.exists():
+            raise SystemExit(f"{f} missing: the climatology needs maps rsdt, asr, olr, asr_cs, olr_cs, clt")
+        x = np.load(f).reshape(len(lat), nlon)
+        return gmean(x, wts), x
+
+    rsdt, asr, asr_cs, olr, olr_cs = (g(k)[0] for k in ["rsdt", "asr", "asr_cs", "olr", "olr_cs"])
+    clt, cltmap = g("clt")
+    albedo = 1 - asr / rsdt
+    sw_cre, lw_cre = asr - asr_cs, olr_cs - olr
+    z = cltmap.mean(axis=1)
+    m["earth_energy"] = rec = {
+        "planetary_albedo": float(albedo),
+        "clear_sky_albedo": float(1 - asr_cs / rsdt),
+        "olr_W_m2": float(olr),
+        "net_toa_W_m2": float(asr - olr),
+        "sw_cre_W_m2": float(sw_cre),
+        "lw_cre_W_m2": float(lw_cre),
+        "total_cloud_cover": float(clt),
+        "zonal_clt": [float(x) for x in z],
+        "lat": [float(x) for x in latd],
+    }
+    if (c / "mean_clwvi.npy").exists():
+        rec["clwvi_kg_m2"] = g("clwvi")[0]
+
+    def band(lo, hi):
+        sel = (np.abs(latd) >= lo) & (np.abs(latd) <= hi)
+        return sel
+
+    # shape: a maximum within 15° of the equator, a local maximum (not at the poleward edge
+    # of the band) in 40-70° of each hemisphere, the 15-35° minimum of each hemisphere below
+    # both
+    shape = True
+    eq = z[np.abs(latd) <= 15].max()
+    notes = []
+    for hem, sgn in (("N", 1), ("S", -1)):
+        h = sgn * latd > 0
+        sub = z[h & band(15, 35)].min()
+        st_sel = h & band(40, 70)
+        zs, ls = z[st_sel], np.abs(latd[st_sel])
+        k = int(np.argmax(zs))
+        local = ls[k] < ls.max() and zs[k] > zs[ls == ls.max()][0]
+        ok = local and sub < eq and sub < zs[k]
+        notes.append(f"{hem}: subtropical min {sub:.2f}, storm-track max {zs[k]:.2f} at {ls[k]:.0f}° "
+                     f"(local {local}), ITCZ max {eq:.2f}")
+        shape = shape and ok
+    rec["zonal_shape"] = notes
+    checks = [
+        ("planetary albedo 0.27-0.33", 0.27 <= albedo <= 0.33),
+        ("OLR 228-250 W/m²", 228 <= olr <= 250),
+        ("net TOA within ±8 W/m²", abs(asr - olr) <= 8),
+        ("SW cloud radiative effect -30 to -60 W/m²", -60 <= sw_cre <= -30),
+        ("LW cloud radiative effect +15 to +35 W/m²", 15 <= lw_cre <= 35),
+        ("total cloud cover 0.5-0.75", 0.5 <= clt <= 0.75),
+        ("cloud maxima in the ITCZ and storm tracks, subtropical minima", shape),
+        ("energy closure (atmosphere) within 0.5 W/m²",
+         m.get("energy_closure_atm_W_m2", 99) < 0.5),
+    ]
+    return checks
+
+
+SUITES = {"aquaplanet": aquaplanet, "earth_amip": earth_amip, "earth_energy": earth_energy}
 
 
 def main():

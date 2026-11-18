@@ -32,6 +32,7 @@ until then are reproducible; do not tune).
 | 2026-11-17 | Gray `latitude_dependence` | (new) implicit on → off by default | SPEC.md §9.6 P3 / defect 4: the Earth-shaped τ₀(φ) is now an option; every Earth-like gray case sets it on (results unchanged, regress), the tidally locked cases leave it off (results change on purpose). |
 | 2026-11-18 | `[radiation] reflectance` with `scheme = "semigray"` (exploratory Earth AMIP T21 run `out/p3/earth_amip_t21_semigray_r165.toml` only; no case file changed) | 0.23 → 0.165 | Earth target: global planetary albedo. With 0.23 the semigray run had albedo 0.354 (clear-sky gas scattering and absorption add to the stand-in), against 0.30 observed (Trenberth, Fasullo & Kiehl 2009). 0.165 solves r + (1 − r)·0.161 = 0.30; measured 0.298. Exploratory, to separate the radiation change from the albedo error; the cloud stand-in goes away in P4. |
 | 2026-11-18 | `[surface.ocean] albedo` in `cases/bench/p3_aquaplanet/aquaplanet_t21.toml` | (new) 0.38 → 0.25 | Case setting for the SPEC.md P3 acceptance 4 cloud stand-in, not fitted to an output of the test: with clear-sky radiation the stand-in must carry the net cloud effect (shortwave and longwave), so the value puts the 285 K warm start in TOA balance. 60-day runs: 0.22 / 0.26 / 0.30 → planetary albedo 0.225 / 0.252 / 0.279, net TOA +5.3 / −2.3 / −11.0 W m⁻². 0.38 (from one offline global-mean column) froze the planet over: 236 K after 10 years. |
+| 2026-11-18 | Diagnostic clouds (P4), all knobs | (new) | Not tuned yet: SPEC.md §9.4.7 starting values (table "Clouds" below); optics constants from Slingo (1989) and Ebert & Curry (1992) via the NCAR CAM source. |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -185,3 +186,20 @@ climate target.
 | Two-stream method | (code) | δ-scaled PIFM | — | fixed | Joseph et al. (1976); Zdunkowski et al. (1980); RRTMG_SW default |
 | Smallest cos zenith of the beam | (code) | 0.05 | — | fixed | as the gray scheme |
 | Top reflectance (cloud stand-in) / forced planetary albedo | `reflectance`, `planetary_albedo` | 0 / none | — | case setting | P3 acceptance 3; replaced by P4 clouds |
+
+### Clouds (P4, `[clouds] scheme = "diagnostic"`; SPEC.md §9.4.7)
+
+Tunable in P4 on Earth targets only (the Earth-like aquaplanet and Earth AMIP). Optics
+constants are published values, not tuned.
+
+| Parameter | Key | Default | Range | Status | Source |
+|---|---|---|---|---|---|
+| Critical RH near the surface / aloft | `rh_crit_surface`, `rh_crit_upper` | 0.9, 0.8 | 0.75–0.95 (SPEC) | knob (P4) | SPEC.md §9.4.7; profile shape after ECHAM (Lohmann & Roeckner 1996, not checked) |
+| RH_c profile exponent n (RH_c = u + (s − u) e^{1 − σ^−n}) | `rh_crit_exponent` | 4 | 1–8 | knob (P4) | as above |
+| Convective cover b, cap (c = min(cap, b ln(1 + P/1 mm day⁻¹))) | `conv_coef`, `conv_max` | 0.125, 0.8 | 0.05–0.25, 0.3–0.8 | knob (P4) | form after Slingo (1987) |
+| In-cloud water β (fraction of q_sat), cap | `water_ratio`, `water_max` | 0.02, 5e-4 kg/kg | 0.005–0.05, 2e-4–1e-3 | knob (P4) | SPEC.md §9.4.7 |
+| No clouds above σ | `sigma_min` | 0.1 | — | fixed | stratosphere |
+| Effective radius liquid / ice | `r_liquid`, `r_ice` | 10, 30 µm | fit ranges 4.2–16, 13–130 µm | knob (P4) | SPEC.md §9.4.7 |
+| Liquid LW absorption (vertical) | `k_lw_liquid` | 0.090361 m² g⁻¹ | — | knob (P4) | NCAR CAM (×1.66 = 0.150; SPEC.md ≈ 0.14) |
+| Ice LW absorption | (code) | 0.005 + 1/r_e m² g⁻¹ | — | fixed | NCAR CAM / Ebert & Curry (1992) |
+| SW optics liquid / ice | (code) | Slingo (1989) / Ebert & Curry (1992), 4 bands; near-IR bands combined by the star's flux | — | fixed | coefficients via the NCAR CAM source (papers paywalled) |

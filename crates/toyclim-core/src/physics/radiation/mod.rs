@@ -9,6 +9,7 @@
 //!   [`GrayOpacity`] (the gray scheme's longwave optical depths in the generic solver; used
 //!   to test the solver against the gray scheme).
 
+pub mod cloud_optics;
 pub mod gray;
 pub mod offline;
 pub mod planck;
@@ -18,7 +19,8 @@ pub mod solver;
 pub use gray::{Clouds, GrayRadiation};
 
 use super::column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
-use solver::{Boundary, Fluxes, LayerOptics, SwScratch};
+use cloud_optics::CloudOpticsParams;
+use solver::{Boundary, CloudOptics, Fluxes, LayerOptics, SwScratch};
 
 /// Stefan–Boltzmann constant \[W m⁻² K⁻⁴\] (CODATA 2018).
 pub const STEFAN_BOLTZMANN: f64 = 5.670374e-8;
@@ -60,6 +62,9 @@ pub struct TwoStream {
     /// clear solve scaled by (1 − r).
     pub reflectance: f64,
     pub planetary_albedo: Option<f64>,
+    /// Cloud optics; with them the scheme reads the clouds the cloud diagnosis left in
+    /// [`SurfaceExchange::cloud`] in the previous physics step (SPEC.md §9.3.3).
+    pub clouds: Option<CloudOpticsParams>,
 }
 
 impl TwoStream {
@@ -74,6 +79,7 @@ impl TwoStream {
             mu_min: 0.05,
             reflectance: 0.0,
             planetary_albedo: None,
+            clouds: None,
         }
     }
 
@@ -110,6 +116,7 @@ impl TwoStream {
             lw_sfc,
             albedo,
             sw,
+            ..
         } = w;
         frac.clear();
         frac.resize(nlw, 0.0);
@@ -168,7 +175,40 @@ impl TwoStream {
                 *x *= 1.0 - r;
             }
             out.sw_up_top = r * s0 + (1.0 - r) * out.sw_up_top;
+            out.clear_sw_up_top = r * s0 + (1.0 - r) * out.clear_sw_up_top;
         }
+    }
+
+    /// In-cloud optics of the column's clouds (`sfc.cloud`, see [`SurfaceExchange::cloud`])
+    /// into `c`; false when the column has none.
+    pub fn cloud_optics(&self, sfc: &SurfaceExchange, nlev: usize, c: &mut CloudOptics) -> bool {
+        let Some(par) = &self.clouds else {
+            return false;
+        };
+        let m = &sfc.cloud;
+        if m.len() < 3 * nlev || m[..nlev].iter().all(|&f| f <= 0.0) {
+            return false;
+        }
+        let (nsw, nlw) = (self.opacity.sw_bands(), self.opacity.lw_bands());
+        c.optics.resize(nlev, nsw, nlw);
+        c.frac.clear();
+        c.frac.extend_from_slice(&m[..nlev]);
+        let o = &mut c.optics;
+        for k in 0..nlev {
+            let (lwp, iwp) = (m[nlev + k], m[2 * nlev + k]);
+            for b in 0..nsw {
+                let (t, w, g) = par.shortwave(self.opacity.sw_albedo_band(b), lwp, iwp);
+                let i = b * nlev + k;
+                o.sw_tau[i] = t;
+                o.sw_ssa[i] = w;
+                o.sw_g[i] = g;
+            }
+            let tl = par.longwave(lwp, iwp);
+            for b in 0..nlw {
+                o.lw_tau[b * nlev + k] = tl;
+            }
+        }
+        true
     }
 }
 
@@ -181,6 +221,7 @@ pub struct RadWork {
     lw_sfc: Vec<f64>,
     albedo: Vec<f64>,
     sw: SwScratch,
+    clouds: CloudOptics,
 }
 
 thread_local! {
@@ -192,7 +233,13 @@ impl ColumnScheme for TwoStream {
         "two_stream_radiation"
     }
     fn diagnostics(&self) -> &'static [&'static str] {
-        &["rsdt", "olr", "asr", "rsds", "rlds"]
+        if self.clouds.is_some() {
+            &[
+                "rsdt", "olr", "asr", "rsds", "rlds", "clt", "olr_cs", "asr_cs",
+            ]
+        } else {
+            &["rsdt", "olr", "asr", "rsds", "rlds"]
+        }
     }
     fn apply(
         &self,
@@ -205,7 +252,10 @@ impl ColumnScheme for TwoStream {
         let l = st.nlev;
         let f = WORK.with(|w| {
             let (work, f) = &mut *w.borrow_mut();
-            self.fluxes_with(ctx, st, sfc, None, f, work);
+            let mut cl = std::mem::take(&mut work.clouds);
+            let cloudy = self.cloud_optics(sfc, l, &mut cl);
+            self.fluxes_with(ctx, st, sfc, cloudy.then_some(&cl), f, work);
+            work.clouds = cl;
             std::mem::take(f)
         });
         let g = ctx.planet.gravity;
@@ -233,6 +283,11 @@ impl ColumnScheme for TwoStream {
         diag[2] += f.sw_net[0];
         diag[3] += sw_down;
         diag[4] += f.lw_down[l];
+        if self.clouds.is_some() {
+            diag[5] += f.cloud_cover;
+            diag[6] += f.clear_olr;
+            diag[7] += ctx.insolation - f.clear_sw_up_top;
+        }
         // hand the flux arrays back for the next column
         WORK.with(|w| w.borrow_mut().1 = f);
     }

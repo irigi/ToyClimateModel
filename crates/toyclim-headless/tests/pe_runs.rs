@@ -315,6 +315,97 @@ type = "gray_aquaplanet"
 /// Prescribed monthly SST and sea ice (AMIP-style ocean) with land: bitwise across thread
 /// counts and restarts, and the output concentration and SST are the files' values
 /// interpolated linearly between mid-months.
+/// P4: semi-gray radiation with the diagnostic clouds on a slab aquaplanet with sea ice.
+/// The clouds are carried between physics steps (driver memory, restart array
+/// `physics_memory`): output identical across thread counts and through a restart; the
+/// clouds exist and stay within bounds.
+#[test]
+fn clouds_run_and_restart() {
+    use toyclim_core::io::npy;
+    let cfg_text = r#"
+schema = 2
+model = "primitive"
+truncation = 21
+levels = 10
+dt = "30min"
+length = "4day"
+output_every = "2day"
+output_fields = ["ts", "precip", "clt", "clwvi", "olr", "olr_cs", "asr", "asr_cs"]
+initial_condition = { case = "jw06", perturbed = true }
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+[planet]
+preset = "earth"
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+[moisture]
+condensable = "water"
+initial = "tj16"
+[radiation]
+scheme = "semigray"
+[clouds]
+scheme = "diagnostic"
+[boundary_layer]
+scheme = "kprofile"
+[convection]
+scheme = "sbm"
+[dynamics]
+tracer_transport = "semi_lagrangian"
+[surface]
+geography = "aquaplanet"
+[surface.ocean]
+model = "slab"
+mixed_layer_depth = 20.0
+initial = "tj16"
+[surface.sea_ice]
+enabled = true
+"#;
+    let cfg = tmp("clouds.toml");
+    std::fs::write(&cfg, cfg_text).unwrap();
+    let (a, a5, c) = (tmp("ca"), tmp("cb"), tmp("cc"));
+    run(&cfg, &a, "2", &[]);
+    run(&cfg, &a5, "5", &[]);
+    assert_same(&a, &a5);
+    run(&cfg, &c, "2", &["--length", "2day"]);
+    let r = c.join("restart");
+    run(&cfg, &c, "2", &["--restart", r.to_str().unwrap()]);
+    for f in ["ts", "precip", "clt", "clwvi", "olr"] {
+        let name = format!("{f}_000192.npy");
+        let x = std::fs::read(a.join("fields").join(&name)).unwrap();
+        let y = std::fs::read(c.join("fields").join(&name)).unwrap();
+        assert!(x == y, "{name} differs after restart");
+    }
+    let rd = |f: &str| {
+        npy::read::<f32>(&a.join("fields").join(format!("{f}_000192.npy")))
+            .unwrap()
+            .0
+    };
+    let (clt, clwvi) = (rd("clt"), rd("clwvi"));
+    assert!(clt.iter().all(|&x| (0.0..=1.0 + 1e-6).contains(&x)));
+    assert!(clwvi.iter().all(|&x| x >= 0.0));
+    let mean = |v: &[f32]| v.iter().map(|&x| x as f64).sum::<f64>() / v.len() as f64;
+    assert!(mean(&clt) > 0.05, "cloud cover {}", mean(&clt));
+    assert!(mean(&clwvi) > 1e-3, "water path {}", mean(&clwvi));
+    // clouds trap longwave: all-sky OLR below clear-sky on average
+    assert!(mean(&rd("olr")) < mean(&rd("olr_cs")));
+    for d in [&a, &a5, &c] {
+        std::fs::remove_dir_all(d).ok();
+    }
+    std::fs::remove_file(&cfg).ok();
+}
+
 #[test]
 fn prescribed_ocean_runs_and_restarts() {
     use toyclim_core::io::npy;
