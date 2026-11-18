@@ -247,8 +247,14 @@ geography = "aquaplanet"
     let m = crate::primitive::from_config(&c).unwrap();
     let names: Vec<_> = m.physics.schemes.iter().map(|s| s.name()).collect();
     let (r, d) = (
-        names.iter().position(|n| *n == "two_stream_radiation").unwrap(),
-        names.iter().position(|n| *n == "diagnostic_clouds").unwrap(),
+        names
+            .iter()
+            .position(|n| *n == "two_stream_radiation")
+            .unwrap(),
+        names
+            .iter()
+            .position(|n| *n == "diagnostic_clouds")
+            .unwrap(),
     );
     assert!(r < d, "clouds must follow condensation: {names:?}");
     assert_eq!(*names.last().unwrap(), "diagnostic_clouds");
