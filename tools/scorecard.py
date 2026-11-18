@@ -86,8 +86,10 @@ def gmean(field, wts):
     return float((field * wts).sum())
 
 
-def storm_index(precip, orog):
-    """G: max over cells with flat surroundings of P / mean(P of the neighbours)."""
+def storm_index(precip, orog, floor=1.0 / 86400):
+    """G: max over cells with flat surroundings of P / mean(P of the neighbours), counting
+    only cells whose neighbour mean is at least `floor` (1 mm/day; SPEC.md §9.5, owner
+    decision 2026-11-18, open question 8)."""
     nlat, nlon = precip.shape
     best = (0.0, None)
     for j in range(nlat):
@@ -104,7 +106,7 @@ def storm_index(precip, orog):
             if any(abs(orog[jj, ii] - orog[j, i]) > 300.0 for jj, ii in nb):
                 continue
             m = np.mean([precip[jj, ii] for jj, ii in nb])
-            if m > 0:
+            if m >= floor:
                 r = precip[j, i] / m
                 if r > best[0]:
                     best = (float(r), (j, i))
@@ -207,6 +209,12 @@ def world_metrics(run, meta, c, info, diag):
             out = rate("cum_runoff") + rate("cum_ocean_uptake")
             m["runoff_mm_day"] = float(rate("cum_runoff") * 86400)
             m["water_closure_system_mm_day"] = float(abs(dw + dws + out) * 86400)
+    dt = (meta.get("config") or {}).get("dt")
+    if "max_u" in diag and dt:
+        # SPEC.md §9.8 time-step trigger (owner decision 2026-11-18, open question 5):
+        # spectral Courant number |v|_max Δt √(M(M+1)) / a, at the diagnostics rows
+        mt = meta["truncation"]
+        m["spectral_courant_max"] = float(diag["max_u"].max() * dt * np.sqrt(mt * (mt + 1)) / a)
     if "rsdt" in diag and "asr" in diag:
         sel = slice(i0, i1 + 1)
         m["planetary_albedo"] = float(1 - diag["asr"][sel].mean() / diag["rsdt"][sel].mean())

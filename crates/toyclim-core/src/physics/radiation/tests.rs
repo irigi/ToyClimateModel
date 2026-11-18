@@ -335,10 +335,9 @@ fn sw_fractions(sg: &SemiGray, t_eff: f64, pw: f64) -> (f64, f64) {
     (atm / 1000.0, f.sw_up_top / 1000.0)
 }
 
-/// Test 4: Clear-sky OLR at 288 K (75 % RH, 400 ppm): 260–275 W m⁻²; slope 1.7–2.5 W m⁻² K⁻¹
-/// between 265 and 300 K. The slope passes; the OLR range is checked in
-/// [`clear_sky_olr_spec_range`] (ignored: RRTMG itself gives 251.1 W m⁻² for this column,
-/// open question 9 in docs/progress.md).
+/// Test 4: Clear-sky OLR at 288 K (75 % RH, 400 ppm) within 8 W m⁻² of RRTMG for the same
+/// column; slope 1.7–2.5 W m⁻² K⁻¹ between 265 and 300 K (SPEC.md §9.4.1 as restated by
+/// the owner on 2026-11-18, open question 9).
 #[test]
 fn clear_sky_olr_slope_and_reference() {
     let sg = SemiGray::default();
@@ -347,14 +346,6 @@ fn clear_sky_olr_slope_and_reference() {
     assert!((1.7..=2.5).contains(&slope), "dOLR/dTs = {slope}");
     // RRTMG (climlab 0.9.2) for the same column: 251.1 W m⁻², slope 1.93
     assert!((o - 251.1).abs() < 8.0, "OLR(288 K) = {o}");
-}
-
-/// SPEC.md §9.4.1 test 4 as written (fails, open question 9).
-#[test]
-#[ignore]
-fn clear_sky_olr_spec_range() {
-    let o = olr(&SemiGray::default(), 288.0);
-    assert!((260.0..=275.0).contains(&o), "OLR(288 K) = {o}");
 }
 
 /// Test 5: 400 → 800 ppm on the 288 K column reduces the OLR by 2.5–5 W m⁻².
@@ -373,24 +364,15 @@ fn co2_doubling_forcing() {
 }
 
 /// Test 6: Clear-sky shortwave, Sun, cos zenith 0.5, 25 kg m⁻² of water, ocean albedo:
-/// atmospheric absorption 17–24 %, planetary albedo 0.12–0.19. Earth configuration: the
-/// calibrated ozone on. The absorption passes; the albedo range is checked in
-/// [`clear_sky_albedo_spec_range`] (ignored: RRTMG with ozone gives 0.107 for this column,
-/// open question 9).
+/// atmospheric absorption 17–24 %, planetary albedo within 0.015 of RRTMG for the same
+/// column (restated 2026-11-18, open question 9). Earth configuration: the calibrated
+/// ozone on.
 #[test]
 fn clear_sky_shortwave_sun() {
     let (a, r) = sw_fractions(&earth_semigray(), 5772.0, 25.0);
     assert!((0.17..=0.24).contains(&a), "absorption {a}");
     // RRTMG (climlab 0.9.2) for the same column with ozone: absorption 0.214, albedo 0.107
     assert!((r - 0.107).abs() < 0.015, "albedo {r}");
-}
-
-/// SPEC.md §9.4.1 test 6, albedo part as written (fails, open question 9).
-#[test]
-#[ignore]
-fn clear_sky_albedo_spec_range() {
-    let (_, r) = sw_fractions(&earth_semigray(), 5772.0, 25.0);
-    assert!((0.12..=0.19).contains(&r), "albedo {r}");
 }
 
 /// Test 7: Under a 3000 K star the same column absorbs more and reflects less.

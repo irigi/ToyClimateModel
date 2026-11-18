@@ -1051,12 +1051,15 @@ space and is added to `olr`.
    albedo; a conservative-scattering layer over a black surface conserves flux.
 3. Isothermal column: OLR = σT⁴.
 4. Clear-sky OLR for a moist-adiabatic profile with 75% relative humidity and 400 ppm CO₂:
-   260–275 W m⁻² at T_s = 288 K; slope dOLR/dT_s = 1.7–2.5 W m⁻² K⁻¹ between 265 and
-   300 K (compare Koll & Cronin 2018).
+   within 8 W m⁻² of RRTMG for the same column at T_s = 288 K; slope dOLR/dT_s =
+   1.7–2.5 W m⁻² K⁻¹ between 265 and 300 K (compare Koll & Cronin 2018). *(Owner,
+   2026-11-18, open question 9: was "260–275 W m⁻²", a range that excludes RRTMG's
+   251 W m⁻² for this column.)*
 5. CO₂ doubling 400 → 800 ppm on the same 288 K profile reduces OLR by 2.5–5 W m⁻².
 6. Clear-sky shortwave, Sun, global-mean conditions (cos zenith 0.5, 25 kg m⁻² water,
    ocean albedo): atmospheric absorption 17–24% of the incoming flux, planetary albedo
-   0.12–0.19.
+   within 0.015 of RRTMG for the same column. *(Owner, 2026-11-18, open question 9: was
+   "0.12–0.19", which excludes RRTMG's 0.107.)*
 7. Same column under a 3000 K star: atmospheric absorption fraction higher and planetary
    albedo lower than under the Sun.
 
@@ -1274,7 +1277,9 @@ Metrics every world suite includes:
   the same for the whole system; **water closure**;
 - **grid-point storm index G:** the largest ratio, over all cells with flat surroundings
   (orography within ±300 m of its neighbours), of a cell's annual-mean precipitation to
-  the mean of its 8 neighbours. Pass: G ≤ 2.0;
+  the mean of its 8 neighbours, counting only cells whose neighbour mean is at least
+  1 mm/day (owner, 2026-11-18, open question 8: the ratio of small numbers in dry regions
+  is not a storm). Pass: G ≤ 2.0;
 - tracer fixer rate (§9.8);
 - equilibrium: a run is **equilibrated** when the 5-year trend of global-mean T_s is below
   0.02 K/yr and the 5-year mean net top-of-atmosphere flux is within ±1 W m⁻² of the
@@ -1387,7 +1392,9 @@ defect 1 (§9.1.1) with the listed hypotheses and record which one it was.
 3. System energy closure within 0.5 W m⁻² (T21 world, 3 years).
 4. Bitwise restart and thread independence with all new surface state.
 5. Test world T42, gray radiation, slab 50 m, equilibrated: G ≤ 2.0; no EF classification
-   over ice-free ocean; sea ice only where the annual-mean `tos` is at the freezing point.
+   over ice-free ocean; perennial sea ice (annual-mean concentration ≥ 0.95) only where
+   the annual-mean `tos` is within 0.1 K of the freezing point. *(Owner, 2026-11-18, open
+   question 8: was "sea ice only where …", which seasonal ice fails by construction.)*
 6. Bistability, T21 aquaplanet with slab and seasons: started ice-free it stays ice-free
    equatorward of 50° at 1361 W m⁻²; started fully ice-covered it stays ice-covered at
    1361 W m⁻². *Record* the instellation at which the warm branch freezes over (steps of 2%).
@@ -1404,9 +1411,10 @@ only in Earth-like idealized cases.
 
 1. Offline tests 1–7 of §9.4.1.
 2. Calibration report committed (`docs/radiation/`), with residuals: clear-sky OLR and
-   surface downward longwave within 8 W m⁻², shortwave atmospheric absorption within
-   10% (relative), over the fitted profile set (T_s 250–310 K, CO₂ 100–10000 ppm,
-   p_s 0.3–3 bar where the reference allows).
+   surface downward longwave within 8 W m⁻² rms, shortwave atmospheric absorption within
+   10% (relative) rms, over the fitted profile set (T_s 250–310 K, CO₂ 100–10000 ppm,
+   p_s 0.3–1 bar); maxima, and p_s 2–3 bar where the reference is extrapolated, are
+   *recorded*. *(Owner, 2026-11-18, open question 9: was a maximum over 0.3–3 bar.)*
 3. SCM radiative–convective equilibrium, Sun, global-mean insolation, planetary albedo
    forced to 0.3 by a reflective layer, 400 ppm: T_s = 283–293 K; doubling CO₂ warms the
    equilibrium by 1.5–4.5 K.
@@ -1617,7 +1625,7 @@ Do these **only** when their trigger fires; record the trigger evidence.
 | Temperature diffusion over mountains | spurious precipitation or temperature anomalies locked to steep orography | apply the hyperdiffusion to T minus a reference profile along σ (pressure-surface correction) |
 | Orographic drag | P5 jets or sea-level pressure rows fail with too-strong, too-zonal flow | effective roughness from the sub-grid orography variance of the heightmap |
 | Sponge on by default | top-level winds exceed 150 m s⁻¹ or runs blow up at the top in P7 | enable `[dynamics.sponge]` for that case family |
-| Shorter time step | max Courant number above 0.8 in the log | reduce Δt for that case; do not raise diffusion |
+| Shorter time step | spectral Courant number \|v\|_max Δt √(M(M+1)) / a above 0.8 (owner, 2026-11-18, open question 5: replaces the grid Courant number u Δt / (a cos φ Δλ), which grows like 1/cos φ near the poles) | reduce Δt for that case; do not raise diffusion |
 | Rain re-evaporation | P5 deserts too wet with the other rows passing | `reevaporation = true`, tune its knob |
 | Longer levels / higher top | tropopause not resolved for warm or thick atmospheres (P7) | a 32-level set with the same lower levels |
 

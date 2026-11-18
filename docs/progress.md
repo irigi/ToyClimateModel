@@ -34,8 +34,8 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
 | P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
-| P2 Land, snow, sea ice, precipitation phase | 2026-11-17 (branch `p2-surface`): acceptance 1–4 and 7 met (Earth scorecard recorded: 11 of 19 P5 rows would pass at T42); 5 and 6 fail, open questions 7 and 8; defect 1 diagnosed |
-| P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (branch `p3-radiation`): acceptance 3 and 5 met (RCE 285.2 K, +3.95 K for 2×CO₂; radiation 21 % of a T42 step); 1 and 2 fail as written (RRTMG itself is outside the test 4/6 ranges; maxima above 8 W m⁻², open question 9); 4: numerically stable with closure and G met, but the aquaplanet drifts to a snowball (open question 10). Earth T21: subtropical jets now form, 14 of 19 P5 rows would pass |
+| P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
+| P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
 | P4 Clouds, Earth-like energy balance | not started |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
@@ -1423,6 +1423,8 @@ question 10. The water-closure defect is to diagnose early in P4.
    two seeds (a criterion change — owner's call); (c) four more seeds per precision (~3 h on
    the laptop) to test for a systematic f32 difference. Recommendation: (a) now, (c) only if
    f32 becomes a production mode. Figures: `docs/figures/P0/hs_t42l20_2200d_*.png`.
+   **Owner decision (2026-11-18): (a).** f32 accepted as recorded; f64 stays the default for
+   acceptance. Resolved.
 4. **Earth-gate thresholds** (2026-11-12): the numbers in SPEC.md §9.6 P5/P6 were set from
    judgement of what intermediate-complexity models achieve, before any Earth run exists.
    They are binding for sessions; the owner may want to revise them after seeing the first
@@ -1434,6 +1436,9 @@ question 10. The water-closure defect is to diagnose early in P4.
    grid spacing at the pole. Proposed replacement: monitor |v|_max Δt √(M(M+1)) / a (or the
    same with the grid spacing at the equator) and set the trigger on that. Until decided,
    the trigger is not applied to Part I cases.
+   **Owner decision (2026-11-18): replace it.** SPEC.md §9.8 now uses |v|_max Δt √(M(M+1)) / a
+   > 0.8; `tools/scorecard.py` reports it as `spectral_courant_max` from the diagnostics
+   rows (P3 aquaplanet 0.58, P2 test world 0.50). Resolved.
 6. **APE Control: surface easterlies poleward of ~49°** (2026-11-16; P1 acceptance 5).
    - **What fails:** the gate requires lowest-level westerlies at every latitude from 35° to
      60°. At T42 the westerlies span 24°–48° (peak 7.8 m/s at 35°) and turn easterly
@@ -1507,6 +1512,8 @@ question 10. The water-closure defect is to diagnose early in P4.
        stand-in, not tuning;
      - (c) the owner revises the criterion for the gray stand-in physics.
    - **Recommendation:** (b) as data, then (a).
+   - **Owner decision (2026-11-18): (a), retest after P4 clouds.** The q-flux pair (below)
+     ruled out the ocean heat transport.
    - **Instellation sweep** (acceptance 6 *record*): from the warm state (year 12) at 98, 96,
      94 and 92 % (luminosity scaled), 6 years each, climatology over years 15–18
      (`out/p2/sweep/`, binary f59dd7e). Ice edge = most equatorward latitude with
@@ -1550,6 +1557,11 @@ question 10. The water-closure defect is to diagnose early in P4.
        - (b) the owner restates it per month, or for perennial ice (annual ice ≥ 0.95,
          which passes).
    - I have not changed either criterion.
+   - **Owner decision (2026-11-18): restate both.** SPEC.md §9.5 G now counts only cells
+     whose neighbour mean is ≥ 1 mm/day; P2 acceptance 5 now reads "perennial sea ice
+     (annual-mean concentration ≥ 0.95) only where the annual-mean `tos` is within 0.1 K of
+     freezing". Re-evaluated on the same run: G 1.71 (4.2°N 149°E), perennial ice in 2804
+     cells with `tos` ≤ 271.369 K (T_f 271.35 K). **P2 acceptance 5 met.** Resolved.
 9. **P3 acceptance 1 and 2: spec ranges against the RRTMG reference** (2026-11-18).
    - **Test 4** (clear-sky OLR at 288 K, RH 75 %, 400 ppm: 260–275 W m⁻²) and **test 6**
      (Sun, global mean: planetary albedo 0.12–0.19):
@@ -1583,6 +1595,10 @@ question 10. The water-closure defect is to diagnose early in P4.
      - the gray scheme keeps its own solver;
      - `every > 1` is not implemented: the cost is 21 % of a step with `every = 1`.
    - I have not changed any criterion.
+   - **Owner decision (2026-11-18): (b)/(c), compare to RRTMG.** SPEC.md §9.4.1 tests 4 and
+     6 are now relative to RRTMG (8 W m⁻², 0.015), and P3 acceptance 2 is an rms over
+     0.3–1 bar with maxima and 2–3 bar recorded. The two ignored spec-range tests are
+     removed; the RRTMG-relative tests pass. **P3 acceptance 1 and 2 met.** Resolved.
 10. **P3 acceptance 4: the aquaplanet is numerically stable but drifts to a snowball**
     (2026-11-18).
     - **Results:**
@@ -1602,3 +1618,5 @@ question 10. The water-closure defect is to diagnose early in P4.
     - **Recommendation:** (b). It is the same ice-edge sensitivity as question 7, and the
       stand-in is the weak part of the configuration.
     - I have not changed the criterion.
+    - **Owner decision (2026-11-18): (b).** "Stable" means a steady climate; acceptance 4
+      stays open and is retested in P4 with clouds.
