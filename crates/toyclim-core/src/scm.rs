@@ -15,13 +15,20 @@
 //! wind = [5.0, 0.0]          # [u, v] m/s
 //! wind_mode = "geostrophic"  # or "fixed" (wind reset to `wind` after every step)
 //! [scm.surface]
-//! kind = "land"              # "land" | "ocean"
-//! heat_capacity = 2.0e5      # land [J m⁻² K⁻¹]; ocean: mixed_layer_depth [m]
-//! fixed = false              # prescribed T_s
-//! albedo = 0.3
-//! beta = 1.0                 # evaporation efficiency (land)
-//! t_initial = 300.0
+//! kind = "land"              # "land" | "ocean" (with sea ice)
+//! heat_capacity = 2.0e5      # land as one layer [J m⁻² K⁻¹] (default: 5-layer soil)
+//! mixed_layer_depth = 50.0   # ocean [m]
+//! fixed = false              # prescribed SST
+//! albedo = 0.3               # broadband bare-land or ocean albedo (default: band values)
+//! beta = 1.0                 # initial wetness of the bucket (land)
+//! t_initial = 300.0          # surface (soil, mixed layer, ice surface) temperature [K]
+//! snow = 0.0                 # initial snow on land [kg m⁻²]
+//! ice_thickness = 0.0        # initial mean sea-ice thickness [m]
+//! ice_snow = 0.0             # initial snow on the ice per ocean area [kg m⁻²]
 //! ```
+//!
+//! The surface is the 3-D model's [`Surface`] on one point, so the conservation checks cover
+//! soil, snowpack, bucket and sea ice.
 //!
 //! "geostrophic": after the physics, the ageostrophic wind (u − u_g, v − v_g) is rotated by
 //! the Coriolis angle −f Δt_p (exact inertial rotation; the external pressure gradient is
@@ -29,12 +36,13 @@
 //! Each step records the energy and water residuals of column + surface against the
 //! boundary fluxes the schemes report (§9.5.1 conservation test).
 
+use crate::config::SurfaceConfig;
 use crate::config::{Config, Duration, ModelKind};
 use crate::physics::column::{ColumnCtx, ColumnState, SurfaceExchange, Workspace};
 use crate::physics::{Condensable, Schemes};
 use crate::planet::Planet;
 use crate::primitive::vertical::SigmaLevels;
-use crate::surface::{ocean_slab, Tile, TileKind};
+use crate::surface::Surface;
 use crate::system::orbit::Orbit;
 
 /// Settings of the `[scm]` block.
@@ -49,11 +57,15 @@ pub struct ScmSettings {
     pub rh: f64,
     pub wind: [f64; 2],
     pub fixed_wind: bool,
-    pub kind: TileKind,
-    pub heat_capacity: f64,
-    pub albedo: f64,
+    /// Land (else ocean).
+    pub land: bool,
+    /// The surface block as a world `[surface]` config.
+    pub surface: SurfaceConfig,
     pub beta: f64,
     pub t_surface: f64,
+    pub snow: f64,
+    pub ice_thickness: f64,
+    pub ice_snow: f64,
 }
 
 fn get_num(t: &toml::Table, k: &str, d: f64) -> Result<f64, String> {
@@ -118,23 +130,40 @@ impl ScmSettings {
             "albedo",
             "beta",
             "t_initial",
+            "snow",
+            "ice_thickness",
+            "ice_snow",
         ];
         if let Some(k) = s.keys().find(|k| !SKEYS.contains(&k.as_str())) {
             return Err(format!("unknown key {k:?} in [scm.surface]"));
         }
-        let kind = match s.get("kind").and_then(|v| v.as_str()).unwrap_or("ocean") {
-            "ocean" => TileKind::Ocean,
-            "land" => TileKind::Land,
+        let land = match s.get("kind").and_then(|v| v.as_str()).unwrap_or("ocean") {
+            "ocean" => false,
+            "land" => true,
             o => return Err(format!("unknown scm.surface.kind {o:?} (ocean, land)")),
         };
-        let fixed = s.get("fixed").and_then(|v| v.as_bool()).unwrap_or(false);
-        let heat_capacity = if fixed {
-            f64::INFINITY
-        } else if kind == TileKind::Ocean {
-            ocean_slab::heat_capacity(get_num(s, "mixed_layer_depth", 50.0)?)
-        } else {
-            get_num(s, "heat_capacity", 2.0e5)?
-        };
+        let mut sc = toml::Table::new();
+        sc.insert(
+            "fixed".into(),
+            toml::Value::Boolean(s.get("fixed").and_then(|v| v.as_bool()).unwrap_or(false)),
+        );
+        sc.insert(
+            "mixed_layer_depth".into(),
+            toml::Value::Float(get_num(s, "mixed_layer_depth", 50.0)?),
+        );
+        if land && s.contains_key("heat_capacity") {
+            sc.insert(
+                "land_heat_capacity".into(),
+                toml::Value::Float(get_num(s, "heat_capacity", 2.0e5)?),
+            );
+        }
+        if s.contains_key("albedo") {
+            let key = if land { "land_albedo" } else { "ocean_albedo" };
+            sc.insert(key.into(), toml::Value::Float(get_num(s, "albedo", 0.3)?));
+        }
+        let surface: SurfaceConfig = toml::Value::Table(sc)
+            .try_into()
+            .map_err(|e| format!("[scm.surface]: {e}"))?;
         let t_air = get_num(t, "t_air", 300.0)?;
         Ok(ScmSettings {
             lat: get_num(t, "lat", 0.0)?.to_radians(),
@@ -146,11 +175,13 @@ impl ScmSettings {
             rh: get_num(t, "rh", 0.5)?,
             wind,
             fixed_wind,
-            kind,
-            heat_capacity,
-            albedo: get_num(s, "albedo", 0.3)?,
+            land,
+            surface,
             beta: get_num(s, "beta", 1.0)?,
             t_surface: get_num(s, "t_initial", t_air)?,
+            snow: get_num(s, "snow", 0.0)?,
+            ice_thickness: get_num(s, "ice_thickness", 0.0)?,
+            ice_snow: get_num(s, "ice_snow", 0.0)?,
         })
     }
 }
@@ -206,10 +237,8 @@ pub struct Scm {
     pub ph: Vec<f64>,
     pub ps: f64,
     pub state: ColumnState,
-    pub tile: Tile,
-    /// Land bucket content \[kg m⁻²\] (budget only; β is fixed).
-    pub bucket: f64,
-    pub ustar: f64,
+    /// The surface (one point).
+    pub surface: Surface,
     pub time: f64,
     work: Workspace,
     sfc: SurfaceExchange,
@@ -241,7 +270,27 @@ impl Scm {
             (None, None) => return Err("scm needs `levels` or `sigma_half`".into()),
         };
         let orbit = cfg.orbit.as_ref().map(|o| o.resolve(planet.rotation_rate));
-        Ok(Self::new(st, planet, cond, schemes, levels, orbit))
+        let lf = cond.as_ref().map_or(0.0, |c| c.latent_heat_fusion);
+        let t_eff = cfg.system.as_ref().map_or(5772.0, |s| s.star.t_eff);
+        let params = crate::primitive::setup::surface_params(
+            &st.surface,
+            lf,
+            t_eff,
+            crate::primitive::setup::solar_day_frequency(orbit.as_ref()),
+        );
+        let mut surface = Surface::aquaplanet(params, vec![st.t_surface]);
+        if st.land {
+            surface.set_land(&[1.0], 0.0);
+            surface.bucket[0] = st.beta.clamp(0.0, 1.0) * 0.75 * surface.params.bucket_capacity;
+            surface.snow[0] = st.snow;
+        } else {
+            surface.ice_h[0] = st.ice_thickness;
+            surface.ice_snow[0] = st.ice_snow;
+            if st.ice_thickness > 0.0 {
+                surface.t_ml[0] = surface.params.t_freeze_sea;
+            }
+        }
+        Ok(Self::new(st, planet, cond, schemes, levels, orbit, surface))
     }
 
     pub fn new(
@@ -251,6 +300,7 @@ impl Scm {
         schemes: Schemes,
         levels: SigmaLevels,
         orbit: Option<Orbit>,
+        surface: Surface,
     ) -> Self {
         let l = levels.nlev;
         let ps = planet.p0;
@@ -279,12 +329,6 @@ impl Scm {
             .iter()
             .flat_map(|s| s.diagnostics().iter().copied())
             .collect();
-        let mut tile = Tile::new(st.kind, 1.0, st.t_surface, st.heat_capacity, st.albedo);
-        tile.beta = if st.kind == TileKind::Land {
-            st.beta
-        } else {
-            1.0
-        };
         Scm {
             planet,
             cond,
@@ -298,9 +342,7 @@ impl Scm {
             ph,
             ps,
             state,
-            tile,
-            bucket: 0.0,
-            ustar: 0.0,
+            surface,
             time: 0.0,
             work: Workspace::new(l),
             sfc: SurfaceExchange::default(),
@@ -346,10 +388,10 @@ impl Scm {
         let (t0, u0, v0, q0) = (s.t.clone(), s.u.clone(), s.v.clone(), s.q.clone());
         let sfc = &mut self.sfc;
         sfc.begin();
-        sfc.tiles.clear();
-        self.tile.ts_new = self.tile.ts;
-        sfc.tiles.push(self.tile);
-        sfc.ustar_prev = self.ustar;
+        self.surface.tiles_at(0, dt, &mut sfc.tiles);
+        sfc.ustar_prev = self.surface.ustar[0];
+        let e_sfc0 = self.surface.energy(0);
+        let w_sfc0 = self.surface.water(0);
         let mut diag = vec![0.0; self.names.len()];
         let mut off = 0;
         for (i, sc) in self.schemes.iter().enumerate() {
@@ -362,58 +404,65 @@ impl Scm {
         if let Some(i) = self.names.iter().position(|n| *n == "olr") {
             diag[i] += sfc.lw_up_change;
         }
-        // budgets: column + surface against the boundary fluxes the schemes reported
-        let t_new = sfc.tiles[0].ts_new;
-        let c = self.tile.heat_capacity;
-        let d_sfc = if c.is_finite() {
-            c * (t_new - self.tile.ts)
-        } else {
-            // prescribed temperature: the ocean below takes the net flux
-            sfc.sfc_net * dt
-        };
+        // hand the fluxes to the surface as the 3-D driver does
+        use crate::physics::driver::Exchange as X;
+        let mut ex = [0.0; X::N];
+        for t in &sfc.tiles {
+            ex[X::TS + t.slot] = t.ts_new;
+            ex[X::GROUND + t.slot] = t.ground;
+            ex[X::TEVAP + t.slot] = t.evap;
+            ex[X::MELT + t.slot] = t.melt;
+        }
+        ex[X::USTAR] = sfc.ustar;
+        ex[X::RAIN] = sfc.rain;
+        ex[X::SNOW] = sfc.snow;
         let radiation = which
             .iter()
             .any(|&i| self.schemes[i].name() == "gray_radiation");
         let coupled = which
             .iter()
             .any(|&i| self.schemes[i].name() == "kprofile_boundary_layer");
+        let ustar_before = self.surface.ustar[0];
+        self.surface.apply_physics(&ex, 1.0, dt);
+        if !coupled {
+            self.surface.ustar[0] = ustar_before;
+        }
+        let d_sfc = self.surface.energy(0) - e_sfc0;
+        let f = &self.surface.fluxes;
         // energy entering through the top; without the surface solve, radiation's surface
         // absorption leaves the column; without radiation, the surface solve's radiative
         // input (from the given sw_down/lw_down, zero here) enters at the bottom
-        let mut boundary = sfc.toa_net - sfc.lw_up_change;
-        let t = &sfc.tiles[0];
-        let sfc_rad = sfc.sw_down * (1.0 - t.albedo) + sfc.lw_down
-            - crate::physics::radiation::STEFAN_BOLTZMANN * t.ts.powi(4);
+        let mut boundary = sfc.toa_net - sfc.lw_up_change + f.qflux[0] + f.ice_cap[0];
+        let sfc_rad: f64 = sfc
+            .tiles
+            .iter()
+            .map(|t| {
+                t.frac
+                    * (sfc.sw_down * (1.0 - t.albedo) + sfc.lw_down
+                        - crate::physics::radiation::STEFAN_BOLTZMANN * t.ts.powi(4))
+            })
+            .sum();
         if radiation && !coupled {
             boundary -= sfc_rad;
         } else if coupled && !radiation {
             boundary += sfc_rad;
         }
-        boundary += self.tile.qflux;
         let lv = self.cond.as_ref().map_or(0.0, |c| c.latent_heat);
+        let lf = self.cond.as_ref().map_or(0.0, |c| c.latent_heat_fusion);
+        if self.surface.params.fixed {
+            // a prescribed SST takes whatever leaves the atmosphere at the bottom
+            boundary -= sfc.sfc_net - lf * sfc.snow;
+        }
         let d_col = column_energy_change(s, &self.dp, &self.planet, lv, (&t0, &u0, &v0, &q0));
         let energy_residual = (d_col + d_sfc) / dt - boundary;
-        // water: column change = E − P (the ocean is an infinite reservoir; the land
-        // bucket takes P − E)
+        // water: column + stores change by −(runoff + what the ocean reservoir takes)
         let mut water_residual = 0.0;
         if self.cond.is_some() {
             let dq: f64 = (0..s.nlev)
                 .map(|k| (s.q[k] - q0[k]) * self.dp[k] / self.planet.gravity)
                 .sum();
-            water_residual = dq / dt - (sfc.evap - sfc.rain - sfc.snow);
-        }
-        // advance the surface and the large-scale forcing
-        if c.is_finite() {
-            self.tile.ts = t_new;
-        }
-        if self.tile.kind == TileKind::Land {
-            self.bucket += dt * (sfc.rain + sfc.snow - sfc.evap);
-        }
-        if which
-            .iter()
-            .any(|&i| self.schemes[i].name() == "kprofile_boundary_layer")
-        {
-            self.ustar = sfc.ustar;
+            let dw = self.surface.water(0) - w_sfc0;
+            water_residual = (dq + dw) / dt + f.runoff[0] + f.ocean_uptake[0];
         }
         let [ug, vg] = st.wind;
         if st.fixed_wind {
@@ -431,7 +480,7 @@ impl Scm {
         self.time += dt;
         ScmRecord {
             time: self.time,
-            ts: self.tile.ts,
+            ts: self.surface.ts_cell(0),
             diag,
             energy_residual,
             water_residual,

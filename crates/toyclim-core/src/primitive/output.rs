@@ -61,6 +61,18 @@ impl Primitive {
         self.surface.is_some() || self.condensable.is_some()
     }
 
+    /// A per-point surface quantity as a grid field.
+    fn surface_field(
+        &self,
+        f: impl Fn(&crate::surface::Surface, usize) -> f64,
+    ) -> Option<GridField> {
+        let s = self.surface.as_ref()?;
+        Some(GridField {
+            nlev: 1,
+            data: (0..s.len()).map(|p| f(s, p) as Real).collect(),
+        })
+    }
+
     /// One slot of the physics exchange as a grid field.
     fn exchange_field(&self, slot: usize) -> Vec<Real> {
         use crate::physics::driver::Exchange as X;
@@ -102,7 +114,19 @@ impl Primitive {
         }
         v.extend_from_slice(&["t_low", "u_low", "v_low", "wind_low", "psl"]);
         if self.surface.is_some() {
-            v.extend_from_slice(&["ts", "surface_heat", "land", "bucket"]);
+            v.extend_from_slice(&[
+                "ts",
+                "tos",
+                "sic",
+                "sit",
+                "snw",
+                "mrso",
+                "mrro",
+                "ice_cap_flux",
+                "surface_heat",
+                "land",
+                "bucket",
+            ]);
         }
         let reg = &self.physics.registry;
         if !reg.precip_parts().is_empty() {
@@ -150,18 +174,32 @@ impl Primitive {
                 .iter()
                 .map(|t| t + self.planet.t_ref as Real)
                 .collect()),
-            "land" => self
-                .surface
-                .as_ref()
-                .and_then(|s| one(s.land_fraction.clone())),
-            "bucket" => self.surface.as_ref().and_then(|s| one(s.bucket.clone())),
+            "land" => self.surface_field(|s, p| s.land_fraction[p]),
+            // bucket water [kg m⁻²] (land part of the cell; also as "mrso")
+            "bucket" | "mrso" => self.surface_field(|s, p| s.bucket[p]),
+            // mixed-layer temperature [K], sea-ice concentration (fraction of the ocean area),
+            // mean ice thickness per ocean area [m], land snow [kg m⁻²]
+            "tos" => self.surface_field(|s, p| {
+                if s.land_fraction[p] < 1.0 {
+                    s.t_ml[p]
+                } else {
+                    s.ts_cell(p)
+                }
+            }),
+            "sic" => self.surface_field(|s, p| s.sic(p)),
+            "sit" => self.surface_field(|s, p| s.ice_h[p]),
+            "snw" => self.surface_field(|s, p| s.snow[p]),
+            // runoff [kg m⁻² s⁻¹] and cap energy [W m⁻²] of the last step (cell means)
+            "mrro" => self.surface_field(|s, p| s.fluxes.runoff[p]),
+            "ice_cap_flux" => self.surface_field(|s, p| s.fluxes.ice_cap[p]),
             // filtered surface height Φ_s / g [m]
             "orog" => one(self
                 .phis_grid
                 .iter()
                 .map(|p| p / self.planet.gravity as Real)
                 .collect()),
-            "ts" => self.surface.as_ref().and_then(|s| one(s.ts.clone())),
+            // area-mean skin temperature [K]
+            "ts" => self.surface_field(|s, p| s.ts_cell(p)),
             // net energy flux into the surface [W m⁻²] (last physics step)
             "surface_heat" if !self.physics.exchange.is_empty() => {
                 one(self.exchange_field(crate::physics::driver::Exchange::SFC_NET))
@@ -223,7 +261,13 @@ impl Primitive {
             v.push((name, self.tr.integrate(grid) / area));
         }
         if let Some(sf) = &self.surface {
-            v.push(("ts", self.tr.integrate(&sf.ts) / area));
+            let ts: Vec<Real> = (0..sf.len()).map(|p| sf.ts_cell(p) as Real).collect();
+            v.push(("ts", self.tr.integrate(&ts) / area));
+            // surface energy and water content (global integrals) [J], [kg]
+            let e: Vec<Real> = (0..sf.len()).map(|p| sf.energy(p) as Real).collect();
+            let w: Vec<Real> = (0..sf.len()).map(|p| sf.water(p) as Real).collect();
+            v.push(("surface_energy", self.tr.integrate(&e)));
+            v.push(("surface_water", self.tr.integrate(&w)));
         }
         // fixed set of names for the whole run (the CSV header is written at step 0)
         if self.surface.is_some() || !self.physics.is_empty() {
@@ -245,6 +289,10 @@ impl Primitive {
                 ("cum_evap", b.evap),
                 ("cum_diffusion_ke", b.diffusion_ke),
                 ("cum_fixer", b.fixer),
+                ("cum_runoff", b.runoff),
+                ("cum_ocean_uptake", b.ocean_uptake),
+                ("cum_ice_cap", b.ice_cap),
+                ("cum_qflux", b.qflux),
             ]);
         }
         // latent energy ∫ L q dm [J]

@@ -34,7 +34,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
 | P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
-| P2 Land, snow, sea ice, precipitation phase | not started |
+| P2 Land, snow, sea ice, precipitation phase | 2026-11-17 (branch `p2-surface`): acceptance 1–4 and 7 met (Earth scorecard recorded: 11 of 19 P5 rows would pass at T42); 5 and 6 fail, open questions 7 and 8; defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | not started |
 | P4 Clouds, Earth-like energy balance | not started |
 | P5 Earth gate (prescribed ocean) | not started |
@@ -57,7 +57,10 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 
 ## Dependencies beyond the SPEC.md §2 allow-list
 
-None.
+- Python tools: `netCDF4` and `xarray` (owner approval 2026-11-17), to read the netCDF
+  reference data of §9.5.3 for the `earth_amip` scorecard. Installed in the git-ignored
+  `.venv/` (`python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt`).
+  The Rust crates are unaffected.
 
 ---
 
@@ -955,6 +958,230 @@ The T63 run took 5.2 h wall on 8 threads, sharing the machine with other runs.
 
 **Next step**: P2 (branch `p2-surface`), with the 35–60° row open.
 
+## 2026-11-16 (night) — P2 in progress: land-world crash fixed, budgets, defect 1 diagnosed (branch `p2-surface`)
+
+**Done**: phase and fall of precipitation and the tiled surface (5-layer soil, bucket,
+snow, zero-layer sea ice, two-band albedo; commits b84b4ce…59db440, described in the commit
+messages and `docs/tuning.md`).
+
+**Crash of the 3-year T21 land world at day 841, now fixed (f59dd7e).**
+- **Cause:** a positive feedback in the land melt cap. The cell (52.6°N) is 97 % sea ice
+  and 3 % land, and light snow kept a trace on the land tile after the sun warmed it above
+  T_melt.
+  - The surface solve capped a snow-covered tile at T_melt even when it started above it,
+    and evaluated the fluxes at T_melt.
+  - The surplus the trace of snow could not take went into the soil, so the soil warmed
+    further, and the gap to T_melt grew each step.
+  - The skin went 278 → ~700 → ~6000 K, the bucket reached −1.8e5 kg/m², and the state
+    became NaN at step 60562.
+- **Fix:**
+  - The melt is at most L_f S/Δt_p (`Tile::melt_max`). Beyond it the tile warms past T_max,
+    with the melt as a fixed sink.
+  - Snow fallen during the step and left on a skin above T_melt melts with the top soil
+    layer's heat.
+- **Test:** the SCM test `trace_snow_on_warm_land_stays_bounded` (old code: 9.4e7 K, then
+  NaN; fixed: peak 284.9 K).
+- **Verification:** a restart from day 835 runs through to day 850, with peak T_s 320 K
+  and no negative bucket.
+- **Runs redone with the fixed binary:** the land world and the T42 test world (stopped
+  after ~1.3 h). The buggy outputs are kept in `out/p2/buggy/`, not in the repo.
+
+**Measured** (`cases/bench/p2_budget/land_world_t21.toml`, 1096 days, window days 30–1096):
+
+| P2 acceptance | criterion | result |
+|---|---|---|
+| 2. system water budget | ≤ 1e-3 mm/day | 7.3e-4 mm/day |
+| 3. system energy closure | ≤ 0.5 W/m² | 0.11 W/m² |
+| 4. bitwise restart and thread independence | identical | `land_world_runs_and_restarts` passes; the 3-D restart from day 835 reproduced the crash step exactly |
+
+Climate of the land world, for reference: T_s 279.5 K, P 2.81 / E 2.80 mm/day, planetary
+albedo 0.35, net TOA −3.1 W/m² (still cooling in year 3), runoff 0.24 mm/day, G 1.52,
+fixer 0.20 %/day.
+
+**Defect 1, grid-point storms over tropical land (§9.1.1):** T42 test world, 455 days,
+climatology days 90–455. The defect is measured over tropical land (|φ| < 30°, land
+fraction > 0.5) as the number of cells with time-mean P > 30 mm/day and their maximum. The
+global G is also given; in five of the six runs its maximum is an ocean cell at (−15°,
+174°E) with ~3 mm/day next to drier neighbours.
+
+| run | change from the prototype | land cells > 30 mm/day | max land P | global G |
+|---|---|---|---|---|
+| E0 | prototype (main 65a5f5d) | 6 | 38 mm/day | 11.1 |
+| E0a | (a) bucket never dry (capacity 1e6) | 4 | 48 mm/day | 2.0 |
+| E0b | (b) land heat capacity ×10 (2e6) | 13 | 50 mm/day | 10.5 |
+| E0d | (d) SBM τ 2 h → 4 h | 12 | 48 mm/day | 7.5 |
+| E1 | P1 code: sequential physics (c) + implicit PBL–surface solve | 0 | 24 mm/day | 3.8 |
+| E2 | P2 code (this branch) | 0 | 20 mm/day | 2.0 |
+
+- **(a)** A wet bucket removes the dry-ocean contrast behind the large global G, but not
+  the land storms.
+- **(b) and (d)** change neither.
+- **Verdict:** the storms disappear only with the P1 physics. That points to **(c)**,
+  convection and large-scale condensation acting on the same input state. (c) is not
+  separated from the implicit surface solve that came in the same milestone. (b)'s
+  small-heat-capacity half alone does not explain it.
+
+**Tuning changes**: none.
+
+**Open questions**: none new. P2 acceptance 7 needs Python netCDF libraries; I will ask the
+owner before installing them.
+
+**Next step**:
+1. Evaluate the T42 test world, 15 years, slab 50 m (acceptance 5: equilibrium, G,
+   Köppen EF over ice-free ocean, sea ice only where `tos` is at freezing).
+2. Evaluate the bistability runs (acceptance 6), then the instellation sweep in 2 % steps.
+3. Acceptance 7, after the owner's answer on netCDF.
+
+## 2026-11-17 (early morning) — P2 acceptance 5 and 6 evaluated (branch `p2-surface`)
+
+**Acceptance 5: T42 test world, 15 years, slab 50 m** (`cases/bench/p2_testworld/testworld_t42_slab50.toml`,
+binary f59dd7e, 6 threads, 8.8 h wall; climatology over years 10–15):
+
+| criterion | result | |
+|---|---|---|
+| equilibrated (`tools/equilibrium.py`) | T_s trend +0.004 K/yr; TOA − closure residual −0.79 W/m² | pass |
+| G ≤ 2.0 | **2.18**, an ocean cell at 18.1°N 75.9°E (0.8 mm/day, neighbours ~0.37) | **fail** |
+| no EF over ice-free ocean | 0 EF cells over ocean with annual sea ice ≤ 0.15 (2801 EF ocean cells, all with ice) | pass |
+| sea ice only where annual-mean `tos` is at freezing | 3233 ocean cells with annual ice > 0.15; **589** have annual-mean `tos` > T_f + 0.1 K (up to 277.1 K) | **fail as written** |
+
+- **G:** only one cell exceeds 2.0; the next is 1.76, and the largest over land is 1.71.
+  - It is a dry subtropical ocean cell next to a desert coast, not a storm: the ratio
+    of small numbers.
+  - The tropical land storms (defect 1) are absent.
+- **Sea ice and `tos`:** the 589 cells are seasonal ice between 46°S and 49°S and between
+  ~40°N and 46°N. Their annual sea ice has a median of 0.40, and their minimum monthly ice
+  is ~0.
+  - Their annual-mean `tos` is above freezing because the water is open and warm in
+    summer.
+  - Within a month, ice above 0.15 coexists with `tos` > T_f + 0.5 K in 487 of 36117
+    cell-months (1.3 %), at most 273.8 K: the months in which ice forms or melts.
+  - Where the annual ice is ≥ 0.95, `tos` ≤ 271.37 K.
+  - So there is no ice over persistently warm water, which was the prototype's
+    defect. But seasonal ice fails the annual-mean wording. See open question 8.
+- **Climate:**
+  - global T_s 274.4 K, T_as 273.3 K, P = E = 2.73 mm/day, planetary albedo 0.35;
+  - Köppen EF on 30 % of the area: sea ice poleward of ~45° in both hemispheres, the
+    same excess ice as the bistability runs (question 7);
+  - energy closure 0.17 W/m² (system and atmosphere), water closure 1.2e-3 mm/day,
+    fixer 0.37 %/day, runoff 0.19 mm/day.
+- **Figure:** `docs/figures/P2/testworld_t42_koppen.png`. Köppen classes: EF (grey)
+  poleward of ~45° and ET in a ~8° band equatorward of it; Af and Aw along the equator;
+  BWh and BSh deserts at 10–30° on the continents; Cfb across the mid-latitude oceans.
+
+**Acceptance 6** (bistability and the instellation sweep): fails, see open question 7 and
+its sweep table. No snowball down to 92 % within 6 years.
+
+**Tuning changes**: none.
+
+**Open questions**: 8 (new).
+
+**Next step**: owner decisions on questions 7 and 8, and on netCDF for acceptance 7.
+
+## 2026-11-17 — P2 acceptance 7: Earth scorecard recorded (branch `p2-surface`)
+
+**What was built** (commits a29d6cc, 472fa5d and this one):
+- `tools/fetch_reference.py`: fetches and regrids the §9.5.3 reference data to T21 and T42
+  (`reference/derived/`, sources and licences in `reference/derived/SOURCES.md`):
+  - GPCP precipitation; NCEP/NCAR 2 m temperature, sea-level pressure, 200 hPa wind and
+    surface height; OISST v2 SST, sea ice and land mask; Rutgers NH snow cover; ETOPO5;
+    Beck et al. (2018) Köppen;
+  - checks: GPCP 2.69 mm/day, NCEP 2 m T 287.4 K, land fraction 0.282, NH sea ice
+    14.1 / 4.7 million km² (March / September), NH snow 46.2 / 4.3 million km²
+    (February / August);
+  - figure `docs/figures/P2/reference_earth_t42.png`.
+- Ocean model `"prescribed"` (`surface/prescribed.rs`): monthly SST and sea-ice
+  concentration, linear between mid-months. Floes 2 m (NH) and 1 m (SH), the CICE
+  prescribed-ice mode; the knob is logged in `docs/tuning.md`. Integration test: thread
+  independence, bitwise restart and the interpolated values.
+- **Restart bug fixed:** serde_json read the restart scalars (budget totals) back off by
+  1 ulp, so even fixed-SST runs did not reproduce `diagnostics.csv` bitwise after a
+  restart. Fixed with the `float_roundtrip` feature.
+- Cases `cases/bench/earth_amip/earth_amip_{t42,t21}.toml`: gray radiation with top
+  reflectance 0.23, K-profile boundary layer, SBM convection, ETOPO5 geography, 400 ppm,
+  Earth orbit. T42 L26 1 + 5 years; T21 1 + 2 years.
+- `tools/scorecard.py --suite earth_amip --record`: every P5 row, reported as "would
+  pass / fail" with no thresholds applied.
+  - Ceiling: the reference itself agrees with Beck only 0.862 (main group) / 0.730
+    (30 classes) at T21, because of regridding and the climatology periods.
+- `tools/earth_maps.py`: the model-vs-reference figure.
+- Regression check `scripts/regress --against 6822614 --threads "1 2"`: PASS, all cases
+  byte-identical.
+
+**Runs** (binary from a29d6cc + u200; T21 on 4 threads, T42 on 8):
+
+| Row (P5 threshold) | T21 | T42 | Reference |
+|---|---|---|---|
+| Global precipitation (2.4–3.4 mm/day) | 3.44 ✗ | 3.75 ✗ | 2.69 |
+| Zonal precipitation correlation (≥ 0.85) | 0.82 ✗ | 0.82 ✗ | |
+| Tropical peak (5–9 mm/day, 10°S–12°N) | 6.9 at 8°N ✓ | 6.8 at 7°N ✓ | 5.8 at 7°N |
+| Subtropical minima (< 2.5 mm/day, N / S) | 3.3 / 3.2 ✗ | 3.4 / 3.4 ✗ | 1.7 / 1.9 |
+| Precipitation map correlation (≥ 0.60) | 0.62 ✓ | 0.65 ✓ | |
+| Land 2 m T RMSE (≤ 4.5 K) / bias | 4.10 ✓ / −1.39 | 3.38 ✓ / −0.46 | |
+| July − January: correlation (≥ 0.90) / amplitude ratio (0.75–1.3) | 0.96 / 0.82 ✓ | 0.97 / 0.78 ✓ | |
+| Sea-level pressure correlation, DJF / JJA (≥ 0.60) | 0.76 / 0.67 ✓ | 0.79 / 0.69 ✓ | |
+| Winter jets at 200 hPa (30–55 m/s at 25–45°): NH DJF / SH JJA | 25.5 at 47° / 27.6 at −58° ✗ | 26.1 at 43° / 27.2 at −63° ✗ | 41.8 at 32° / 40.2 at −29° |
+| Monsoon, JJA − DJF (≥ 3 mm/day) | 6.5 ✓ | 10.9 ✓ | 8.2 |
+| Köppen main group (≥ 60 %) / 30 classes | 57.9 % ✗ / 29.2 % | 61.1 % ✓ / 36.5 % | ceiling 86 / 73 % at T21 |
+| Named regions | central Australia C ✗ | Arabia C, central Australia C ✗ | |
+| Diurnal 2 m range: Sahara (10–22 K) / tropical Pacific (< 1.5 K) | 6.7 ✗ / 0.51 | 6.5 ✗ / 0.57 | |
+| NH snow (February 35–58, August < 10 million km²) | 29.8 ✗ / 6.4 | 30.8 ✗ / 5.9 | 46.3 / 4.3 |
+| G (≤ 2.0) | 1.94 ✓ | 2.53 ✗ (4°S 67.5°W, Amazon) | |
+| Energy (atmosphere) / water closure | 0.21 W/m² ✓ / 2.4e-4 mm/day ✓ | 0.21 ✓ / 2.2e-4 ✓ | |
+| Cost (≤ 30 min per model year) | 11.6 min (4 threads) | 24.4 min (8 threads) ✓ | |
+
+Rows that would pass: 11 of 19 at both resolutions. Other numbers (T42):
+- global T_s 286.7 K;
+- planetary albedo 0.296;
+- net TOA −15.9 W/m² (fixed SST, so not constrained);
+- fixer 0.084 %/day;
+- runoff 0.24 mm/day.
+
+Scorecards: `docs/scorecards/P2_earth_amip_{t21,t42}_2026-11-17.json`.
+
+**Figures** `docs/figures/P2/earth_amip_{t42,t21}.png`. Rows: precipitation, land 2 m T,
+Köppen main group (model vs reference), and zonal means.
+- **Precipitation:**
+  - the ITCZ is in the right place (peak 7°N);
+  - the subtropics are too wet: 3.4 mm/day against 1.7–1.9, with a broad secondary
+    maximum near ±35° instead of the reference's dry minimum near ±25°;
+  - the land precipitation is patchy;
+  - the Amazon at T42 is a cell-scale mosaic of 1–10 mm/day against a uniform 7–9 in
+    GPCP. This is where G = 2.53 sits, so a weaker form of defect 1 survives over the
+    Amazon at T42;
+  - the maritime continent and the West Pacific are too wet (single cells up to
+    19.6 mm/day against a reference maximum of 11.3).
+- **Land 2 m temperature:** close to NCEP. The Arctic and Siberia are too cold: the
+  zonal mean is ~5 K low poleward of 70°N.
+- **Köppen:**
+  - the Sahara and the Siberian D zone are right;
+  - Australia, southern Africa, Arabia and the US Great Plains are C instead of B, which
+    is the too-wet subtropics again;
+  - E (tundra) reaches too far south in northern Siberia and Canada.
+- **Jets at 200 hPa:** single eddy-driven jets at 43–63°. The subtropical jets (30°,
+  40 m/s in the reference) are missing in both hemispheres. This matches the P1
+  westerlies row (question 6) and points at the tropical heating and Hadley-cell
+  structure under gray radiation, which P3/P4 replace.
+
+**Reading:** all failures except snow and the diurnal range trace to the subtropics
+being too wet and the Hadley circulation being too weak.
+- These are the radiation/convection items that P3–P4 address.
+- The snow deficit (31 against 46 million km² in February) and the small Sahara diurnal
+  range (6.5 against 10–22 K) are land-surface and boundary-layer items to look at in P5,
+  together with the gray longwave (no window: the night-time cooling of dry air is too
+  weak).
+
+**Question 7 diagnostic** (recommended option (b), as data only, not adopted): the
+bistability pair with the ocean heat transport on (`heat_transport = 50.0`, as in the
+test world). Running in `out/p2/q7/` (binary 472fa5d, 4 threads); results in the next
+entry.
+
+**Tuning changes**: none (the floe thickness is a new knob at its literature value).
+
+**Open questions**: none new. Question 4 (Earth-gate thresholds) now has its first data
+for the owner.
+
+**Next step**: P3 radiation. P2 acceptance 5 and 6 stay open (questions 7 and 8).
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -1040,3 +1267,62 @@ The T63 run took 5.2 h wall on 8 threads, sharing the machine with other runs.
        `docs/figures/P1/ape_{t42_sl,t63}_{zonal_mean,moist}.png`.
      - Conclusion: per the owner's decision, the row stays open for the P3/P4 retest; P2
        proceeds.
+7. **P2 bistability: one climate, with ice to ~45°** (2026-11-16; P2 acceptance 6).
+   - **What fails:** the T21 aquaplanet (slab 20 m, sea ice, seasons, 1361 W/m², 12 years)
+     reaches the same climate from both starts (`cases/bench/p2_bistability/`):
+     - global T_s 279.3 K and global sea-ice cover 0.29 in both;
+     - annual-mean sea ice reaches 42°N (concentration 0.2) and 47°S (0.55), full cover
+       poleward of ~52°.
+     - So the warm start does not stay ice-free equatorward of 50°, and the ice start does
+       not stay ice-covered (it deglaciates in ~4 years).
+     - T_s trend over the last 5 years is −0.13 / −0.07 K/yr (warm / ice start).
+   - **Figures:** `docs/figures/P2/bistability_1361.png`, `bistability_1361_ts.png`.
+   - **Likely candidates** (none tested yet):
+     - the uniform TOA reflectance 0.23 (cloud stand-in) applies over sea ice too, on top of
+       the ice albedo, so high latitudes absorb too little. Real clouds over ice add little
+       to the albedo;
+     - no ocean heat transport: the q-flux is zero in this case;
+     - gray radiation with the Earth-shaped τ(φ) and no water-vapour feedback; P3 replaces
+       it.
+   - **Options:**
+     - (a) keep the criterion and retest after P3/P4 (radiation, clouds), as for question 6;
+     - (b) diagnostic runs, not adopted as a setting: the q-flux on, and the reflectance
+       only over open ocean and land. This would be a physics change of the cloud
+       stand-in, not tuning;
+     - (c) the owner revises the criterion for the gray stand-in physics.
+   - **Recommendation:** (b) as data, then (a).
+   - **Instellation sweep** (acceptance 6 *record*): from the warm state (year 12) at 98, 96,
+     94 and 92 % (luminosity scaled), 6 years each, climatology over years 15–18
+     (`out/p2/sweep/`, binary f59dd7e). Ice edge = most equatorward latitude with
+     annual-mean concentration ≥ 0.15:
+
+     | Instellation | Global T_s | Global ice cover | Ice edge N / S | T_s trend, last 5 yr |
+     |---|---|---|---|---|
+     | 100 % (bistab_warm) | 279.3 K | 0.29 | 41.5° / 41.5° | −0.19 K/yr |
+     | 98 % | 277.5 K | 0.30 | 41.5° / 41.5° | −0.01 K/yr |
+     | 96 % | 275.4 K | 0.33 | 41.5° / 41.5° | −0.24 K/yr |
+     | 94 % | 272.8 K | 0.37 | 36.0° / 36.0° | −0.44 K/yr |
+     | 92 % | 270.3 K | 0.40 | 36.0° / 36.0° | −0.70 K/yr |
+
+     - No run reaches a snowball within 6 years, and the tropics stay ice-free in all of
+       them. The 94 % and 92 % runs are still cooling fast, so the freeze point is not
+       found. It lies at or above 92 % if those runs keep going, and is undetermined
+       otherwise.
+     - Recording the transition would need longer runs (≥ 15 years) at 94–90 %. These are
+       not started: question 7 is open and its physics may change.
+8. **P2 acceptance 5: G and seasonal sea ice in the test world** (2026-11-17).
+   - **G = 2.18 against ≤ 2.0:** one dry ocean cell (0.8 mm/day against ~0.37 in its
+     neighbours) at 18°N, off a desert coast. Every other cell is ≤ 1.76.
+     - The criterion is a ratio, so it trips in near-dry regions without any storm.
+     - Options:
+       - (a) keep it, and retest after P3/P4 changes the subtropics;
+       - (b) the owner adds a precipitation floor to G (e.g. only cells with neighbour
+         mean > 1 mm/day).
+   - **"Sea ice only where the annual-mean `tos` is at freezing":** seasonal ice breaks
+     this wording, with 589 cells failing. Monthly, ice coexists with water above
+     freezing only in the months it forms or melts (1.3 % of cell-months, ≤ 273.8 K).
+     - Options:
+       - (a) keep the wording;
+       - (b) the owner restates it per month, or for perennial ice (annual ice ≥ 0.95,
+         which passes).
+   - I have not changed either criterion.

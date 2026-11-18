@@ -5,6 +5,20 @@ use super::*;
 const DRY_LAND: &str = include_str!("../../../../cases/scm/dry_land_diurnal.toml");
 const OCEAN: &str = include_str!("../../../../cases/scm/ocean_diurnal.toml");
 const STIFF: &str = include_str!("../../../../cases/scm/stiff_land.toml");
+const SNOW: &str = include_str!("../../../../cases/scm/snow_melt.toml");
+const ICE: &str = include_str!("../../../../cases/scm/sea_ice.toml");
+
+/// Thin, partly open sea ice under warm air: surface and bottom melt until the ice is gone
+/// (the transition dumps the snow into the ocean).
+fn melting_ice() -> Scm {
+    scm(&ICE
+        .replace("t_air = 255.0", "t_air = 290.0")
+        .replace("t_initial = 250.0", "t_initial = 272.0")
+        .replace("ice_thickness = 1.0", "ice_thickness = 0.3")
+        .replace("ice_snow = 30.0", "ice_snow = 5.0")
+        .replace("mixed_layer_depth = 50.0", "mixed_layer_depth = 10.0")
+        .replace("lat = 80.0", "lat = 40.0"))
+}
 
 fn scm(text: &str) -> Scm {
     Scm::from_config(&Config::parse(text).unwrap()).unwrap()
@@ -51,6 +65,9 @@ fn conservation_per_scheme_and_chain() {
         ("ocean", scm(OCEAN)),
         ("stiff_land", scm(STIFF)),
         ("moist_land", moist_land()),
+        ("snow_melt", scm(SNOW)),
+        ("sea_ice", scm(ICE)),
+        ("melting_ice", melting_ice()),
     ] {
         let (mut emax, mut wmax) = (0.0f64, 0.0f64);
         for step in 0..96 {
@@ -151,7 +168,7 @@ fn dry_land_diurnal_cycle() {
                 r.diag[it],
                 r.diag[ish],
                 r.diag[ipb],
-                s.tile.ts,
+                s.surface.ts_cell(0),
                 th(l - 2) - th(l - 1),
             ));
         }
@@ -197,4 +214,99 @@ fn ocean_diurnal_cycle() {
     let (range, min, _) = diurnal(scm(OCEAN));
     eprintln!("ocean: tas diurnal range {range:.3} K (min {min:.1} K)");
     assert!(range < 1.0, "2 m diurnal range {range:.3} K");
+}
+
+/// P2 acceptance 1 (snowpack): while snow remains the land surface does not exceed the
+/// freezing point; the sun melts snow; melt water reaches the bucket.
+#[test]
+fn snow_covered_land_stays_at_or_below_freezing() {
+    let mut s = scm(SNOW);
+    let t_melt = s.surface.params.t_melt;
+    let (s0, w0) = (s.surface.snow[0], s.surface.bucket[0]);
+    let mut melted_some = false;
+    for _ in 0..480 {
+        let had_snow = s.surface.snow[0] > 0.0;
+        let r = s.step();
+        check(&r, "snow_melt");
+        if had_snow && s.surface.snow[0] > 0.0 {
+            assert!(
+                s.surface.soil_t[0][0] <= t_melt + 1e-9,
+                "snow-covered T_s {}",
+                s.surface.soil_t[0][0]
+            );
+        }
+        melted_some |= s.surface.snow[0] < s0 - 1.0;
+    }
+    eprintln!(
+        "snow melt: snow {s0:.1} → {:.2} kg/m², bucket {w0:.1} → {:.1} kg/m², T_s {:.2} K",
+        s.surface.snow[0], s.surface.bucket[0], s.surface.soil_t[0][0]
+    );
+    assert!(melted_some, "no snow melted");
+    assert!(s.surface.bucket[0] > w0);
+}
+
+/// A trace of snow on land above freezing (snow falling on warm ground) gives no runaway. The melt cap may only take as much energy as the snow can absorb. Before the
+/// fix, the cap evaluated the fluxes at T_melt and put the unused surplus into the soil, a
+/// positive feedback (the 2026-11-16 P2 land-world crash: a 3 % land tile reached
+/// ~6000 K).
+#[test]
+fn trace_snow_on_warm_land_stays_bounded() {
+    let mut s = scm(&SNOW
+        .replace("t_initial = 272.0", "t_initial = 279.0")
+        .replace("snow = 40.0", "snow = 0.01"));
+    // as in the 3-D crash, light snowfall keeps a trace of snow on the ground every step
+    // (added directly, so the budgets are not checked here; the snow_melt case checks them)
+    let mut tmax = 0.0f64;
+    for _ in 0..4 * 48 {
+        s.surface.snow[0] = s.surface.snow[0].max(0.001);
+        s.step();
+        tmax = tmax.max(s.surface.soil_t[0][0]);
+    }
+    eprintln!(
+        "trace snow: snow {:.4} kg/m², max T_s {tmax:.2} K, bucket {:.2} kg/m²",
+        s.surface.snow[0], s.surface.bucket[0]
+    );
+    assert!(tmax < 300.0, "land skin ran away: {tmax:.1} K");
+    assert!(s.surface.bucket[0] >= 0.0);
+}
+
+/// P2 acceptance 1 (sea ice): cold air over thick ice grows it at the base; the ice surface
+/// stays at or below the melting point; warm air melts thin ice away (conservation through
+/// the transition is checked in `conservation_per_scheme_and_chain`).
+#[test]
+fn sea_ice_grows_in_the_cold_and_melts_in_the_warm() {
+    let mut s = scm(ICE);
+    let h0 = s.surface.ice_h[0];
+    for _ in 0..480 {
+        let r = s.step();
+        check(&r, "sea_ice");
+        assert!(s.surface.ice_ts[0] <= s.surface.params.t_melt + 1e-9);
+        assert!(s.surface.t_ml[0] >= s.surface.params.t_freeze_sea - 1e-9);
+    }
+    let h1 = s.surface.ice_h[0];
+    eprintln!(
+        "sea ice (cold): h {h0:.3} → {h1:.3} m, snow {:.1} kg/m², T_ice {:.1} K",
+        s.surface.ice_snow[0], s.surface.ice_ts[0]
+    );
+    assert!(h1 > h0, "ice did not grow");
+    let mut m = melting_ice();
+    let h0 = m.surface.ice_h[0];
+    for _ in 0..20 * 48 {
+        let r = m.step();
+        check(&r, "melting_ice");
+        if m.surface.ice_h[0] == 0.0 {
+            break;
+        }
+    }
+    eprintln!(
+        "sea ice (warm): h {h0:.3} → {:.3} m, T_ml {:.2} K, snow on ice {:.2}",
+        m.surface.ice_h[0], m.surface.t_ml[0], m.surface.ice_snow[0]
+    );
+    assert!(m.surface.ice_h[0] < h0, "ice did not melt");
+    assert_eq!(m.surface.ice_h[0], 0.0, "ice did not melt away");
+    assert_eq!(m.surface.ice_snow[0], 0.0, "snow left without ice");
+    // and the column keeps conserving after the transition (open water only)
+    for _ in 0..48 {
+        check(&m.step(), "after the ice");
+    }
 }

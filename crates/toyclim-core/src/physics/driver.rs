@@ -81,17 +81,25 @@ impl DiagRegistry {
 pub struct Exchange;
 
 impl Exchange {
-    /// New temperature of tile i is slot `TS + i`.
+    /// Per tile slot s (`crate::surface::SLOT_*`): new temperature `TS + s` \[K\], heat into
+    /// the tile body `GROUND + s` and melt `MELT + s` \[W m⁻²\], evaporation `TEVAP + s`
+    /// \[kg m⁻² s⁻¹\].
     pub const TS: usize = 0;
-    pub const USTAR: usize = MAX_TILES;
-    /// Rain + snow and evaporation \[kg m⁻² s⁻¹\].
-    pub const PRECIP: usize = MAX_TILES + 1;
-    pub const EVAP: usize = MAX_TILES + 2;
-    /// Net downward flux at the top of the atmosphere and net flux into the surface
-    /// \[W m⁻²\]; their difference is the atmosphere's energy source.
-    pub const TOA_NET: usize = MAX_TILES + 3;
-    pub const SFC_NET: usize = MAX_TILES + 4;
-    pub const N: usize = MAX_TILES + 5;
+    pub const GROUND: usize = MAX_TILES;
+    pub const TEVAP: usize = 2 * MAX_TILES;
+    pub const MELT: usize = 3 * MAX_TILES;
+    pub const USTAR: usize = 4 * MAX_TILES;
+    /// Rain + snow and evaporation, cell means \[kg m⁻² s⁻¹\].
+    pub const PRECIP: usize = 4 * MAX_TILES + 1;
+    pub const EVAP: usize = 4 * MAX_TILES + 2;
+    /// Net downward flux at the top of the atmosphere and the energy leaving the
+    /// atmosphere at the bottom \[W m⁻²\]; their difference is the atmosphere's source.
+    pub const TOA_NET: usize = 4 * MAX_TILES + 3;
+    pub const SFC_NET: usize = 4 * MAX_TILES + 4;
+    /// Rain and snow reaching the surface \[kg m⁻² s⁻¹\].
+    pub const RAIN: usize = 4 * MAX_TILES + 5;
+    pub const SNOW: usize = 4 * MAX_TILES + 6;
+    pub const N: usize = 4 * MAX_TILES + 7;
 }
 
 /// Physics tendencies per level: cos φ-weighted (du, dv), dT and tracer tendencies.
@@ -193,6 +201,16 @@ impl PhysicsDriver {
         self.schemes.is_empty()
     }
 
+    /// Largest specific humidity (tracer 0) of the state the physics last saw.
+    pub fn max_humidity(&self) -> f64 {
+        self.grids.q.first().map_or(0.0, |q| {
+            q.as_slice()
+                .par_iter()
+                .fold(|| 0.0f64, |m, &x| m.max(x as f64))
+                .reduce(|| 0.0, f64::max)
+        })
+    }
+
     /// Exchange slots of point `p`.
     pub fn exchange_at(&self, p: usize) -> &[f64] {
         &self.exchange[p * Exchange::N..(p + 1) * Exchange::N]
@@ -258,8 +276,8 @@ impl PhysicsDriver {
                 sfc.begin();
                 sfc.tiles.clear();
                 if let Some(sf) = surface {
-                    sf.tiles_at(p, &mut sfc.tiles);
-                    sfc.ustar_prev = sf.ustar[p] as f64;
+                    sf.tiles_at(p, dtp, &mut sfc.tiles);
+                    sfc.ustar_prev = sf.ustar[p];
                 }
                 let ctx = ColumnCtx {
                     lat: tr.grid.lat[j] as Real as f64,
@@ -301,14 +319,23 @@ impl PhysicsDriver {
                     *x = y as Real;
                 }
                 let e = &mut exch[i * Exchange::N..(i + 1) * Exchange::N];
-                for (it, t) in sfc.tiles.iter().take(MAX_TILES).enumerate() {
-                    e[Exchange::TS + it] = t.ts_new;
+                e.fill(0.0);
+                for t in sfc.tiles.iter().take(MAX_TILES) {
+                    e[Exchange::TS + t.slot] = t.ts_new;
+                    e[Exchange::GROUND + t.slot] = t.ground;
+                    e[Exchange::TEVAP + t.slot] = t.evap;
+                    e[Exchange::MELT + t.slot] = t.melt;
                 }
+                e[Exchange::RAIN] = sfc.rain;
+                e[Exchange::SNOW] = sfc.snow;
                 e[Exchange::USTAR] = sfc.ustar;
                 e[Exchange::PRECIP] = sfc.rain + sfc.snow;
                 e[Exchange::EVAP] = sfc.evap;
                 e[Exchange::TOA_NET] = toa_net;
-                e[Exchange::SFC_NET] = sfc.sfc_net;
+                // energy leaving the atmosphere at the bottom: the net flux into the surface
+                // and the latent-heat deficit of the snow that reaches it
+                let lf = cx.cond.map_or(0.0, |c| c.latent_heat_fusion);
+                e[Exchange::SFC_NET] = sfc.sfc_net - lf * sfc.snow;
             }
         };
         let jobs = self

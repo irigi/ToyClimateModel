@@ -25,7 +25,7 @@ pub use condensation::Condensable;
 use crate::config::{Duration, PhysicsConfig, SchemeConfig};
 use crate::planet::Planet;
 use boundary_layer::KProfile;
-use condensation::LargeScaleCondensation;
+use condensation::{LargeScaleCondensation, PrecipitationFall};
 use convection::{DryAdjustment, SimplifiedBettsMiller};
 use damping::Sponge;
 use idealized::held_suarez::{Damping, HeldSuarez, TidallyLocked};
@@ -214,7 +214,9 @@ pub fn build(
         }
         "moist_held_suarez" => {
             check_keys("[forcing]", f, &[HS_KEYS, TJ16_KEYS].concat())?;
-            let cond = moisture.ok_or("forcing moist_held_suarez needs a [moisture] block")?;
+            let cond = &moisture
+                .ok_or("forcing moist_held_suarez needs a [moisture] block")?
+                .without_fusion();
             let d = HeldSuarez::default();
             let c_e = num(f, "c_e", 0.0044)?;
             let sst = match f.get("sst_uniform") {
@@ -317,6 +319,7 @@ pub fn build(
 }
 
 const GRAY_KEYS: &[&str] = &[
+    "reflectance",
     "tau_eq",
     "tau_pole",
     "f_linear",
@@ -407,6 +410,7 @@ pub fn build_world(
                 f_linear: num(&r.params, "f_linear", d.f_linear)?,
                 tau_q: num(&r.params, "tau_q", d.tau_q)?,
                 tau_sw: num(&r.params, "tau_sw", d.tau_sw)?,
+                reflectance: num(&r.params, "reflectance", d.reflectance)?,
                 albedo: num(&r.params, "albedo", d.albedo)?,
                 t_surface_default: num(&r.params, "t_surface_default", d.t_surface_default)?,
                 clouds,
@@ -471,6 +475,7 @@ pub fn build_world(
     }
     if let Some(cond) = moisture {
         schemes.push(Box::new(LargeScaleCondensation { cond: cond.clone() }));
+        schemes.push(Box::new(PrecipitationFall { cond: cond.clone() }));
     }
     // 7. sponge
     if let Some(s) = sponge {

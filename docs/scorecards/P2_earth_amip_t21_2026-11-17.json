@@ -1,0 +1,315 @@
+{
+ "run": "out/p2/earth_amip_t21",
+ "run_git_hash": "a29d6ccde985-dirty",
+ "tool_git_hash": "472fa5df2660",
+ "truncation": 21,
+ "suite": "earth_amip",
+ "pass": null,
+ "record_only": true,
+ "checks": [
+  {
+   "name": "global-mean precipitation 2.4\u20133.4 mm/day",
+   "pass": false
+  },
+  {
+   "name": "zonal-mean precipitation vs GPCP: correlation \u2265 0.85",
+   "pass": false
+  },
+  {
+   "name": "tropical peak 5\u20139 mm/day between 10\u00b0S and 12\u00b0N",
+   "pass": true
+  },
+  {
+   "name": "subtropical minima < 2.5 mm/day in both hemispheres",
+   "pass": false
+  },
+  {
+   "name": "annual precipitation map pattern correlation \u2265 0.60",
+   "pass": true
+  },
+  {
+   "name": "land 2 m temperature RMSE \u2264 4.5 K (lapse-rate corrected)",
+   "pass": true
+  },
+  {
+   "name": "July \u2212 January land 2 m temperature: correlation \u2265 0.90",
+   "pass": true
+  },
+  {
+   "name": "July \u2212 January land 2 m temperature: amplitude ratio 0.75\u20131.3",
+   "pass": true
+  },
+  {
+   "name": "sea-level pressure DJF and JJA, 60\u00b0S\u201360\u00b0N: correlation \u2265 0.60 each",
+   "pass": true
+  },
+  {
+   "name": "winter jets at 200 hPa: 30\u201355 m/s at 25\u201345\u00b0 in each hemisphere",
+   "pass": false
+  },
+  {
+   "name": "monsoon: JJA \u2212 DJF precipitation 10\u201325\u00b0N, 70\u201390\u00b0E \u2265 3 mm/day",
+   "pass": true
+  },
+  {
+   "name": "K\u00f6ppen main group vs Beck et al.: \u2265 60% of land area agrees",
+   "pass": false
+  },
+  {
+   "name": "named regions have their majority class",
+   "pass": false
+  },
+  {
+   "name": "diurnal 2 m range: Sahara 10\u201322 K, open tropical ocean < 1.5 K",
+   "pass": false
+  },
+  {
+   "name": "NH snow cover: February 35\u201358 million km\u00b2, August < 10 million km\u00b2",
+   "pass": false
+  },
+  {
+   "name": "G \u2264 2.0",
+   "pass": true
+  },
+  {
+   "name": "energy closure (atmosphere) within 0.5 W/m\u00b2",
+   "pass": true
+  },
+  {
+   "name": "water closure within 1e-3 mm/day",
+   "pass": true
+  },
+  {
+   "name": "cost \u2264 30 min per model year (T42 L26, 8 threads)",
+   "pass": true
+  }
+ ],
+ "metrics": {
+  "global_ts_K": 287.7784729783813,
+  "global_precip_mm_day": 3.440708041221548,
+  "global_evap_mm_day": 3.4133790521905745,
+  "global_pw_mm": 21.9815788878729,
+  "global_olr_W_m2": 250.72036443857942,
+  "global_asr_W_m2": 239.64700615918605,
+  "global_tas_K": 286.10117784460056,
+  "window_days": 730.5,
+  "net_toa_W_m2": -11.1597811924414,
+  "net_surface_W_m2": -11.349440075610724,
+  "atm_energy_tendency_W_m2": -0.02236276909279966,
+  "energy_closure_atm_W_m2": 0.21202165226212366,
+  "diffusion_ke_W_m2": 1.699381917910512,
+  "window_precip_mm_day": 3.4287148810256554,
+  "window_evap_mm_day": 3.428170203302593,
+  "p_minus_e_rel": 0.0001588829290149018,
+  "water_closure_kg_m2_s": 2.7718113624919565e-09,
+  "fixer_percent_per_day": 0.11082889218602661,
+  "runoff_mm_day": 0.23962479392390432,
+  "water_closure_system_mm_day": 0.00023948450164620354,
+  "planetary_albedo": 0.29862292732396656,
+  "storm_index_G": 1.937129020690918,
+  "storm_index_cell_latlon": [
+   13.84448373438486,
+   78.75
+  ],
+  "zonal_precip_mm_day": [
+   0.3247637152671814,
+   0.4956934154033661,
+   0.7697985172271729,
+   0.7954564094543457,
+   1.2666819095611572,
+   1.980229377746582,
+   2.4024651050567627,
+   2.576169967651367,
+   3.072962760925293,
+   3.7204887866973877,
+   3.4062247276306152,
+   3.325946092605591,
+   3.628798484802246,
+   5.58153772354126,
+   6.903026580810547,
+   5.994205474853516,
+   5.107183456420898,
+   4.580042362213135,
+   4.0531158447265625,
+   3.5578718185424805,
+   3.201181411743164,
+   3.346705436706543,
+   3.4451630115509033,
+   3.033933639526367,
+   2.5134153366088867,
+   2.186190366744995,
+   1.759932518005371,
+   1.4241838455200195,
+   0.8578814268112183,
+   0.4601893424987793,
+   0.3403942883014679,
+   0.16408564150333405
+  ],
+  "lat_deg": [
+   85.7605871204438,
+   80.26877907225,
+   74.74454036863577,
+   69.21297616937085,
+   63.67863556109686,
+   58.14295404920328,
+   52.606526034345265,
+   47.06964205968768,
+   41.53246124665608,
+   35.99507841127159,
+   30.457553961152087,
+   24.91992862994861,
+   19.38223134643438,
+   13.84448373438486,
+   8.306702856518806,
+   2.768903007736009,
+   -2.768903007736009,
+   -8.306702856518806,
+   -13.84448373438486,
+   -19.38223134643438,
+   -24.91992862994861,
+   -30.457553961152087,
+   -35.99507841127159,
+   -41.53246124665608,
+   -47.06964205968768,
+   -52.606526034345265,
+   -58.14295404920328,
+   -63.67863556109686,
+   -69.21297616937085,
+   -74.74454036863577,
+   -80.26877907225,
+   -85.7605871204438
+  ],
+  "earth_amip": {
+   "global_precip_mm_day": 3.4406672207026983,
+   "global_precip_ref_mm_day": 2.695144112373974,
+   "zonal_precip_corr": 0.8209804255085973,
+   "tropical_peak": {
+    "mm_day": 6.904193878173828,
+    "lat": 8.306702856518806
+   },
+   "tropical_peak_ref": {
+    "mm_day": 5.355036612406062,
+    "lat": 8.306702856518806
+   },
+   "subtropical_min_NH_mm_day": 3.3255257606506348,
+   "subtropical_min_NH_ref_mm_day": 1.7813283102223068,
+   "subtropical_min_SH_mm_day": 3.201108932495117,
+   "subtropical_min_SH_ref_mm_day": 1.9919478279686396,
+   "precip_map_corr": 0.6159446736665638,
+   "zonal_precip_ref_mm_day": [
+    0.49126268780673854,
+    0.6196100633339181,
+    0.9119285708099294,
+    1.3812352422391996,
+    1.8892674249752115,
+    2.339144919222842,
+    2.4422503277116143,
+    2.5514487447217107,
+    2.7406404840342775,
+    2.5922574120001327,
+    2.1240869858071774,
+    1.7813283102223068,
+    1.9290129008262131,
+    2.937775878931916,
+    5.355036612406062,
+    4.762576924307116,
+    4.021195593241525,
+    3.6417478458364108,
+    2.647354741662639,
+    1.9919478279686396,
+    1.9977949181823835,
+    2.3286117811027607,
+    2.6890263240008303,
+    2.9515723502263427,
+    2.8697995976544917,
+    2.9946015663444996,
+    3.062839037273079,
+    2.0745141141427057,
+    1.1497517653818552,
+    0.7449048469667712,
+    0.4419518247086671,
+    0.3613734553667503
+   ],
+   "land_tas_rmse_K": 4.0953239210071155,
+   "land_tas_bias_K": -1.3942404763410772,
+   "land_tas_jul_jan_corr": 0.958169684068528,
+   "land_tas_jul_jan_amplitude_ratio": 0.8201156481827206,
+   "psl_DJF_corr": 0.762007883990207,
+   "psl_JJA_corr": 0.6707678614234894,
+   "jet200_NH_DJF": {
+    "u": 25.546186447143555,
+    "lat": 47.06964205968768
+   },
+   "jet200_NH_DJF_ref": {
+    "u": 41.76499586304028,
+    "lat": 30.457553961152087
+   },
+   "jet200_SH_JJA": {
+    "u": 27.62415313720703,
+    "lat": -58.14295404920328
+   },
+   "jet200_SH_JJA_ref": {
+    "u": 39.528135577837624,
+    "lat": -30.457553961152087
+   },
+   "monsoon_jja_minus_djf_mm_day": 6.461974689325981,
+   "monsoon_jja_minus_djf_mm_day_ref": 8.490377207159362,
+   "koppen_main_group_agreement": 0.5793038192900816,
+   "koppen_30class_agreement": 0.29171867734225404,
+   "named_regions": {
+    "Sahara": {
+     "expected": "B",
+     "model": "B",
+     "cells": 14
+    },
+    "Arabia": {
+     "expected": "B",
+     "model": "B",
+     "cells": 4
+    },
+    "central Australia": {
+     "expected": "B",
+     "model": "C",
+     "cells": 3
+    },
+    "Amazon": {
+     "expected": "A",
+     "model": "A",
+     "cells": 6
+    },
+    "Congo": {
+     "expected": "A",
+     "model": "A",
+     "cells": 4
+    },
+    "Borneo/Sumatra": {
+     "expected": "A",
+     "model": "A",
+     "cells": 3
+    },
+    "central Siberia": {
+     "expected": "D",
+     "model": "D",
+     "cells": 12
+    },
+    "Greenland interior": {
+     "expected": "E",
+     "model": "E",
+     "cells": 6
+    },
+    "Antarctica": {
+     "expected": "E",
+     "model": "E",
+     "cells": 160
+    }
+   },
+   "diurnal_range_sahara_K": 6.656698703765869,
+   "diurnal_range_tropical_pacific_K": 0.5080147981643677,
+   "nh_snow_extent_Feb_Mkm2": 29.761733969167746,
+   "nh_snow_extent_Feb_ref_Mkm2": 46.22159838526408,
+   "nh_snow_extent_Aug_Mkm2": 6.414281005321993,
+   "nh_snow_extent_Aug_ref_Mkm2": 4.267535808282831,
+   "cost_min_per_model_year": 11.5845
+  }
+ }
+}

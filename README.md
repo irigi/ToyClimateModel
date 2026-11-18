@@ -106,7 +106,20 @@ boundary layer solved implicitly with the surface energy balance), `[convection]
 "sbm" | "dry" | "none"`, large-scale condensation when `[moisture]` is present, and
 `[dynamics] energy_fixer = true`. Near-surface fields `tas`, `huss`, `uas`, `vas`, `sfcwind`,
 `gust` are true 2 m / 10 m diagnostics; `t_low`, `u_low`, `v_low`, `wind_low` are the lowest
-model level; `psl` is sea-level pressure.
+model level; `psl` is sea-level pressure. `[dynamics] tracer_transport = "semi_lagrangian"`
+carries humidity on the grid (the moist world cases use it). Precipitation has an ice phase:
+`prsn` is snowfall, `melt` the snow melted on the way down. `[radiation] reflectance` reflects
+a fraction of the incoming sunlight at the top (a stand-in for clouds until P4; 0.23 in the
+world cases).
+
+Surface (`[surface]`, `[surface.ocean]`, `[surface.land]`, `[surface.sea_ice]`): every cell has
+fractions of open ocean, sea ice and land (from the heightmap). Slab ocean or fixed SST;
+zero-layer sea ice (`initial_thickness` for an ice-covered start); 5-layer soil, bucket and
+snowpack on land; albedos per tile in two bands. Fields: `ts` (cell-mean skin temperature),
+`tos` (mixed layer), `sic` (ice concentration of the ocean part), `sit` (ice thickness per
+ocean area, m), `snw` (land snow, kg m⁻²), `mrso` / `bucket` (soil water), `mrro` (runoff),
+`ice_cap_flux`, `land`. `tools/scorecard.py out/<run>` prints global means and the energy and
+water closures of atmosphere and surface.
 
 Settings outside the supported envelope (SPEC.md §9.2 P-5) are logged as warnings. Then:
 
@@ -126,8 +139,8 @@ python tools/koppen.py out/myworld
 `tools/tidally_locked.py` and `tools/plot_field.py` give more views. Physics available so
 far: dry Held–Suarez-type forcings, the TJ16 moist Held–Suarez bundle, and world physics
 (gray radiation, K-profile boundary layer with the coupled surface solve, dry adjustment,
-simplified Betts–Miller convection, large-scale condensation), slab or fixed-SST ocean, land
-with a bucket model. See `docs/progress.md` for what is validated and what is not.
+simplified Betts–Miller convection, large-scale condensation with ice and snowfall), slab or
+fixed-SST ocean with sea ice, land with soil layers, a bucket and snow. See `docs/progress.md` for what is validated and what is not.
 
 ## Viewer
 

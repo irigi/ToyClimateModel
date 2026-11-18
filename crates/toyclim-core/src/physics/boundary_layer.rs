@@ -125,10 +125,14 @@ pub fn implicit_diffusion(
 
 /// Result of one tile's implicit energy balance.
 struct TileSolve {
-    /// Sensible heat flux, evaporation, net flux into the surface.
+    /// Sensible heat flux, evaporation; energy leaving the atmosphere into the tile
+    /// (radiation − H − L_v E) \[W m⁻²\].
     h: f64,
     e: f64,
     net: f64,
+    /// Heat into the tile body and melt (surplus above `t_max`) \[W m⁻²\].
+    ground: f64,
+    melt: f64,
     /// T_s⁺ − T_s \[K\] and the linearised extra emission 4σT_s³ΔT_s.
     dts: f64,
     lw_change: f64,
@@ -282,19 +286,52 @@ impl ColumnScheme for KProfile {
                 }
                 None => (0.0, 0.0),
             };
+            // the tile's evaporation costs L_v plus L_f for the part that sublimates
+            let lt = lv + if cond.is_some() { t.fusion } else { 0.0 };
             let sig = STEFAN_BOLTZMANN * t.ts.powi(3);
             let r0 = sw_down * (1.0 - t.albedo) + lw_down - sig * t.ts;
             let r1 = 4.0 * sig;
-            let dts = if t.heat_capacity.is_finite() {
-                (r0 - h0 - lv * e0 + t.qflux) / (t.heat_capacity / dtp + r1 + h1 + lv * e1)
+            let finite = t.heat_capacity.is_finite();
+            let c_body = if finite {
+                t.heat_capacity / dtp + t.g1
             } else {
                 0.0
             };
+            let (dts, capped) = if finite {
+                let den = c_body + r1 + h1 + lt * e1;
+                let d = (r0 - h0 - lt * e0 - t.g0) / den;
+                if t.ts + d > t.t_max {
+                    // the surplus at T_max melts snow or ice, at most `melt_max`; beyond
+                    // that the tile warms past T_max with the melt as a fixed sink. The
+                    // melt is net_body − G = den (d − ΔT_s) either way. (A tile that starts
+                    // above T_max, snow falling on warm ground, is cooled to T_max only as
+                    // far as its snow can take the energy.)
+                    let dc = t.t_max - t.ts;
+                    if den * (d - dc) <= t.melt_max {
+                        (dc, true)
+                    } else {
+                        (d - t.melt_max / den, true)
+                    }
+                } else {
+                    (d, false)
+                }
+            } else {
+                (0.0, false)
+            };
             let (hh, ee) = (h0 + h1 * dts, e0 + e1 * dts);
+            let net_body = r0 - r1 * dts - hh - lt * ee;
+            let (ground, melt) = if capped {
+                let g = t.g0 + c_body * dts;
+                (g, net_body - g)
+            } else {
+                (net_body, 0.0)
+            };
             TileSolve {
                 h: hh,
                 e: ee,
                 net: r0 - r1 * dts - hh - lv * ee,
+                ground,
+                melt,
                 dts,
                 lw_change: r1 * dts,
             }
@@ -305,6 +342,9 @@ impl ColumnScheme for KProfile {
             let r = solve(i, &sfc.tiles[i]);
             let t = &mut sfc.tiles[i];
             t.ts_new = t.ts + r.dts;
+            t.ground = r.ground;
+            t.melt = r.melt;
+            t.evap = r.e;
             let f = t.frac;
             hm += f * r.h;
             em += f * r.e;

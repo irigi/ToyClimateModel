@@ -58,6 +58,10 @@ pub struct ColumnState {
     pub dv: Vec<f64>,
     pub dt: Vec<f64>,
     pub dq: Vec<f64>,
+    /// Condensate produced per layer during this step and not yet fallen out, liquid and
+    /// ice \[kg m⁻² s⁻¹\] (convection and condensation add, the fall scheme removes).
+    pub prod_rain: Vec<f64>,
+    pub prod_snow: Vec<f64>,
     dtp: f64,
 }
 
@@ -73,6 +77,8 @@ impl ColumnState {
             q: zq.clone(),
             du: z.clone(),
             dv: z.clone(),
+            prod_rain: z.clone(),
+            prod_snow: z.clone(),
             dt: z,
             dq: zq,
             dtp: 1.0,
@@ -81,9 +87,21 @@ impl ColumnState {
     /// Start a new physics step of length `dtp` (zero the accumulated tendencies).
     pub fn begin(&mut self, dtp: f64) {
         self.dtp = dtp;
-        for x in [&mut self.du, &mut self.dv, &mut self.dt, &mut self.dq] {
+        for x in [
+            &mut self.du,
+            &mut self.dv,
+            &mut self.dt,
+            &mut self.dq,
+            &mut self.prod_rain,
+            &mut self.prod_snow,
+        ] {
             x.fill(0.0);
         }
+    }
+    /// Record condensate `m` \[kg m⁻² s⁻¹\] formed in layer k with ice fraction `ice`.
+    pub fn produce(&mut self, k: usize, m: f64, ice: f64) {
+        self.prod_snow[k] += ice * m;
+        self.prod_rain[k] += (1.0 - ice) * m;
     }
     /// The physics step Δt_p \[s\].
     pub fn dtp(&self) -> f64 {

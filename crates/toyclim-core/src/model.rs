@@ -39,6 +39,10 @@ pub trait Model: Send {
     fn diagnostics(&self) -> Vec<(&'static str, f64)>;
     /// False if the state contains NaN or Inf.
     fn is_finite(&self) -> bool;
+    /// Why the run must stop although the state is finite (e.g. outside the envelope).
+    fn failure(&self) -> Option<String> {
+        None
+    }
     /// Spectral state for a restart (both leapfrog levels), plus scalar counters.
     fn restart_state(&self) -> (Vec<RestartArray>, Vec<(String, f64)>);
     /// Switch the per-phase wall-clock timers on or off (no effect on results).

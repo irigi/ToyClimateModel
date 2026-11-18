@@ -71,6 +71,12 @@ pub struct Budget {
     pub diffusion_ke: f64,
     /// Water mass moved by the negative-humidity fixer (SPEC.md §9.8 monitor) \[kg\].
     pub fixer: f64,
+    /// Surface: runoff and water into the ocean reservoir \[kg\]; energy gained by
+    /// discarding frozen mass above the caps and prescribed ocean heat convergence \[J\].
+    pub runoff: f64,
+    pub ocean_uptake: f64,
+    pub ice_cap: f64,
+    pub qflux: f64,
 }
 
 /// The primitive-equation model.
@@ -118,6 +124,8 @@ pub struct Primitive {
     /// Global mass of each grid-point tracer after physics, before transport (target of
     /// the mass fixer) \[Pa m²\].
     sl_target: Vec<f64>,
+    /// Consecutive steps with specific humidity above 0.1 somewhere (SPEC.md §9.4.4).
+    q_high_steps: u64,
 }
 
 /// Phases reported by [`Model::profile`].
@@ -168,6 +176,7 @@ impl Primitive {
             sl: (!init.state.gq.is_empty())
                 .then(|| semi_lagrangian::SemiLagrangian::new(&tr.grid, tr.radius as f64)),
             sl_target: Vec::new(),
+            q_high_steps: 0,
             isol: Vec::new(),
             ke_norm: harmonic_norm(&tr),
             prev: init.state.clone(),
@@ -295,6 +304,9 @@ impl Primitive {
         } else {
             2.0 * self.settings.dt
         };
+        if let Some(sfc) = self.surface.as_mut() {
+            sfc.prescribe(self.steps as f64 * self.settings.dt);
+        }
         let cx = DriverCtx {
             tr: &self.tr,
             planet: &self.planet,
@@ -309,6 +321,17 @@ impl Primitive {
         let dt = self.settings.dt;
         if let Some(sfc) = self.surface.as_mut() {
             sfc.apply_physics(&self.physics.exchange, dt / dtp, dt);
+        }
+        if let Some(sfc) = &self.surface {
+            let int = |x: &[f64]| {
+                let g: Vec<Real> = x.iter().map(|&v| v as Real).collect();
+                self.tr.integrate(&g) * dt
+            };
+            let f = &sfc.fluxes;
+            self.budget.runoff += int(&f.runoff);
+            self.budget.ocean_uptake += int(&f.ocean_uptake);
+            self.budget.ice_cap += int(&f.ice_cap);
+            self.budget.qflux += int(&f.qflux);
         }
         use crate::physics::driver::Exchange as X;
         let mut sums = [0.0f64; 4];
@@ -391,6 +414,13 @@ impl Model for Primitive {
         let mut lap = tendencies::Lap::new();
         if !self.physics.is_empty() {
             self.physics_step();
+            // the physics saw the grid humidity of the n−1 level
+            let q_max = self.physics.max_humidity();
+            if q_max > 0.1 {
+                self.q_high_steps += 1;
+            } else {
+                self.q_high_steps = 0;
+            }
         }
         lap.add(&mut t.as_mut(), 0);
         let phys = (!self.physics.is_empty()).then_some(&self.physics.tend);
@@ -563,6 +593,15 @@ impl Model for Primitive {
     }
     fn is_finite(&self) -> bool {
         self.curr.is_finite() && self.prev.is_finite()
+    }
+    fn failure(&self) -> Option<String> {
+        (self.q_high_steps > 100).then(|| {
+            format!(
+                "specific humidity above 0.1 kg/kg for {} consecutive steps: the atmosphere is \
+                 outside the dilute envelope this model supports (SPEC.md §9.4.4)",
+                self.q_high_steps
+            )
+        })
     }
     fn set_profiling(&mut self, on: bool) {
         self.timers = on.then_some([0.0; 9]);

@@ -24,6 +24,9 @@ until then are reproducible; do not tune).
 | 2026-11-16 | P1 surface exchange and boundary layer | new | Defaults from Louis (1979), Frierson et al. (2006) and SPEC.md §9.4.2–9.4.3; not tuned (tuning is P4–P6). World cases: TJ16 exchange and Rayleigh drag removed. |
 | 2026-11-16 | `tau_sw` in the APE benchmark cases | 0.22 → 0 | Not tuning: the benchmark configuration follows Frierson et al. (2006, no SW absorption). With 0.22 along the slant path the gray scheme heats the polar upper troposphere by several K/day at low sun (P1 SCM diagnosis). World cases keep 0.22 until P3 replaces the radiation. |
 | 2026-11-16 | `[dynamics] tracer_transport` in the moist world and APE cases | spectral → semi_lagrangian | Not tuning: SPEC.md §9.8 remedy after the tracer-fixer trigger fired (2.3%/day of the vapour mass at T42). |
+| 2026-11-16 | Surface (P2) | prototype land 2e5 J m⁻² K⁻¹ / albedo 0.3 and the 0.6 ice switch → soil, snow, sea ice, band albedos | Not tuning: SPEC.md §9.4.5–9.4.6 schemes at their published or SPEC starting values. |
+| 2026-11-16 | `[radiation] reflectance` in the world cases | (new) 0 → 0.23 | Not fitted: observed fraction of the incoming shortwave reflected by clouds and atmosphere, 79/341.3 W m⁻² (Trenberth, Fasullo & Kiehl 2009, Fig. 1); a stand-in for the P4 clouds once the P2 surface albedos replaced the prototype's 0.3. Default 0 (APE, idealized cases unchanged). |
+| 2026-11-17 | `[surface.ocean] model = "prescribed"` (Earth AMIP case) | (new) | Not tuning: AMIP-style boundary condition for P2 item 7 and P5; observed monthly SST and ice concentration (OISST v2, 1991–2020) with floe thickness 2 m / 1 m from the CICE prescribed-ice mode. |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -58,24 +61,45 @@ until then are reproducible; do not tune).
 | Gray LW linear fraction f_l | `f_linear` | 0.1 | proto | Frierson et al. (2006) |
 | LW optical depth per kg m⁻² vapour | `tau_q` | 0 | proto | Byrne & O'Gorman (2013) form, off |
 | SW absorption optical depth τ_sw (∝ σ²) | `tau_sw` | 0.22 | proto | O'Gorman & Schneider (2008) |
+| SW reflectance at the top (cloud stand-in until P4) | `reflectance` | 0 (worlds: 0.23) | interim | Trenberth et al. (2009): 79 of 341.3 W m⁻² |
 | Surface albedo (gray) | `albedo` | 0.3 | proto | Frierson et al. (2006) |
 | SBM relaxation time τ | `tau_convection` | 2 h | knob (P1/P5) | Frierson (2007) |
 | SBM reference RH | `rh_convection` | 0.7 | knob (P1/P5) | Frierson (2007) |
 | Clouds RH_c, SW reflect, LW τ | `cloud_rh_crit`, `cloud_sw_reflect`, `cloud_lw_tau` | 0.8, 0.25, 3 | proto (experimental) | none (untuned); replaced in P4 |
 
-## Prototype surface (`[surface]`; replaced in P2)
+## Surface (`[surface]`, P2; SPEC.md §9.4.5–9.4.6)
 
-| Parameter | Key | Default | Status | Source |
-|---|---|---|---|---|
-| Mixed-layer depth | `mixed_layer_depth` | 20 m | knob (P6: 50 m) | common slab choice |
-| Land heat capacity | `land_heat_capacity` | 2e5 J m⁻² K⁻¹ | proto | ≈ 5 cm water; replaced by soil layers (P2) |
-| Land albedo | `land_albedo` | 0.3 | proto | none; replaced by §9.4.6 (P2) |
-| Ocean albedo | `ocean_albedo` | radiation `albedo` | proto | — |
-| Bucket capacity | `bucket_capacity` | 150 kg m⁻² | knob | Manabe (1969) |
-| Initial bucket fill | `initial_bucket` | 0.75 | proto | — |
-| Ice/snow albedo switch | `ice_albedo` | 0.6 | proto | none; removed in P2 (§9.4.6) |
-| Ocean freezing / land snow threshold | `ocean_freeze`, `land_freeze` | 271.15 K, 273.15 K | proto | — |
-| Prescribed ocean heat transport Q₀ | `ocean_heat_transport` | 0 (worlds: 50 W m⁻²) | proto | Merlis et al. (2013) form, φ₀ = 16° |
+The prototype's single-layer land (2e5 J m⁻² K⁻¹, albedo 0.3) and the ice–albedo
+temperature switch (0.6 below 271.15 / 273.15 K) were removed in P2. `[surface.land]
+heat_capacity` still selects one layer of that heat capacity (P1 single-column stability
+tests only).
+
+| Parameter | Key | Default | Range | Status | Source |
+|---|---|---|---|---|---|
+| Mixed-layer depth | `[surface.ocean] mixed_layer_depth` | 20 m | 10–50 | knob (P6: 50 m) | common slab choice |
+| Prescribed ocean heat transport Q₀ | `[surface.ocean] heat_transport` | 0 (worlds: 50 W m⁻²) | 0–60 | knob | Merlis et al. (2013) form, φ₀ = 16° |
+| Ocean albedo (both bands) | `[surface.ocean] albedo` | 0.06 | — | knob | SPEC.md §9.4.6 starting value |
+| Bare-land albedo vis / NIR | `[surface.land] albedo` (broadband) | 0.15 / 0.30 | — | knob | SPEC.md §9.4.6 starting values (no paper) |
+| Soil volumetric heat capacity, conductivity | `soil_heat_capacity`, `soil_conductivity` | 2.0e6 J m⁻³ K⁻¹, 1.0 W m⁻¹ K⁻¹ | — | knob | SPEC.md §9.4.5 |
+| Soil layers | (code) | 5, d₁ = 0.25 √(2κ/ω_day) ∈ [0.01, 0.2] m, ×3 per layer | — | fixed | SPEC.md §9.4.5 |
+| Bucket capacity | `[surface.land] bucket_capacity` | 150 kg m⁻² | — | knob | Manabe (1969) |
+| β = min(1, W/(0.75 W_max)) | (code) | — | — | fixed | Manabe (1969) |
+| Initial bucket fill | `initial_bucket` | 0.75 | — | proto | — |
+| Snow cover scale S_c (land) | `snow_cover_scale` | 15 kg m⁻² | — | knob | SPEC.md §9.4.5 |
+| Snow cap | `snow_cap` | 5000 kg m⁻² | — | fixed | SPEC.md §9.4.5 |
+| Dry snow albedo vis / NIR | (code) | 0.96 / 0.68 | — | knob | CAM6 Scientific Guide §8.3 |
+| Melting snow: loss per K above −1 °C | (code) | 0.10 / 0.15 | — | knob | CAM6 §8.3 |
+| Bare sea ice albedo vis / NIR; melt loss per K | (code) | 0.73 / 0.33; 0.075 / 0.075 | — | knob | CAM6 §8.3 |
+| Snow cover on ice h_s/(h_s + 0.02 m) | (code) | S/(S + 6.6 kg m⁻²) | — | fixed | CAM6 §8.3 eq. 7, ρ_s = 330 |
+| Band weights | (code) | Planck fraction below 0.7 µm at T_eff (Sun 0.49) | — | fixed | — |
+| Sea-water freezing point | `[surface.sea_ice] freezing_point` | 271.35 K | — | fixed | SPEC.md §9.4.5; CAM6 −1.8 °C |
+| Ice, snow conductivity | (code) | 2.034, 0.31 W m⁻¹ K⁻¹ | — | fixed | CAM6 §8.2 table |
+| Ice, snow density | (code) | 917, 330 kg m⁻³ | — | fixed | CAM6 §8.2 table |
+| Latent heat of fusion, T_freeze | (condensable) | 3.34e5 J kg⁻¹, 273.15 K | — | fixed | CAM6 §8.2 table |
+| Sea-ice concentration scale h₀ | `[surface.sea_ice] h0` | 0.5 m | 0.2–1 | knob | SPEC.md §9.4.5 |
+| Prescribed sea-ice floe thickness, NH / SH (AMIP ocean) | `[surface.ocean] ice_thickness` | 2 m / 1 m | 0.5–3 m | knob (P5) | CICE prescribed-ice mode (CICE documentation for CESM 1.0, Hunke & Lipscomb); the CAM6 Scientific Guide §8 gives 2 m / 0.5 m |
+| Sea-ice thickness cap | `max_thickness` | 50 m | — | fixed | SPEC.md §9.4.5 |
+| Ice fraction ramp of condensate | (condensable `ice_ramp`) | 20 K below T_freeze | 10–40 | knob | SPEC.md §9.4.4 |
 
 ## Orbit defaults (become derived quantities in config schema v2, P0)
 
