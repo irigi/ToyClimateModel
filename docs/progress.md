@@ -1488,6 +1488,17 @@ question 10. The water-closure defect is to diagnose early in P4.
        `docs/figures/P1/ape_{t42_sl,t63}_{zonal_mean,moist}.png`.
      - Conclusion: per the owner's decision, the row stays open for the P3/P4 retest; P2
        proceeds.
+   - **P3 retest (2026-11-18):** T42 semi-Lagrangian with the semi-gray radiation and the
+     Earth ozone column, the top reflectance tuned to 0.165 (planetary albedo 0.256), years
+     2–4 (`docs/scorecards/P1_aquaplanet_t42_semigray_2026-11-18.json`):
+     - surface westerlies span 25°–46° (peak 8.5 m/s at 35°), easterlies from 47°, minimum
+       −6.1 m/s at 60°. That is worse than gray (−3.69 m/s); the jet is at 32° (55 m/s)
+       and the Hadley edge at 23.5°.
+     - The other five rows pass (G 1.16, P = E to 0.03 %, energy closure 0.05 W m⁻²).
+     - Radiation is therefore not the cause. Clear-sky semi-gray radiation sharpens the
+       jet and keeps it equatorward. The row stays open for the P4 retest with clouds.
+       Clouds are the last candidate named under "Likely candidates"; if they do not move
+       the westerlies, the remaining option is (c).
 7. **P2 bistability: one climate, with ice to ~45°** (2026-11-16; P2 acceptance 6).
    - **What fails:** the T21 aquaplanet (slab 20 m, sea ice, seasons, 1361 W/m², 12 years)
      reaches the same climate from both starts (`cases/bench/p2_bistability/`):
