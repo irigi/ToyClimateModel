@@ -1491,7 +1491,7 @@ question 10. The water-closure defect is to diagnose early in P4.
    - **P3 retest (2026-11-18):** T42 semi-Lagrangian with the semi-gray radiation and the
      Earth ozone column, the top reflectance tuned to 0.165 (planetary albedo 0.256), years
      2–4 (`docs/scorecards/P1_aquaplanet_t42_semigray_2026-11-18.json`):
-     - surface westerlies span 25°–46° (peak 8.5 m/s at 35°), easterlies from 47°, minimum
+     - surface westerlies span 24°–46° (peak 8.5 m/s at 35°), easterlies from 49°, minimum
        −6.1 m/s at 60°. That is worse than gray (−3.69 m/s); the jet is at 32° (55 m/s)
        and the Hadley edge at 23.5°.
      - The other five rows pass (G 1.16, P = E to 0.03 %, energy closure 0.05 W m⁻²).
