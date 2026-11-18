@@ -56,6 +56,8 @@ initial = "tj16"
 
 [radiation]
 scheme = "gray"
+# Earth-shaped optical depth τ₀(φ) (Frierson et al. 2006), on only in Earth-like idealized cases (P3)
+latitude_dependence = true
 tau_sw = 0.0
 
 [boundary_layer]

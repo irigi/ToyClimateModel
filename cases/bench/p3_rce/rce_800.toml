@@ -1,0 +1,71 @@
+# SPEC.md P3 acceptance 3 (2×CO₂ twin of rce_400.toml): single-column radiative–convective equilibrium with the semi-gray
+# radiation. Sun, global-mean insolation S/4 = 340.25 W m⁻² at cos zenith 0.5 (1361 W m⁻²,
+# Kopp & Lean 2011), planetary albedo forced to 0.3 by a top reflective layer (the
+# reflectance is recomputed every step from the clear-sky albedo), 400 ppm CO₂, the Earth
+# ozone column of the calibration. Must reach T_s = 283–293 K; the 800 ppm twin
+# (rce_800.toml) must be 1.5–4.5 K warmer.
+# Surface: a 2 m ocean mixed layer (fast equilibration; the equilibrium does not depend on
+# the depth), albedo 0.06. K-profile boundary layer with a fixed 5 m/s wind, SBM
+# convection, large-scale condensation. 8 years; statistics over the last year.
+schema = 2
+description = "P3 RCE: semi-gray, S/4, planetary albedo 0.3, 800 ppm"
+model = "scm"
+truncation = 21
+levels = "L26"
+length = "2922day"
+output_every = "1day"
+
+[scm]
+lat = 0.0
+lon = 0.0
+dt = "30min"
+t_air = 290.0
+lapse_rate = 6.5
+t_tropopause = 200.0
+wind = [5.0, 0.0]
+wind_mode = "fixed"
+rh = 0.7
+insolation = 340.25
+cos_zenith = 0.5
+
+[scm.surface]
+kind = "ocean"
+mixed_layer_depth = 2.0
+albedo = 0.06
+t_initial = 290.0
+
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0
+obliquity = 0.0
+spin = "free"
+diurnal = false
+
+[planet]
+preset = "earth"
+
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0008 }
+gas_constant = 287.04
+cp = 1004.64
+
+[radiation]
+scheme = "semigray"
+planetary_albedo = 0.3
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+[boundary_layer]
+scheme = "kprofile"
+
+[convection]
+scheme = "sbm"
+
+[moisture]
+condensable = "water"

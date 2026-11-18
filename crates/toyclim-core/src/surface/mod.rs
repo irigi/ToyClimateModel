@@ -78,8 +78,11 @@ pub struct Tile {
     /// Largest melt the tile can take \[W m⁻²\] (L_f × snow / Δt_p on land; infinite on
     /// sea ice). Energy above it warms the tile past `t_max`.
     pub melt_max: f64,
-    /// Broadband albedo.
+    /// Broadband albedo (the gray scheme's; the two-stream scheme replaces it during the
+    /// step by the value effective for the surface's band fluxes).
     pub albedo: f64,
+    /// Albedo \[visible, near-IR\] (SPEC.md §9.4.6).
+    pub albedo_bands: [f64; 2],
     /// Evaporation efficiency β ∈ [0, 1].
     pub beta: f64,
     /// Momentum roughness \[m\] for land tiles (0 = the default).
@@ -113,6 +116,7 @@ impl Tile {
             t_max: f64::INFINITY,
             melt_max: f64::INFINITY,
             albedo,
+            albedo_bands: [albedo; 2],
             beta: 1.0,
             z0: 0.0,
             fusion: 0.0,
@@ -347,6 +351,7 @@ impl Surface {
                 c,
                 ab.broadband(ab.ocean),
             );
+            t.albedo_bands = ab.ocean;
             // the q-flux heats the mixed layer under ice and open water alike
             t.g0 = -self.qflux[p];
             out.push(t);
@@ -361,6 +366,7 @@ impl Surface {
             let fsn = hs / (hs + ab.snow_cover_ice);
             let alb = albedo::blend(ab.ice(ts, pr.t_melt), ab.snow(ts, pr.t_melt), fsn);
             let mut t = Tile::new(TileKind::SeaIce, f[SLOT_ICE], ts, 0.0, ab.broadband(alb));
+            t.albedo_bands = alb;
             t.g1 = g1;
             t.g0 = g1 * (ts - pr.t_freeze_sea);
             t.t_max = pr.t_melt;
@@ -373,6 +379,7 @@ impl Surface {
             let (fs, beta) = self.land_cover(p);
             let alb = albedo::blend(self.land_albedo[p], ab.snow(st[0], pr.t_melt), fs);
             let mut t = Tile::new(TileKind::Land, f[SLOT_LAND], st[0], 0.0, ab.broadband(alb));
+            t.albedo_bands = alb;
             t.g0 = g0;
             t.g1 = g1;
             t.z0 = self.land_z0[p];

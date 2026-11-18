@@ -34,8 +34,8 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | M7–M11 "first steps" (moisture, gray radiation, slab/land, clouds, Python tools) | **prototype**, superseded by Phase 2 (SPEC.md §9.1); numbers in the entries below are history |
 | P0 Groundwork (refactor, config v2, regress script, f32 question) | done 2026-11-15 (branch `p0-groundwork`): regress byte-identical, derivations tested, files < 700 lines; f32 asymmetry data for the owner (question 3) |
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
-| P2 Land, snow, sea ice, precipitation phase | 2026-11-17 (branch `p2-surface`): acceptance 1–4 and 7 met (Earth scorecard recorded: 11 of 19 P5 rows would pass at T42); 5 and 6 fail, open questions 7 and 8; defect 1 diagnosed |
-| P3 Radiation (multi-band two-stream, semi-gray) | not started |
+| P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
+| P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
 | P4 Clouds, Earth-like energy balance | not started |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
@@ -61,6 +61,12 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
   reference data of §9.5.3 for the `earth_amip` scorecard. Installed in the git-ignored
   `.venv/` (`python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt`).
   The Rust crates are unaffected.
+- Radiation calibration (P3): RRTMG through `climlab` 0.9.2 + `climlab-rrtmg` (MIT), which
+  exist only on conda-forge (owner approval 2026-11-17: micromamba environment). micromamba
+  2.10.0 in `~/.local/bin`, environment in the git-ignored `.rrtmg/`:
+  `micromamba create -p ./.rrtmg -c conda-forge python=3.12 climlab climlab-rrtmg numpy scipy
+  matplotlib-base cycler pillow kiwisolver fonttools pyparsing python-dateutil contourpy`.
+  Used only by `tools/calibrate_radiation.py`; the model does not depend on it.
 
 ---
 
@@ -1182,6 +1188,216 @@ for the owner.
 
 **Next step**: P3 radiation. P2 acceptance 5 and 6 stay open (questions 7 and 8).
 
+## 2026-11-18 — P3 Radiation (branch `p3-radiation`)
+
+**What was built** (commit 2814acf):
+- `physics/radiation/solver.rs`: generic multi-band two-stream solver.
+  - Shortwave: δ-scaling (Joseph et al. 1976) and the closed-form homogeneous layer with
+    the PIFM coefficients (Zdunkowski et al. 1980; RRTMG_SW's default `kmodts = 2`).
+    Layers are combined by the adding method.
+  - Longwave: no scattering, diffusivity 1.66, isothermal layers.
+  - Clouds: two columns (clear and cloudy) with maximum-random overlap. This is ready for
+    P4; there are no clouds yet.
+- `TwoStream`, the column scheme (`scheme = "semigray"`):
+  - its optics come from an `Opacity` provider;
+  - a top reflectance or a forced planetary albedo stands in for clouds until P4.
+- `planck.rs`: band fractions from the closed-form series. Checked against quadrature:
+  - 0.537 of the flux lies below 0.75 µm at 5772 K, and 0.110 at 3000 K;
+  - the 8–14 µm window holds 0.366 at 288 K.
+- `semigray.rs`, the semi-gray provider:
+  - shortwave: three bands (vis, near-IR weak, near-IR strong), with Rayleigh scattering,
+    water vapour, a dry near-IR absorber and an optional ozone layer;
+  - longwave: three bands (window, rest weak, rest strong) after Geen et al. (2016),
+    with pressure scaling on all terms and CO₂ curvature L + κL²;
+  - the window Planck fraction is tabulated from 50 to 1000 K.
+- `GrayOpacity`: the gray optical depths fed through the generic solver. Tested against
+  the gray scheme. The gray scheme itself is kept unchanged as `scheme = "gray"`, with its
+  own solver, for the idealized comparators.
+- Per-band surface albedo (visible, near-IR) on every tile.
+- The gray latitude dependence of the optical depth is now the option
+  `latitude_dependence`:
+  - on in the 18 Earth-like gray cases;
+  - off in the tidally locked cases, which are a deliberate change; the regression check
+    uses a reference patch for them.
+- Calibration against RRTMG:
+  - `toyclim radiation` evaluates columns offline, with the same code as the model;
+  - `tools/calibrate_radiation.py` fits the knobs with RRTMG from climlab 0.9.2, in a
+    micromamba environment approved by the owner;
+  - outputs: `docs/radiation/calibration.{md,json,png}`.
+- SCM: new `[scm] insolation` and `cos_zenith` keys.
+  - **Bug fixed:** the SCM energy budget recognised only the radiation scheme name
+    `gray_radiation`. Under the new scheme it reported a −70 W m⁻² residual.
+- Cases:
+  - `cases/bench/p3_rce/rce_{400,800}.toml`;
+  - `cases/bench/p3_aquaplanet/aquaplanet_t21.toml`.
+- Regression vs 0db198d: PASS. Every case is byte-identical, including the patched
+  tidally locked case.
+
+**Results:**
+
+| P3 acceptance | criterion | result |
+|---|---|---|
+| 1 | offline tests 1–7 of §9.4.1 | 1, 2, 3, 5, 7 pass. In 4, the slope passes (1.72 W m⁻² K⁻¹) but the OLR is 246.2 W m⁻² (spec 260–275). In 6, the absorption passes (0.196) but the albedo is 0.116 (spec 0.12–0.19). RRTMG itself, on exactly these columns, gives 251.1 W m⁻² and 0.107, so the spec ranges exclude the reference. **Fails as written** (question 9) |
+| 2 | residuals within 8 W m⁻² (OLR, LW↓) and 10 % (SW absorption) | the rms meets it at 0.3–1 bar (OLR 2.6–4.9, LW↓ 5.1–9.0, SW 7–8 %); the maxima do not (OLR 6.2–11.1, LW↓ 15–18, SW 30 %); at 2–3 bar, which uses extrapolated reference data, the OLR max is 23–37. **Fails as written** (question 9) |
+| 3 | SCM RCE 283–293 K; 2×CO₂ +1.5–4.5 K | 285.20 K; 800 ppm 289.15 K, ΔT = +3.95 K; albedo 0.300; residual 5e-10 W m⁻². **Pass** |
+| 4 | T21 aquaplanet, 10 years stable, closure ≤ 0.5, G ≤ 2.0 | numerically stable for 20 years; closure 0.13 W m⁻² ✓; G 1.38 ✓. But the climate is not steady: it cools toward a snowball (275 → 268 K over years 11–20). **Not met** as I read "stable" (question 10) |
+| 5 | radiation cost < 40 % of a T42 L26 step (record) | single thread, ms per step: no radiation 319.1, gray 344.6, semigray 401.8 → radiation ≈ 83 ms ≈ 21 %. **Pass** |
+
+Calibration checks at 1 bar, RH 0.75, T_s 290 K (toyclim / RRTMG):
+- OLR 250.0 / 255.1 W m⁻²;
+- 2×CO₂ forcing 4.91 / 4.12 W m⁻²;
+- dOLR/dT_s 1.68 / 1.92 W m⁻² K⁻¹.
+
+**Earth AMIP T21 with semigray radiation** (informal check: P1 question 6, too-wet
+subtropics). Configuration: the P2 T21 case with `scheme = "semigray"` plus the Earth
+ozone column; binary 2814acf; 3 years, statistics over the last 2. Configs in
+`out/p3/earth_amip_t21_semigray*.toml`, no case file changed.
+- Run 1, `reflectance = 0.23` as in the gray cases: planetary albedo 0.354. The gas
+  scattering and absorption add to the stand-in. Land was 4.6 K too cold, and 10 of 19
+  P5 rows would pass.
+- Run 2, `reflectance = 0.165`: chosen to give an albedo of 0.30 and logged in
+  `docs/tuning.md`; measured 0.298.
+
+| Row (P5 threshold) | gray (P2) | semigray, r = 0.165 | Reference |
+|---|---|---|---|
+| Global precipitation (2.4–3.4) | 3.44 ✗ | 3.34 ✓ | 2.69 |
+| Zonal precipitation correlation (≥ 0.85) | 0.82 ✗ | 0.90 ✓ | |
+| Tropical peak | 6.9 at 8°N ✓ | 6.5 at 8°N ✓ | 5.4 at 8°N |
+| Subtropical minima N / S (< 2.5) | 3.3 / 3.2 ✗ | 2.9 / 2.7 ✗ | 1.8 / 2.0 |
+| Precipitation map correlation | 0.62 ✓ | 0.71 ✓ | |
+| Land 2 m T RMSE / bias | 4.10 / −1.39 ✓ | 3.54 / −2.61 ✓ | |
+| July − January correlation / amplitude ratio | 0.96 / 0.82 ✓ | 0.96 / 0.93 ✓ | |
+| Sea-level pressure correlation, DJF / JJA | 0.76 / 0.67 ✓ | 0.82 / 0.85 ✓ | |
+| **Winter jets at 200 hPa**, NH DJF / SH JJA | 25.5 at 47° / 27.6 at −58° ✗ | **37.6 at 36° / 38.0 at −30° ✓** | 41.8 at 30° / 39.5 at −30° |
+| Monsoon JJA − DJF (≥ 3) | 6.5 ✓ | 1.0 ✗ | 8.5 |
+| Köppen main group (≥ 60 %) | 57.9 % ✗ | 63.6 % ✓ | |
+| Named regions | central Australia C ✗ | all right ✓ | |
+| Diurnal range Sahara (10–22 K) / tropical Pacific | 6.7 ✗ / 0.51 | 11.8 ✓ / 0.52 | |
+| NH snow February / August (million km²) | 29.8 ✗ / 6.4 | 30.2 ✗ / 1.7 | 46.2 / 4.3 |
+| G (≤ 2.0) | 1.94 ✓ | 2.14 ✗ (14°N 79°E) | |
+| Energy closure, atmosphere | 0.21 ✓ | 0.31 ✓ | |
+| **Water closure** (< 1e-3 mm/day) | 2.4e-4 ✓ | **2.0e-3 ✗** | |
+
+Rows that would pass: **14 of 19** (gray: 11).
+- **Subtropical jets now form.** The single eddy-driven jets of the gray runs at
+  43–63° become subtropical jets at 30–36°. This is the jet half of question 6; the
+  surface-westerlies row is retested in the APE after P4, as agreed.
+- The Sahara diurnal range now passes. The longwave window lets dry air cool at night,
+  which the P2 entry suspected.
+- **Figure** `docs/figures/P3/earth_amip_t21_semigray_r165.png`:
+  - **Precipitation:** the ITCZ is at 8°N. The Indian Ocean and West Pacific are too
+    wet. The subtropics are drier than under gray but still too wet; the secondary
+    maxima near ±35° remain.
+  - **Land 2 m T:** the zonal mean follows NCEP to within ~2 K. Northern Eurasia is
+    somewhat cold.
+  - **Köppen:** Siberia is now D, and Australia, Arabia and the Sahara are B. The
+    eastern Amazon is partly C instead of A.
+  - **200 hPa wind:**
+    - the jet positions and strengths are close to the reference in both seasons;
+    - the tropical upper-level easterlies (−10 m/s at the equator in JJA) are missing:
+      the model has weak westerlies there.
+  - The first run's figure (`earth_amip_t21_semigray.png`, albedo 0.354) shows the same
+    jets, with cold continents (E across Siberia and Canada).
+- **The monsoon row fails** (1.0 against ≥ 3 mm/day). Under gray it passed at 6.5. It is
+  the one row that got worse. Without clouds or a land–sea albedo contrast in the
+  stand-in, India stays relatively cool; to look at again in P4.
+- **Water closure fails, new defect.** dW/dt − (E − P) is 2.0e-3 mm/day with both
+  semigray reflectances, against 2.4e-4 under gray. The semi-Lagrangian fixer is more
+  active (0.38 against 0.11 %/day of the vapour mass), and the residual also rose in the
+  P3 aquaplanet (1.4e-3 mm/day). Radiation does not touch q, so the suspect is the
+  fixer's bookkeeping in the colder, drier upper troposphere. To diagnose before the P5
+  gate (P4 item).
+- Cost: 16.3 min per model year (T21, shared machine; not comparable with the P2
+  number).
+
+**Question 7 diagnostic** (option (b), first half): the bistability pair with the ocean
+heat transport on (`heat_transport = 50.0`, as in the test world); 12 years, statistics
+over the last 5; `out/p2/q7/`.
+
+| Start | Global T_s | Global ice cover | Ice edge N / S | T_s trend, last 5 yr |
+|---|---|---|---|---|
+| warm, q-flux 0 (P2) | 279.3 K | 0.288 | 41.5° / 41.5° | −0.13 K/yr |
+| ice, q-flux 0 (P2) | 279.3 K | 0.289 | 41.5° / 41.5° | −0.07 K/yr |
+| warm, q-flux 50 | 278.8 K | 0.283 | 41.5° / 41.5° | +0.03 K/yr |
+| ice, q-flux 50 | 278.6 K | 0.287 | 41.5° / 41.5° | +0.15 K/yr |
+
+- Still one climate. The ice start deglaciates within ~4 years (271 → 278 K), as before.
+- The heat transport warms the equator by 1.1 K and changes nothing at the ice edge, so it
+  is ruled out as the cause.
+- The other half of option (b), the reflectance only over open ocean and land, was not
+  run. P3 replaces the gray τ(φ) anyway, and the P3 aquaplanet below has no top
+  reflectance at all, yet it ends with the same ice edge (41.5°).
+
+**P3 aquaplanet** (`cases/bench/p3_aquaplanet/aquaplanet_t21.toml`): T21, slab 20 m,
+sea ice, seasons, 1361 W m⁻², 400 ppm, semigray with ozone, no ocean heat transport. The
+ocean albedo is raised to stand in for clouds. Numbers from
+`tools/scorecard.py out/p3/aquaplanet_t21`: metrics only, no suite (the APE thresholds
+do not apply).
+- **Ocean albedo 0.38** (first run, `out/p3/aquaplanet_t21_a038`): froze over.
+  - Planetary albedo 0.38 already in year 1, against the 0.29 estimated from one offline
+    global-mean column.
+  - Global T_s 236 K after 10 years, still losing 8 W m⁻²; albedo 0.55.
+  - Closure 0.03 W m⁻², G 1.45.
+- **Choosing the stand-in:** 60-day runs from the 285 K start
+  (`out/p3/alb/`):
+
+  | Ocean albedo | Planetary albedo | Net TOA [W m⁻²] |
+  |---|---|---|
+  | 0.22 | 0.225 | +5.3 |
+  | 0.26 | 0.252 | −2.3 |
+  | 0.30 | 0.279 | −11.0 |
+
+  A surface albedo adds only the clouds' shortwave effect, not their longwave greenhouse
+  effect. The case therefore uses 0.25, which balances the warm start (logged in
+  `docs/tuning.md`).
+- **Ocean albedo 0.25, years 6–10:**
+  - global T_s 277.0 K, precipitation 2.84 mm/day, planetary albedo 0.304;
+  - sea-ice cover 0.289, edge 41.5°;
+  - energy closure 0.126 W m⁻² (atmosphere and system); water closure 1.4e-3 mm/day;
+    fixer 0.30 %/day;
+  - G 1.38;
+  - but net TOA −1.9 W m⁻² and T_s −0.45 K/yr.
+- **Extended to 20 years** (`out/p3/aquaplanet_t21_ext`, from the restart):
+  - T_s 275.3 → 267.9 K, −0.83 K/yr over years 11–20 and −1.05 K/yr over 16–20;
+  - net TOA −2.4 / −2.9 W m⁻²;
+  - ice cover 0.36 (mean of years 11–20) and 0.40 at the end; the edge reaches 30°N in
+    northern winter.
+  - The run is numerically stable throughout: maximum Courant 1.2–2.0, below the 3.3 of
+    the frozen run.
+  - This is a slow ice–albedo runaway.
+- **Reading:**
+  - The P2 bistability case (gray, reflectance 0.23) settled at 279 K with the same ice
+    edge.
+  - Semigray adds the water-vapour feedback that the fixed gray τ lacked. With a 20 m
+    slab, no ocean heat transport and no clouds over ice, that tips the cold state over.
+  - Tuning the stand-in further against this test's own outcome would be tuning to pass
+    it, so I stopped (question 10).
+
+**Deviations from SPEC.md §9.4.1** (recorded for the owner in question 9):
+- PIFM instead of δ-Eddington. PIFM is RRTMG's default and fits RRTMG better at low sun.
+- Extra terms, all needed to bring the residuals down:
+  - pressure scaling on every term;
+  - a CO₂ exponent and CO₂ curvature;
+  - the longwave "rest" band split into weak and strong;
+  - a dry near-IR absorber.
+- `every > 1` (calling radiation less often than every step) is not implemented. It is
+  not needed for acceptance, and `every = 1` already meets the cost budget.
+- World cases stay on gray radiation for now. Switching them to semigray is tied to the
+  P4 cloud tuning.
+- Koll & Cronin (2018) was not accessible. RRTMG is the reference throughout.
+
+**Tuning changes** (`docs/tuning.md`):
+- semigray knobs fitted to RRTMG;
+- gray `latitude_dependence` made an option.
+
+- `reflectance` 0.23 → 0.165, in the exploratory Earth semigray run only.
+- aquaplanet ocean albedo: first 0.38, now 0.25.
+
+**Open questions**: 9 and 10 (new). 7 is updated with the ocean-heat-transport pair.
+
+**Next step**: P4 clouds. Acceptance 1 and 2 wait for the owner (question 9), and 4 for
+question 10. The water-closure defect is to diagnose early in P4.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -1207,6 +1423,8 @@ for the owner.
    two seeds (a criterion change — owner's call); (c) four more seeds per precision (~3 h on
    the laptop) to test for a systematic f32 difference. Recommendation: (a) now, (c) only if
    f32 becomes a production mode. Figures: `docs/figures/P0/hs_t42l20_2200d_*.png`.
+   **Owner decision (2026-11-18): (a).** f32 accepted as recorded; f64 stays the default for
+   acceptance. Resolved.
 4. **Earth-gate thresholds** (2026-11-12): the numbers in SPEC.md §9.6 P5/P6 were set from
    judgement of what intermediate-complexity models achieve, before any Earth run exists.
    They are binding for sessions; the owner may want to revise them after seeing the first
@@ -1218,6 +1436,9 @@ for the owner.
    grid spacing at the pole. Proposed replacement: monitor |v|_max Δt √(M(M+1)) / a (or the
    same with the grid spacing at the equator) and set the trigger on that. Until decided,
    the trigger is not applied to Part I cases.
+   **Owner decision (2026-11-18): replace it.** SPEC.md §9.8 now uses |v|_max Δt √(M(M+1)) / a
+   > 0.8; `tools/scorecard.py` reports it as `spectral_courant_max` from the diagnostics
+   rows (P3 aquaplanet 0.58, P2 test world 0.50). Resolved.
 6. **APE Control: surface easterlies poleward of ~49°** (2026-11-16; P1 acceptance 5).
    - **What fails:** the gate requires lowest-level westerlies at every latitude from 35° to
      60°. At T42 the westerlies span 24°–48° (peak 7.8 m/s at 35°) and turn easterly
@@ -1291,6 +1512,8 @@ for the owner.
        stand-in, not tuning;
      - (c) the owner revises the criterion for the gray stand-in physics.
    - **Recommendation:** (b) as data, then (a).
+   - **Owner decision (2026-11-18): (a), retest after P4 clouds.** The q-flux pair (below)
+     ruled out the ocean heat transport.
    - **Instellation sweep** (acceptance 6 *record*): from the warm state (year 12) at 98, 96,
      94 and 92 % (luminosity scaled), 6 years each, climatology over years 15–18
      (`out/p2/sweep/`, binary f59dd7e). Ice edge = most equatorward latitude with
@@ -1310,6 +1533,14 @@ for the owner.
        otherwise.
      - Recording the transition would need longer runs (≥ 15 years) at 94–90 %. These are
        not started: question 7 is open and its physics may change.
+   - **Update 2026-11-18, ocean heat transport on** (option (b), first half; 12 years,
+     `out/p2/q7/`):
+     - still one climate: warm / ice start 278.8 / 278.6 K, ice cover 0.283 / 0.287, edge
+       41.5° in both;
+     - the ice start deglaciates in ~4 years, as before;
+     - the heat transport is ruled out as the cause.
+     - Under semigray radiation without a top reflectance, the P3 aquaplanet has the same
+       41.5° edge but then slides colder (question 10).
 8. **P2 acceptance 5: G and seasonal sea ice in the test world** (2026-11-17).
    - **G = 2.18 against ≤ 2.0:** one dry ocean cell (0.8 mm/day against ~0.37 in its
      neighbours) at 18°N, off a desert coast. Every other cell is ≤ 1.76.
@@ -1326,3 +1557,66 @@ for the owner.
        - (b) the owner restates it per month, or for perennial ice (annual ice ≥ 0.95,
          which passes).
    - I have not changed either criterion.
+   - **Owner decision (2026-11-18): restate both.** SPEC.md §9.5 G now counts only cells
+     whose neighbour mean is ≥ 1 mm/day; P2 acceptance 5 now reads "perennial sea ice
+     (annual-mean concentration ≥ 0.95) only where the annual-mean `tos` is within 0.1 K of
+     freezing". Re-evaluated on the same run: G 1.71 (4.2°N 149°E), perennial ice in 2804
+     cells with `tos` ≤ 271.369 K (T_f 271.35 K). **P2 acceptance 5 met.** Resolved.
+9. **P3 acceptance 1 and 2: spec ranges against the RRTMG reference** (2026-11-18).
+   - **Test 4** (clear-sky OLR at 288 K, RH 75 %, 400 ppm: 260–275 W m⁻²) and **test 6**
+     (Sun, global mean: planetary albedo 0.12–0.19):
+     - RRTMG itself, on exactly these columns, gives 251.1 W m⁻² and 0.107. Both are
+       outside the ranges, so a scheme that matched RRTMG perfectly would fail.
+     - toyclim gives 246.2 W m⁻² (slope 1.72 ✓) and 0.116 (absorption 0.196 ✓).
+     - The tests are in the code as ignored tests: `clear_sky_olr_spec_range`,
+       `clear_sky_albedo_spec_range`.
+     - Probable cause: SPEC.md §9.4.1 was written from memory (CLAUDE.md). The Koll &
+       Cronin (2018) values it cites could not be fetched.
+   - **Acceptance 2** ("within 8 W m⁻² and 10 %"):
+     - met as rms at 0.3–1 bar: OLR 2.6–4.9, LW↓ 5.1–9.0 W m⁻², SW absorption 7–8 %;
+     - not met as maxima: OLR 6.2–11.1, LW↓ 15.2–17.7 W m⁻², SW 30 %;
+     - the worst columns sit at the edges of the set (310 K, 10000 ppm, 0.3 bar, very low
+       sun);
+     - at 2–3 bar the RRTMG reference is extrapolated beyond its tables (OLR max 23–37).
+   - **Options:**
+     - (a) keep the criteria; P3 stays open on 1 and 2, and more terms are added to the
+       semi-gray scheme;
+     - (b) the owner restates test 4 as "within 8 W m⁻² of RRTMG" and test 6 as "within
+       0.015 of RRTMG" (both pass now), and acceptance 2 as rms over the set, with maxima
+       recorded (passes at 0.3–1 bar);
+     - (c) as (b), with the p_s range limited to where RRTMG is valid (≤ 1 bar fitted, 2–3
+       bar recorded).
+   - **Recommendation:** (c). The semi-gray scheme is a calibrated approximation. Its
+     worst-case error at the edges of the envelope is the known price of three bands.
+   - **Deviations from §9.4.1, for the owner's record:**
+     - PIFM in place of δ-Eddington: RRTMG's default; it fits RRTMG at low sun;
+     - pressure scaling on all terms, a CO₂ pressure exponent and curvature, the "rest"
+       band split into weak and strong, and a dry near-IR absorber;
+     - the gray scheme keeps its own solver;
+     - `every > 1` is not implemented: the cost is 21 % of a step with `every = 1`.
+   - I have not changed any criterion.
+   - **Owner decision (2026-11-18): (b)/(c), compare to RRTMG.** SPEC.md §9.4.1 tests 4 and
+     6 are now relative to RRTMG (8 W m⁻², 0.015), and P3 acceptance 2 is an rms over
+     0.3–1 bar with maxima and 2–3 bar recorded. The two ignored spec-range tests are
+     removed; the RRTMG-relative tests pass. **P3 acceptance 1 and 2 met.** Resolved.
+10. **P3 acceptance 4: the aquaplanet is numerically stable but drifts to a snowball**
+    (2026-11-18).
+    - **Results:**
+      - closure 0.13 W m⁻² and G 1.38 pass;
+      - with the warm-start-balanced stand-in (ocean albedo 0.25), global T_s falls
+        277 → 268 K between years 10 and 20, at −0.8 to −1.0 K/yr, with the ice edge
+        moving from 41.5° to 30–36°;
+      - with 0.38 the planet froze over in 10 years.
+    - **Options:**
+      - (a) "stable" means numerically stable (no blow-up, closures hold): acceptance 4
+        passes;
+      - (b) "stable" means a steady climate: acceptance 4 stays open, and is retested in
+        P4 with real clouds replacing the albedo stand-in. Clouds over ice add little
+        albedo but a longwave greenhouse effect, which the stand-in cannot represent;
+      - (c) as (b), adding the test world's ocean heat transport (50 W m⁻²) to the
+        aquaplanet case now.
+    - **Recommendation:** (b). It is the same ice-edge sensitivity as question 7, and the
+      stand-in is the weak part of the configuration.
+    - I have not changed the criterion.
+    - **Owner decision (2026-11-18): (b).** "Stable" means a steady climate; acceptance 4
+      stays open and is retested in P4 with clouds.
