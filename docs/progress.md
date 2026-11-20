@@ -1715,3 +1715,8 @@ and the attribution of the 2×CO₂ warming.
     - **Owner decision needed only if** the warming is still above 6 K after step 3, or the
       trend test still fails with annual means. P5 may start in the first case; P6 waits for
       the ruling.
+    - **Owner decision (2026-11-20, before the overnight session): "Proceed if cause found".**
+      If the warming is still above 6 K after step 3 and no defect is found, P6 may start
+      (when P5 allows it) provided the excess has a documented physical cause and no fault
+      is found in the scheme. The row stays open and is listed as a known limitation; the
+      criterion is unchanged. Recheck the warming once the P6 ocean exists.
