@@ -11,6 +11,13 @@
 //!   (1987): c_c = min(c_max, b ln(1 + P / 1 mm day⁻¹)), between the top of the convecting
 //!   layer and the second level from the bottom. (Slingo's form, a + b ln P, is singular
 //!   at small P; the coefficients are knobs.)
+//! - Optional "freeze-dry" reduction of the stratiform fraction in cold, dry low levels
+//!   (Vavrus & Waliser 2008, J. Climate 21, 5673–5687; the paper could not be fetched, the
+//!   form and constants are transcribed from the NCAR CAM source, `cloud_fraction.F90`,
+//!   subroutine `cldfrc`, branch `cam_cesm2_2_rel`): for σ ≥ σ_fd,
+//!   c_s ← c_s · max(f_min, min(1, q / q_fd)), with q_fd = 3e-3 kg kg⁻¹ and f_min = 0.15.
+//!   CAM applies it to its low-cloud RH cloud below the pressure bound `premib`, whose value
+//!   is not in that file; σ_fd = 0.75 (750 hPa) is unverified. Off unless `freeze_dry_q > 0`.
 //! - Combined at each level as independent covers: c = 1 − (1 − c_s)(1 − c_c).
 //! - In-cloud water mixing ratio r = min(β q_sat(T, p), r_max), split into ice and liquid
 //!   with f_ice(T) of the condensable; path r Δp / g.
@@ -37,6 +44,11 @@ pub struct DiagnosticClouds {
     pub water_max: f64,
     /// No clouds at σ below this.
     pub sigma_min: f64,
+    /// Freeze-dry humidity scale q_fd \[kg kg⁻¹\] (0 = off), minimum factor and the σ at and
+    /// below which it applies (low clouds).
+    pub freeze_dry_q: f64,
+    pub freeze_dry_min: f64,
+    pub freeze_dry_sigma: f64,
 }
 
 impl DiagnosticClouds {
@@ -51,6 +63,9 @@ impl DiagnosticClouds {
             water_ratio: 0.02,
             water_max: 5e-4,
             sigma_min: 0.1,
+            freeze_dry_q: 0.0,
+            freeze_dry_min: 0.15,
+            freeze_dry_sigma: 0.75,
         }
     }
 
@@ -68,6 +83,15 @@ impl DiagnosticClouds {
             1.0
         } else {
             1.0 - ((1.0 - rh) / (1.0 - rc)).sqrt()
+        }
+    }
+
+    /// Freeze-dry factor for specific humidity `q` at σ (1 when off or above σ_fd).
+    pub fn freeze_dry(&self, q: f64, sigma: f64) -> f64 {
+        if self.freeze_dry_q <= 0.0 || sigma < self.freeze_dry_sigma {
+            1.0
+        } else {
+            (q / self.freeze_dry_q).clamp(self.freeze_dry_min, 1.0)
         }
     }
 
@@ -113,7 +137,8 @@ impl ColumnScheme for DiagnosticClouds {
                 continue;
             }
             let qs = self.cond.qsat(planet, st.t[k], ctx.p[k]);
-            let cs = Self::stratiform(q[k] / qs, self.rh_crit(ctx.sigma[k]));
+            let cs = Self::stratiform(q[k] / qs, self.rh_crit(ctx.sigma[k]))
+                * self.freeze_dry(q[k], ctx.sigma[k]);
             let cv = if k >= st.conv_top && k + 1 < l {
                 cc
             } else {
@@ -157,6 +182,49 @@ mod tests {
         let ten = 10.0 / 86400.0;
         assert!((s.convective(ten) - 0.125 * 11f64.ln()).abs() < 1e-12);
         assert_eq!(s.convective(1.0), 0.8);
+        // freeze-dry: off by default; on, factor q / 3 g/kg between 0.15 and 1, low levels only
+        assert_eq!(s.freeze_dry(1e-4, 0.95), 1.0);
+        let f = DiagnosticClouds {
+            freeze_dry_q: 3e-3,
+            ..scheme()
+        };
+        assert!((f.freeze_dry(1.5e-3, 0.9) - 0.5).abs() < 1e-12);
+        assert_eq!(f.freeze_dry(1e-4, 0.9), 0.15);
+        assert_eq!(f.freeze_dry(5e-3, 0.9), 1.0);
+        assert_eq!(f.freeze_dry(1e-4, 0.5), 1.0);
+    }
+
+    /// Freeze-dry in a cold, dry saturated column: low cloud reduced, still no tendencies,
+    /// fractions in [0, 1]; a warm moist column is unchanged.
+    #[test]
+    fn freeze_dry_column() {
+        let geo = Geometry::l26();
+        let planet = crate::planet::Planet::earth();
+        let ctx = geo.ctx(&planet, None, 1200.0);
+        let run = |s: &DiagnosticClouds, t_sfc: f64| {
+            let mut st = ColumnState::new(26, 1);
+            st.begin(1200.0);
+            for k in 0..26 {
+                st.t[k] = t_sfc - 50.0 * (1.0 - ctx.sigma[k]);
+                st.q[k] = 0.97 * s.cond.qsat(ctx.planet, st.t[k], ctx.p[k]);
+            }
+            let q0 = st.q.clone();
+            let mut sfc = SurfaceExchange::default();
+            s.apply(&ctx, &mut st, &mut sfc, &mut [0.0], &mut Workspace::new(26));
+            assert_eq!(st.q, q0);
+            assert!(st.dt.iter().chain(&st.dq).all(|&x| x == 0.0));
+            assert!(sfc.cloud[..26].iter().all(|&c| (0.0..=1.0).contains(&c)));
+            sfc.cloud
+        };
+        let off = scheme();
+        let on = DiagnosticClouds {
+            freeze_dry_q: 3e-3,
+            ..scheme()
+        };
+        let (a, b) = (run(&off, 245.0), run(&on, 245.0));
+        assert!(b[25] < 0.5 * a[25] && b[25] > 0.0, "{} {}", a[25], b[25]);
+        assert_eq!(a[5], b[5]); // aloft unchanged
+        assert_eq!(run(&off, 300.0), run(&on, 300.0));
     }
 
     /// The scheme leaves T and q alone, stores fractions in [0, 1] and positive paths, and

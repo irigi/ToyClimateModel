@@ -648,6 +648,9 @@ pub const CLOUD_KEYS: &[&str] = &[
     "water_ratio",
     "water_max",
     "sigma_min",
+    "freeze_dry_q",
+    "freeze_dry_min",
+    "freeze_dry_sigma",
     "r_liquid",
     "r_ice",
     "k_lw_liquid",
@@ -670,6 +673,9 @@ fn diagnostic_clouds(
         water_ratio: num(p, "water_ratio", d.water_ratio)?,
         water_max: num(p, "water_max", d.water_max)?,
         sigma_min: num(p, "sigma_min", d.sigma_min)?,
+        freeze_dry_q: num(p, "freeze_dry_q", d.freeze_dry_q)?,
+        freeze_dry_min: num(p, "freeze_dry_min", d.freeze_dry_min)?,
+        freeze_dry_sigma: num(p, "freeze_dry_sigma", d.freeze_dry_sigma)?,
         ..d
     };
     for (k, v) in [
@@ -685,6 +691,8 @@ fn diagnostic_clouds(
         ("conv_max", c.conv_max),
         ("water_ratio", c.water_ratio),
         ("water_max", c.water_max),
+        ("freeze_dry_q", c.freeze_dry_q),
+        ("freeze_dry_min", c.freeze_dry_min),
     ] {
         if v.is_nan() || v < 0.0 {
             return Err(format!("[clouds] {k} must be ≥ 0"));
