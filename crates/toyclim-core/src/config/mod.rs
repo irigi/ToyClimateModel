@@ -50,6 +50,10 @@ pub struct Config {
     pub dt: Duration,
     pub length: Duration,
     pub output_every: Duration,
+    /// Interval of the rows of `diagnostics.csv` (global means, budgets); defaults to
+    /// `output_every`. Output steps always get a row as well.
+    #[serde(default)]
+    pub diagnostics_every: Option<Duration>,
     #[serde(default)]
     pub output_fields: Vec<String>,
     #[serde(default)]
@@ -187,6 +191,12 @@ impl Config {
         if (ratio - ratio.round()).abs() > 1e-9 * ratio.max(1.0) {
             return bad("output_every must be a whole multiple of dt");
         }
+        if let Some(de) = self.diagnostics_every {
+            let r = de.0 / self.dt.0;
+            if de.0 <= 0.0 || (r - r.round()).abs() > 1e-9 * r.max(1.0) {
+                return bad("diagnostics_every must be a positive whole multiple of dt");
+            }
+        }
         if let Some(s) = &self.sigma_half {
             if s.len() < 2 || s[0] != 0.0 || *s.last().unwrap() != 1.0 {
                 return bad("sigma_half must start at 0 and end at 1");
@@ -246,6 +256,14 @@ impl Config {
     /// Number of time steps between outputs.
     pub fn steps_per_output(&self) -> u64 {
         (self.output_every.0 / self.dt.0).round() as u64
+    }
+
+    /// Number of time steps between rows of `diagnostics.csv`.
+    pub fn steps_per_diagnostics(&self) -> u64 {
+        self.diagnostics_every
+            .map(|d| (d.0 / self.dt.0).round() as u64)
+            .unwrap_or_else(|| self.steps_per_output())
+            .max(1)
     }
 
     /// Steps between station samples (1 if not set).
@@ -311,6 +329,23 @@ tau = "2.4h"
         assert_eq!(c.diffusion.tau.0, 8640.0);
         assert_eq!(c.planet.resolve().unwrap(), Planet::earth());
         assert_eq!(c.time_filter.alpha, 0.53);
+    }
+
+    #[test]
+    fn diagnostics_interval() {
+        let c = Config::parse(EXAMPLE).unwrap();
+        assert_eq!(c.steps_per_diagnostics(), c.steps_per_output());
+        let with = |v: &str| {
+            EXAMPLE.replace(
+                "output_every = \"6h\"",
+                &format!("output_every = \"6h\"\ndiagnostics_every = \"{v}\""),
+            )
+        };
+        assert_eq!(
+            Config::parse(&with("1h")).unwrap().steps_per_diagnostics(),
+            2
+        );
+        assert!(Config::parse(&with("45min")).is_err());
     }
 
     #[test]

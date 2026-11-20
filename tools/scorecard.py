@@ -29,7 +29,7 @@ Suite `aquaplanet` (SPEC.md §9.6 P1, item 5) adds:
 - global-mean precipitation = evaporation within 1 %;
 - energy closure of the atmosphere within 0.5 W m⁻²;
 - G ≤ 2.0;
-- recorded: zonal-mean precipitation, Hadley cell strength and edge, jets.
+- recorded: zonal-mean precipitation, Hadley cell strength and edge, jets (maximum zonal-mean u at σ > 0.1).
 
 Suite `earth_amip` (SPEC.md §9.6 P5; recorded without thresholds in P2, item 7: use
 `--record`) compares against the reference data of tools/fetch_reference.py
@@ -215,9 +215,17 @@ def world_metrics(run, meta, c, info, diag):
         # spectral Courant number |v|_max Δt √(M(M+1)) / a, at the diagnostics rows
         mt = meta["truncation"]
         m["spectral_courant_max"] = float(diag["max_u"].max() * dt * np.sqrt(mt * (mt + 1)) / a)
-    if "rsdt" in diag and "asr" in diag:
+    # planetary albedo from the climatology maps (sampled every `climatology.every`); the
+    # diagnostics rows are a few instantaneous snapshots when diagnostics_every is long
+    asr_map, rsdt_map = mp("asr"), mp("rsdt")
+    if asr_map is not None and rsdt_map is not None:
+        m["planetary_albedo"] = float(1 - gmean(asr_map, wts) / gmean(rsdt_map, wts))
+        m["planetary_albedo_source"] = "climatology"
+    elif "rsdt" in diag and "asr" in diag:
         sel = slice(i0, i1 + 1)
         m["planetary_albedo"] = float(1 - diag["asr"][sel].mean() / diag["rsdt"][sel].mean())
+        m["planetary_albedo_source"] = "diagnostics rows"
+
     p = mp("precip")
     if p is not None:
         orog_f = sorted(run.glob("fields/orog_*.npy"))
@@ -250,7 +258,9 @@ def aquaplanet(run, meta, c, info, diag, m):
         j = np.where(sel)[0][np.argmax(low[sel])]
         m[f"u_low_peak_{name}"] = float(low[j])
         m[f"u_low_peak_lat_{name}"] = float(latd[j])
-        sub = np.where(sel[None, :], u, -np.inf)
+        # tropospheric jet: levels below σ = 0.1 (the top levels carry the
+        # stratospheric/sponge winds, which are not a target, SPEC.md §9.7)
+        sub = np.where(sel[None, :] & (sigma[:, None] > 0.1), u, -np.inf)
         k, jj = np.unravel_index(np.argmax(sub), u.shape)
         m[f"jet_{name}"] = {"u": float(u[k, jj]), "lat": float(latd[jj]), "sigma": float(sigma[k])}
     psi = streamfunction(v, sh, lat, ps, meta["planet"]["radius"], meta["planet"]["gravity"])

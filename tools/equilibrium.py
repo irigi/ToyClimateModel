@@ -5,7 +5,9 @@ Usage:
     python tools/equilibrium.py out/<run> [--years 5]
 
 A run is equilibrated when, over the last `years` years of `diagnostics.csv`,
-- the linear trend of global-mean T_s is below 0.02 K/yr, and
+- the linear trend of the annual means of global-mean T_s is below 0.02 K/yr (the annual
+  means are averages of the `diagnostics.csv` rows in each model year; the run needs at
+  least 12 rows per year, set `diagnostics_every`, e.g. "1day"), and
 - the mean net top-of-atmosphere flux is within ±1 W m⁻² of the energy-closure residual
   (whole system: net TOA + q-flux + ice-cap flux − d(atmosphere + surface energy)/dt, the
   energy the model loses without accounting for it).
@@ -35,7 +37,18 @@ def main():
     i0 = int(np.searchsorted(t, t[-1] - w))
     sel = slice(i0, None)
     ty = t[sel] / year
-    trend = np.polyfit(ty, d["ts"][sel], 1)[0]
+    # annual means: bin the rows after t[i0] into whole years counted back from the end
+    tt, ts = t[i0 + 1:], d["ts"][i0 + 1:]
+    nyr = int(round(a.years))
+    k = np.clip(np.floor((tt - t[i0]) / year).astype(int), 0, nyr - 1)
+    counts = np.bincount(k, minlength=nyr)
+    if counts.min() < 12:
+        raise SystemExit(
+            f"only {counts.min()} diagnostics rows in some year: annual means need at least 12 "
+            "(set diagnostics_every, e.g. \"1day\")"
+        )
+    annual = np.bincount(k, weights=ts, minlength=nyr) / counts
+    trend = np.polyfit(np.arange(nyr) + 0.5, annual, 1)[0]
     radius = meta["planet"]["radius"]
     area = 4 * np.pi * radius * radius
     T = t[-1] - t[i0]
@@ -57,6 +70,7 @@ def main():
     ok_trend = abs(trend) < 0.02
     ok_toa = abs(toa - leak) <= 1.0
     print(f"{run.name}: last {a.years:g} years ({ty[0]:.2f}–{ty[-1]:.2f})")
+    print(f"  annual-mean T_s    {' '.join(f'{x:.3f}' for x in annual)} K ({counts.min()}+ rows/yr)")
     print(f"  T_s trend          {trend:+.4f} K/yr  (|·| < 0.02: {'yes' if ok_trend else 'no'})")
     print(f"  net TOA            {toa:+.3f} W/m²")
     print(f"  closure residual   {leak:+.3f} W/m²")
