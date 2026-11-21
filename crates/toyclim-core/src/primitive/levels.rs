@@ -33,7 +33,8 @@ impl Primitive {
             .collect()
     }
 
-    /// A 3D field on model levels (`[lev][lat][lon]`) by name: u, v, vor, div, t, q, rh, phi.
+    /// A 3D field on model levels (`[lev][lat][lon]`) by name: u, v, vor, div, t, q, rh, cl, cldwp,
+    /// phi.
     pub(crate) fn level_fields(&self, name: &str) -> Option<Vec<Real>> {
         let tr = &self.tr;
         let l = self.nlev();
@@ -78,6 +79,25 @@ impl Primitive {
                         let pr = self.levels.full[k] * ps[p] as f64;
                         let qs = cond.qsat(&self.planet, (t[p] + tref) as f64, pr);
                         out.push((q[p] as f64 / qs) as Real);
+                    }
+                }
+            }
+            // clouds of the last physics step (SPEC.md §9.5.1 `cl`): fraction per layer, and
+            // `cldwp`, the in-cloud condensate path per layer (liquid + ice) [kg m⁻²]; from the
+            // cloud scheme's per-column memory `[frac | liquid | ice]` (only scheme with memory)
+            "cl" | "cldwp" => {
+                let m = self.physics.memory();
+                if m.len() != n * 3 * l {
+                    return None;
+                }
+                for k in 0..l {
+                    for p in 0..n {
+                        let c = &m[p * 3 * l..(p + 1) * 3 * l];
+                        out.push(if name == "cl" {
+                            c[k]
+                        } else {
+                            c[l + k] + c[2 * l + k]
+                        });
                     }
                 }
             }

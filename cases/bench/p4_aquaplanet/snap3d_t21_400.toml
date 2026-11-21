@@ -13,7 +13,7 @@ dt = "20min"
 length = "16526.25day"
 output_every = "15day"
 diagnostics_every = "1day"
-output_fields = ["t", "q", "rh", "ps", "ts", "clt", "precip"]
+output_fields = ["t", "q", "rh", "cl", "cldwp", "ps", "ts", "clt", "precip"]
 initial_condition = { case = "jw06", perturbed = true }
 [star]
 t_eff = 5772.0
