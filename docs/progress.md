@@ -1746,8 +1746,14 @@ No change after the gate.
   `tools/co2_forcing.py --knobs-json` evaluates a candidate on saved model states. Two fits
   (forcing scale 0.25 and 0.1 W m⁻², surfaces to 320 K) were running at the end of the
   session; nothing adopted.
-- `scripts/regress` picked up the new binary partway through (shallow convection on), so its
-  result does not describe either version. Rerun when the convection change is settled.
+- `scripts/regress` (milestone ratchet, `out/p4/regress_gate.log`; all three parts started
+  before shallow convection was built, so they describe the pre-shallow P4 code):
+  - ignored tests pass;
+  - Held–Suarez T42 L20 1200 days meets all five M5 criteria;
+  - the T21 APE Control gate fails only the known question 6 row: lowest-level winds at
+    35–60° reach −6.85 m/s (P1: −4.17), and the westerly peak is 6.3 m/s at ±24.9°. The
+    other five rows pass.
+  - Rerun after the convection change and the re-tuning.
 
 **Next steps** (owner's sequence):
 1. Finish the CO₂ refit: adopt it if the clear-sky response stays within a few % of RRTMG on
