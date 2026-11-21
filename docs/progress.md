@@ -2007,6 +2007,14 @@ No change after the gate.
         P5 is not started.
       - **Recommendation:** refit the semi-gray CO₂ term first, with forcing pairs over a range
         of states including 300–315 K surfaces weighted. It reopens the cloud tuning anyway.
+    - **Owner decision (2026-11-21): refit the CO₂ term, first.** Fit forcing pairs across
+      the whole state range, including 300–315 K surfaces, weighted so that the temperature
+      dependence of the forcing matches RRTMG. Guard: the clear-sky response to warming
+      (now within 3 % of RRTMG) must not degrade; report it before and after, with the P3
+      tests. Expected effect about −16 %, so this alone will not pass criterion 4. If the
+      warming is still above 6 K after questions 11 and 13 are done, with complete ice melt
+      as the documented cause, the ruling above covers it. P5 stays unstarted until
+      question 13 is settled (P5 must score frozen clouds).
 12. **Equilibrium test: the 5-year T_s trend is below the noise of a 20 m slab with sea ice**
     (2026-11-21; SPEC.md §9.5.2, P4 acceptance 4).
     - **Evidence:** daily diagnostics, annual means, years 31–35 of the P4 slab pair (old
@@ -2019,6 +2027,11 @@ No change after the gate.
     - **Proposed replacement (owner to decide):** the trend over the last 10 years of annual
       means (standard error ≈ 0.009 K/yr) below 0.02 K/yr, or the 5-year trend below
       max(0.02, 2 × its standard error), keeping the TOA condition unchanged.
+    - **Owner decision (2026-11-21): replace with the 10-year version, flux condition
+      tightened.** Trend of the last 10 annual means below 0.02 K/yr, and the 10-year mean
+      net TOA within ±0.3 W m⁻² of the closure residual (not "max(0.02, 2 × standard
+      error)", which loosens as noise grows). Record the implied equilibrium warming next to
+      the measured one. SPEC.md §9.5.2 updated; `tools/equilibrium.py` to follow.
 13. **P4: the convective cloud diagnosis gives a strong positive tropical cloud feedback**
     (2026-11-21; P4 acceptance 3 and 4).
     - **Evidence:** entry "P4 completion plan, steps 1–5", diagnosis section, and figures
@@ -2045,3 +2058,21 @@ No change after the gate.
       which is the smallest change. (b) only if (a) leaves the cover/shape conflict at T42.
       Not choosing anything by its effect on the warming; screening uses the fixed-SST
       feedback as a diagnostic, and the tuning targets stay Earth-only.
+    - **Owner decision (2026-11-21): (c) first, with a named suspect.**
+      - SBM skips columns with CAPE > 0 where the adjustment would moisten (P_q ≤ 0).
+        SPEC.md §9.4.4 asks for Frierson's shallow-convection treatment, which was never
+        implemented. Such columns may build CAPE and then fire in bursts.
+      - Test: the share of tropical column-steps with CAPE > 0 and P_q ≤ 0 at 400 and
+        800 ppm, and the convective vs large-scale share of tropical rain.
+      - If confirmed: implement the paper's shallow scheme (fetched, transcribed,
+        single-column tests). That closes a spec gap; it is not tuning.
+      - If not confirmed: (a), with the averaging time fixed on physical grounds (a few
+        hours, anvil lifetime), not tuned.
+      - Also compare the mean convective cloud between T21 and T42 Earth runs: a concave
+        function of instantaneous rain depends on resolution and time step, which may
+        explain part of the T42 cover loss (0.497).
+      - (b) on hold; no tuning at T42 until this is settled.
+      - Sequence: check that the fixed-SST +4 K pair reproduces the tropical SW cloud term
+        (otherwise it cannot serve as the screen); refit CO₂ (question 11); intermittency
+        test and the convection fix; screen with the +4 K pair; tune once at T42; gate with
+        slab pairs of ≥ 25 years.

@@ -1281,10 +1281,14 @@ Metrics every world suite includes:
   1 mm/day (owner, 2026-11-18, open question 8: the ratio of small numbers in dry regions
   is not a storm). Pass: G ≤ 2.0;
 - tracer fixer rate (§9.8);
-- equilibrium: a run is **equilibrated** when the 5-year trend of global-mean T_s is below
-  0.02 K/yr and the 5-year mean net top-of-atmosphere flux is within ±1 W m⁻² of the
-  energy-closure residual. Climatologies for gates come from equilibrated runs only
-  (fixed-SST runs: after 1 year).
+- equilibrium: a run is **equilibrated** when the trend of the last 10 annual means of
+  global-mean T_s is below 0.02 K/yr and the 10-year mean net top-of-atmosphere flux is
+  within ±0.3 W m⁻² of the energy-closure residual. Also record the implied equilibrium
+  response (`tools/feedbacks.py`) next to the measured one for forced pairs.
+  Climatologies for gates come from equilibrated runs only (fixed-SST runs: after 1 year).
+  *(Owner, 2026-11-21, open question 12: was a 5-year trend below 0.02 K/yr and ±1 W m⁻²
+  over 5 years; the 5-year trend of annual means is below the noise of a 20 m slab with sea
+  ice, and ±1 W m⁻² allows ~3 K of drift at the P4 sensitivity.)*
 
 #### 9.5.3 Reference data
 

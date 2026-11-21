@@ -2,13 +2,15 @@
 """Equilibrium test of a run (SPEC.md §9.5.2).
 
 Usage:
-    python tools/equilibrium.py out/<run> [--years 5]
+    python tools/equilibrium.py out/<run> [--years 10] [--toa-limit 0.3]
 
-A run is equilibrated when, over the last `years` years of `diagnostics.csv`,
+A run is equilibrated when, over the last `years` years of `diagnostics.csv` (10 and
+±0.3 W m⁻² since the owner's restatement of 2026-11-21, open question 12; before: 5 years and
+±1 W m⁻², still available through the options for comparison),
 - the linear trend of the annual means of global-mean T_s is below 0.02 K/yr (the annual
   means are averages of the `diagnostics.csv` rows in each model year; the run needs at
   least 12 rows per year, set `diagnostics_every`, e.g. "1day"), and
-- the mean net top-of-atmosphere flux is within ±1 W m⁻² of the energy-closure residual
+- the mean net top-of-atmosphere flux is within ±0.3 W m⁻² of the energy-closure residual
   (whole system: net TOA + q-flux + ice-cap flux − d(atmosphere + surface energy)/dt, the
   energy the model loses without accounting for it).
 
@@ -24,7 +26,8 @@ import numpy as np
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run")
-    ap.add_argument("--years", type=float, default=5.0)
+    ap.add_argument("--years", type=float, default=10.0)
+    ap.add_argument("--toa-limit", type=float, default=0.3)
     a = ap.parse_args()
     run = pathlib.Path(a.run)
     meta = json.loads((run / "meta.json").read_text())
@@ -68,13 +71,13 @@ def main():
     # store (positive = the model loses energy unaccounted)
     leak = src - de
     ok_trend = abs(trend) < 0.02
-    ok_toa = abs(toa - leak) <= 1.0
+    ok_toa = abs(toa - leak) <= a.toa_limit
     print(f"{run.name}: last {a.years:g} years ({ty[0]:.2f}–{ty[-1]:.2f})")
     print(f"  annual-mean T_s    {' '.join(f'{x:.3f}' for x in annual)} K ({counts.min()}+ rows/yr)")
     print(f"  T_s trend          {trend:+.4f} K/yr  (|·| < 0.02: {'yes' if ok_trend else 'no'})")
     print(f"  net TOA            {toa:+.3f} W/m²")
     print(f"  closure residual   {leak:+.3f} W/m²")
-    print(f"  TOA − residual     {toa - leak:+.3f} W/m²  (|·| ≤ 1: {'yes' if ok_toa else 'no'})")
+    print(f"  TOA − residual     {toa - leak:+.3f} W/m²  (|·| ≤ {a.toa_limit:g}: {'yes' if ok_toa else 'no'})")
     eq = ok_trend and ok_toa
     print("EQUILIBRATED" if eq else "NOT EQUILIBRATED")
     raise SystemExit(0 if eq else 1)
