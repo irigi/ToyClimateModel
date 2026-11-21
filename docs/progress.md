@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-18 (PR #8, draft): acceptance 1, 2 and 5 met; 3 fails on the zonal cloud shape (cover 0.56 passes); 4: T_s 286.5 K passes, 2×CO₂ warming 6.87 K fails (limit 6), the equilibrium test fails on snapshot noise. Completion plan in SPEC.md §9.6 P4; question 11 |
+| P4 Clouds, Earth-like energy balance | 2026-11-21 (PR #8, draft): completion plan steps 1–5 done; knobs frozen. T42 gate: 1, 2 and 5 met; 3: shape met, cover 0.497 (floor 0.5); 4: 2×CO₂ +11.1 K (limit 6) from the convective-cloud diagnosis and the semi-gray CO₂ forcing (questions 11, 13); equilibrium test noise (question 12). Retests: questions 6 and 7 still fail |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -1459,6 +1459,245 @@ Water closure is 4.5e-7 mm/day and G 1.81.
 **Next step:** the P4 completion plan in SPEC.md §9.6, starting with the equilibrium measurement
 and the attribution of the 2×CO₂ warming.
 
+## 2026-11-21 — P4 completion plan, steps 1–5 (branch `p4-clouds`, overnight session)
+
+Unattended session (owner away 2026-11-20 evening to 2026-11-21 20:00). Binaries are kept as
+`out/p4/toyclim_<commit>`; the gate runs use `out/p4/toyclim_frozen` (690ead0, frozen knobs).
+Lost time: 02:20–08:45 the machine was idle. My waiter loops used `pgrep -f` with a pattern
+that matched their own command line, so they never ended. Now they wait on PIDs.
+
+**Tooling.**
+- `diagnostics_every`: diagnostics rows can be written more often than output fields.
+- `tools/equilibrium.py`: the trend is now taken over annual means of the daily rows.
+- `tools/scorecard.py`:
+  - the planetary albedo comes from the climatology maps;
+  - the aquaplanet jet search is limited to σ > 0.1.
+- `tools/co2_forcing.py`: clear-sky 2×CO₂ forcing on saved model states, semi-gray vs RRTMG.
+
+**Step 1: equilibrium with annual means** (old knobs, the P4 slab pair extended to year 35,
+daily rows):
+
+| Run | Annual-mean T_s, years 31–35 [K] | Trend [K/yr] | TOA − residual [W m⁻²] |
+|---|---|---|---|
+| 400 ppm | 286.541 286.465 286.543 286.615 286.675 | +0.042 | +0.015 |
+| 800 ppm | 293.277 293.373 293.452 293.386 293.530 | +0.052 | +0.107 |
+
+The interannual standard deviation is 0.080 / 0.094 K, which makes the standard error of a
+5-point trend 0.025 / 0.030 K/yr. That is larger than the 0.02 limit. Open question 12 (new).
+
+**Steps 2–3: attribution of the old-knob 2×CO₂ warming (6.84 K, years 31–35).**
+- Sea ice off: +4.21 K.
+- Global clear-sky forcing: semi-gray 3.78 W m⁻², RRTMG 3.45 W m⁻² (+9 %).
+- No defect found in the sea ice.
+- Details in question 11.
+
+**Step 4: cloud knobs on Earth targets** (T21 Earth AMIP, 1 + 1 years; `docs/tuning.md`):
+- 5 RH_c variants without freeze-dry: all left the North Pole cloudier than 0.83.
+- Freeze-dry low-cloud reduction (Vavrus & Waliser 2008, transcribed from CAM): North Pole
+  0.81 → 0.71 with s 0.95, u 0.85.
+- Six variants with freeze-dry. Frozen: freeze-dry on, RH_c 0.95 / 0.90, β 0.03. At T21 this
+  gave albedo 0.301, OLR 237.5, net +0.2, SW / LW CRE −52.4 / +23.6 and cover 0.534; the
+  shape row still failed at T21.
+- Figure `docs/figures/P4/clt_zonal_t21_sweep.png`: zonal cloud cover of the sweep runs.
+  - Freeze-dry lowers Antarctic cover from about 0.73 to 0.53.
+  - North of 75°N, cover still rises to 0.77.
+  - The 64°N storm-track maximum is only a shallow bump.
+
+**Step 5: gate with the frozen knobs.**
+
+*Earth AMIP T42, 1 + 5 years* (`out/p4/gate/earth_amip_t42`; scorecards
+`docs/scorecards/P4_earth_{energy,amip}_gate_t42_2026-11-21.json`):
+
+| # | Criterion | Measured | State |
+|---|---|---|---|
+| 1 | Albedo 0.27–0.33; OLR 228–250; net TOA ±8 | 0.280; 242.5 W m⁻²; +2.53 W m⁻² | met |
+| 2 | SW CRE −30 to −60; LW CRE +15 to +35 | −44.6; +19.9 W m⁻² | met |
+| 3 | Cover 0.5–0.75; ITCZ and storm-track maxima, subtropical minima | **0.497**; shape met (N: subtropical minimum 0.32, storm-track local maximum 0.65 at 66°; S: 0.29, 0.65 at 63°) | **not met** (cover, by 0.003) |
+| 5 | Energy closure ≤ 0.5 W m⁻² | 0.31 | met |
+
+- At T42 the zonal shape now passes. The total cover is 0.037 lower than at T21, where the
+  knobs were chosen.
+- Clear-sky albedo 0.149; condensed water path 0.119 kg m⁻².
+- P5 rows (record only):
+  - 16 of 19 pass.
+  - Failing:
+    - zonal precipitation correlation 0.820 (≥ 0.85);
+    - NH February snow 24.3 million km² (35–58);
+    - cost 52 min per model year (contended machine).
+  - Other values:
+    - land 2 m temperature RMSE 3.70 K;
+    - precipitation map correlation 0.71;
+    - sea-level pressure correlation 0.91 / 0.91;
+    - NH winter jet 41.3 m/s at 37.7°, SH 46.4 m/s at 34.9°S;
+    - G 1.90.
+
+*Slab pair, 400 / 800 ppm* (`out/p4/gate/slab_t21_{400,800}`): restarted from year 30 of the
+old-knob runs, run to year 45, statistics over years 41–45.
+
+| | 400 ppm | 800 ppm |
+|---|---|---|
+| Annual-mean T_s, years 41–45 [K] | 288.376 288.570 288.651 288.482 288.516 | 299.320 298.967 299.381 299.597 299.686 |
+| Trend; TOA − residual | +0.019 K/yr; +0.006 W m⁻² (**equilibrated**) | +0.136 K/yr; +0.065 W m⁻² (not equilibrated) |
+| Sea-ice cover; cloud cover | 0.107; 0.579 | 0.000; 0.520 |
+| Albedo; SW / LW CRE [W m⁻²] | 0.318; −62.5 / +24.7 | 0.282; −60.2 / +23.4 |
+
+- **The 2×CO₂ warming with the frozen knobs is 10.88 K** (old knobs 6.84 K), and the 800 ppm
+  run is still warming. It is being continued to year 55 (`gate2_t21_800.toml`).
+- The global net cloud radiative effect now changes by +1.1 W m⁻² (old knobs −5.0).
+- Figure `docs/figures/P4/co2x2_response_old_vs_frozen.png`: zonal 800 − 400 ppm differences,
+  old vs frozen knobs.
+  - Tropics: warming 10.9 K instead of 7.2 K; cloud cover drops by 0.16–0.17 instead of
+    0.09; net CRE rises by up to +26 W m⁻² at the equator instead of +5.
+  - Poles: warming 30–33 K instead of 20 K, because the 800 ppm run loses all its ice.
+  - Poleward of 60°: net CRE falls by 20–25 W m⁻² in both versions (clouds now mask open
+    water).
+- Figure `docs/figures/P4/tropical_cloud_profile_2xco2.png`: tropical (|φ| ≤ 15°) mean
+  relative humidity and stratiform cloud fraction against σ.
+  - Data: 6 snapshots over 90 days after year 45 (`cases/bench/p4_aquaplanet/snap3d_*`).
+    Cloud fraction is recomputed offline with the scheme's formula, including freeze-dry;
+    convective cloud is not included.
+  - At 400 ppm the upper moist layer peaks at σ 0.19 (RH 0.66, cloud 0.25).
+  - At 800 ppm it moves up to σ 0.09–0.12. Cloud at σ 0.19–0.31 falls from 0.11–0.25 to
+    0.02–0.11.
+  - The cloud the 800 ppm state would form above σ 0.1 (0.07–0.14 at σ 0.05–0.085, dashed)
+    is removed by the fixed cloud lid `sigma_min` = 0.1.
+  - Low cloud at σ 0.93 rises from 0.09 to 0.21.
+  - The tropical surface is at 299.1 / 309.9 K.
+- The 800 ppm run continued to year 55 (`gate2_t21_800.toml`):
+  - annual-mean T_s 299.565 299.484 299.403 299.697 299.707 K;
+  - trend +0.050 K/yr; net TOA +0.26 W m⁻²;
+  - **2×CO₂ warming 11.06 K** (against 400 ppm at years 41–45).
+
+**Diagnosis of the 2×CO₂ response** (evening, after a review of the plan by a second session
+that the owner pasted in; its main points checked and adopted):
+
+- *Feedbacks* (`tools/feedbacks.py`; W m⁻² K⁻¹ contributions to the global value).
+  Semi-gray forcing 3.775 W m⁻², split by band and removed from the clear-sky LW term.
+
+  | | Old knobs, years 31–35 | Frozen, years 41–45 | Frozen, 800 ppm at years 51–55 |
+  |---|---|---|---|
+  | ΔT_s | 6.84 K | 10.88 K | 11.06 K |
+  | Clear-sky LW | −1.20 | −1.35 | −1.38 |
+  | Clear-sky SW (ice) | +1.43 | +0.91 | +0.90 |
+  | SW CRE (0–30° / 30–60° / 60–90°) | −0.62 (+0.42 / −0.45 / −0.59) | +0.21 (+0.74 / −0.26 / −0.27) | +0.28 (+0.81 / −0.24 / −0.29) |
+  | LW CRE | −0.12 | −0.11 | −0.12 |
+  | Sum | −0.50 | −0.35 | −0.32 |
+  | Implied equilibrium ΔT | 7.5 K | 10.9 K | 11.7 K |
+
+  - The knob change moved the total feedback from −0.50 to −0.32.
+  - Most of that is the tropical SW cloud term, +0.42 → +0.81.
+  - At −0.32 W m⁻² K⁻¹ a 20 m slab e-folds in about 8 years, so 15-year pairs are not
+    converged.
+  - The clear-sky LW feedback, −1.2 to −1.4, is weak. Comprehensive models give about −1.8 to
+    −2, quoted from memory. The semi-gray calibration column has dOLR/dT_s 1.68 against
+    RRTMG's 1.92 (`docs/radiation/calibration.md`). This makes the radiation a second
+    candidate besides the forcing.
+- *Lid*: the pair with `sigma_min` 0.05 (`lid05_t21_*`, years 46–55, statistics over years
+  51–55):
+  - annual means 288.813 … 288.849 K and 298.847 … 298.936 K;
+  - trends +0.011 / −0.017 K/yr, TOA − residual +0.04 / +0.21 W m⁻², so **both equilibrated**;
+  - ΔT 10.12 K, total feedback −0.35, implied equilibrium 10.8 K against 11.7 K with the lid
+    at σ 0.1. Moving the lid is worth about 0.9 K.
+  - At 800 ppm it restores tropical cover from 0.536 to 0.612, but SW CRE only from −72.9 to
+    −75.8 W m⁻² (400 ppm: −96.7). The cold top cloud is nearly transparent in SW.
+  - My lid hypothesis was wrong.
+- *RH and cloud against temperature* (figure `docs/figures/P4/tropical_rh_cloud_vs_T.png`;
+  tropical means, 6 snapshots):
+  - Left panel: the RH profiles of 400 and 800 ppm lie on top of each other from about 280 K
+    to 225 K. The apparent drying at fixed σ is an upward shift of the profile, not drying.
+  - Right panel: stratiform cloud against temperature is likewise unchanged. The only
+    difference is that the cold top above σ 0.1, at 192–209 K, is missing at 800 ppm.
+- *Model clouds* (new output fields `cl` and `cldwp`, from the cloud scheme's memory; figure
+  `docs/figures/P4/tropical_cl_cwp_vs_T.png`, |φ| ≤ 15°, 7 snapshots after year 45):
+  - Tropical total cover falls from 0.702 to 0.565, while the grid-mean condensate path rises
+    from 271 to 372 g m⁻². The clouds are optically thick, so SW reflection follows cloud
+    fraction.
+  - Left panel: above 240 K the model cloud equals the stratiform part and is the same in
+    both runs.
+  - Below that, the convective part (residual 1 − (1 − cl)/(1 − c_s)) roughly halves: at
+    σ 0.867 from 0.18 to 0.10, and from 0.04–0.08 to 0.03–0.05 at σ 0.4–0.8. The
+    boundary-layer peak falls from 0.43 to 0.32.
+  - Right panel: the condensate path sits in the lowest three cloud layers and increases at
+    800 ppm.
+- *Why the convective cloud falls*: convection becomes more intermittent.
+  - Global convective precipitation rises from 2.13 to 2.86 mm/day, and mean CAPE doubles,
+    508 → 1015 J kg⁻¹ (old knobs: 393 → 561).
+  - Tropical snapshot precipitation:
+
+    | | 400 ppm | 800 ppm |
+    |---|---|---|
+    | Median | 1.93 mm/day | 0.08 mm/day |
+    | 99th percentile | 36 mm/day | 87 mm/day |
+    | Share of points above 1 mm/day | 0.57 | 0.40 |
+
+  - The convective cloud, c_c = 0.125 ln(1 + P) over the convecting column, is a concave
+    function of the instantaneous precipitation of each column. Its tropical mean falls from
+    0.140 to 0.114 although the mean precipitation rises. The excess tropical SW cloud
+    feedback is a property of this convective-cloud diagnosis (and of the intermittency of
+    the convection), not of the RH-based layer cloud.
+- *RRTMG on the same states* (diagnostic 1): `tools/co2_forcing.py` on the 400 and 800 ppm
+  snapshot states. 3584 columns each, every 4th longitude, snapshot ΔT_s 10.91 K.
+
+  | | Semi-gray | RRTMG |
+  |---|---|---|
+  | Clear-sky OLR at 400 ppm: 400 → 800 ppm state | 257.6 → 274.1 (+16.47) | 262.0 → 279.0 (+16.98) |
+  | State response (clear-sky LW feedback) | −1.51 W m⁻² K⁻¹ | −1.56 W m⁻² K⁻¹ |
+  | 2×CO₂ forcing on the 400 ppm state | 3.85 | 3.57 |
+  | 2×CO₂ forcing on the 800 ppm state | 5.99 (tropics 6.70) | 4.66 (tropics 5.11) |
+
+  - On identical states the two schemes' clear-sky response to warming agrees within 3 %.
+    The weak clear-sky LW feedback is a property of the model climate (lapse rate and
+    humidity structure), not of the radiation code.
+  - What the semi-gray scheme gets wrong is the *state dependence of the CO₂ forcing*. It
+    grows 56 % from the cold to the warm state (RRTMG 30 %), so it is 29 % too strong at the
+    warm state against 8 % at the cold one.
+  - In the runs, this growing forcing makes the clear-sky LW term (computed with the fixed
+    3.78 W m⁻²) look weaker, −1.38 against −1.51.
+  - A rough scaling with the mean of the two states' forcings (semi-gray 4.92, RRTMG 4.12)
+    suggests a warming about 16 % lower with RRTMG-like forcing, around 9.3 K instead of
+    11.1 K. This is not a run, only an estimate.
+- *Fixed-SST pair* (APE Control and APE Control + 4 K, T21, `cases/bench/p4_feedback/`):
+  running at the end of this entry; results follow in an addendum.
+
+**Step 6: retests.**
+- Question 7, started fully ice-covered (`cases/bench/p4_retest/bistab_ice.toml`, frozen
+  physics, 12 years): **deglaciates again.**
+  - Figure `docs/figures/P4/bistab_ice_start.png`.
+  - Global T_s falls to 248 K in month 7, then rises every year: 257.5, 267.7, 274.1 …
+    286.5, 287.0, 287.3 K. It is still rising 0.3–0.5 K/yr and approaching the warm branch.
+  - Within the first year the 3 m ice melts within ±20° (T_s 282–287 K there), while the
+    polar ice thickens to 4.6–4.9 m.
+  - Years 8–12: ice cover 0.153, ice edge (concentration 0.15) at 58°N / 53°S, full cover
+    poleward of 69°.
+  - Year-1 planetary albedo is 0.40. Bare sea ice has a broadband albedo of about 0.5
+    (CAM6 0.73 / 0.33), and low-latitude bare ice absorbs enough sunlight to melt at
+    1361 W m⁻². No code defect found.
+- Question 6, APE Control T42 with the frozen clouds (`cases/bench/p4_retest/ape_control_t42_clouds.toml`,
+  1 + 3 years; scorecard `docs/scorecards/P4_aquaplanet_ape_retest_q6_2026-11-21.json`): **same
+  failure as in P1.**
+  - Surface westerlies peak at 9.8 / 9.4 m/s at ±37.7° but end at 51°. Poleward of that the
+    lowest-level wind is easterly, minimum −4.95 m/s at 62.8°N, −5.3 m/s within 35–60°.
+  - The other five rows pass:
+    - tropical easterlies, mean −5.7 m/s;
+    - P = E within 2e-4;
+    - closure;
+    - G 1.17.
+  - Other values: jets 59 / 60 m/s at ±32°, σ 0.16; Hadley cells 13.2 / 12.9 × 10¹⁰ kg/s with
+    edges at 26°; precipitation maximum 7.2 mm/day at 4°N; planetary albedo 0.255.
+  - The clouds do not change the westerly row, so question 6 stays open as it was.
+
+**Cover vs shape at T42** (`cases/bench/p4_earth/rhc/t42_u85.toml`, 1 + 1 years):
+- RH_c aloft 0.85 gives albedo 0.290, OLR 241.2, net +0.58, SW / LW CRE −48.1 / +21.7 and
+  cover 0.522 (passes).
+- The shape fails: the NH storm-track maximum, 0.68 at 68°, is not a local maximum.
+- A run at 0.875 was started and then stopped. Tuning against a 0.003 margin is premature
+  while the cloud structure is in question.
+
+**Tuning changes:** freeze-dry on; RH_c 0.95 / 0.90; β 0.03 (`docs/tuning.md`, 2026-11-21).
+No change after the gate.
+
+**Open questions:** 11 updated, 12 new, 7 updated.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -1564,6 +1803,12 @@ and the attribution of the 2×CO₂ warming.
      latitude 35–60° (minimum +4.1 m/s at 400 ppm). This is not the retest: the APE Control
      gate (T42, prescribed SST) has not been run with clouds. It is step 6 of the P4
      completion plan. The row stays open.
+   - **Retest after P4 (2026-11-21):** APE Control T42 with the frozen P4 clouds
+     (`cases/bench/p4_retest/ape_control_t42_clouds.toml`, 1 + 3 years) fails the same row.
+     - Surface westerlies peak at 9.8 m/s at ±37.7° and end at 51°; easterlies poleward of
+       that, −4.95 m/s at 62.8°.
+     - The other five rows pass.
+     - Clouds do not change it; still open.
 7. **P2 bistability: one climate, with ice to ~45°** (2026-11-16; P2 acceptance 6).
    - **What fails:** the T21 aquaplanet (slab 20 m, sea ice, seasons, 1361 W/m², 12 years)
      reaches the same climate from both starts (`cases/bench/p2_bistability/`):
@@ -1620,6 +1865,14 @@ and the attribution of the 2×CO₂ warming.
    - **P4 note (2026-11-18):** with clouds, the 400 ppm slab aquaplanet keeps its annual ice
      edge near 58°, which is what the warm branch needs. The ice-covered start has not been
      run with clouds, so acceptance 6 stays open until step 6 of the P4 completion plan.
+   - **Retest after P4 (2026-11-21):** the ice-covered start with the frozen P4 physics
+     (`cases/bench/p4_retest/bistab_ice.toml`, 12 years) deglaciates again.
+     - The 3 m tropical ice melts in year 1; global T_s goes 248 K (month 7) → 287.3 K
+       (year 12), still rising 0.3 K/yr.
+     - Years 8–12: ice cover 0.153, edge at 58°N / 53°S.
+     - Figure `docs/figures/P4/bistab_ice_start.png`.
+     - Candidate cause: bare sea-ice albedo of about 0.5 (CAM6 band values) at low latitudes.
+       No code defect found. Still open.
 8. **P2 acceptance 5: G and seasonal sea ice in the test world** (2026-11-17).
    - **G = 2.18 against ≤ 2.0:** one dry ocean cell (0.8 mm/day against ~0.37 in its
      neighbours) at 18°N, off a desert coast. Every other cell is ≤ 1.76.
@@ -1737,6 +1990,23 @@ and the attribution of the 2×CO₂ warming.
         reopen P3 and the cloud tuning. **Owner:** refit the CO₂ term now (I would weight
         the forcing pairs more heavily and accept a slightly larger OLR rms), or leave it as
         a known limitation.
+    - **Gate with the frozen knobs (2026-11-21):** warming **11.06 K** (800 ppm at years 51–55),
+      implied equilibrium 11.7 K; total feedback −0.32 W m⁻² K⁻¹ (old knobs −0.50).
+      - The extra warming is the tropical SW cloud term (+0.81 against +0.42), from the
+        convective cloud diagnosis (question 13).
+      - Sea ice now melts completely in each pair. Clear-sky SW is +0.9 W m⁻² K⁻¹, about
+        +9.8 W m⁻² in total; it acts as a fixed push, so the 2.6 K from the old knobs does
+        not transfer.
+      - Diagnostic 1 (RRTMG on the 400 / 800 ppm states): the clear-sky response to warming
+        agrees with RRTMG within 3 % (−1.51 against −1.56 W m⁻² K⁻¹). The 2×CO₂ forcing does
+        not: semi-gray 3.85 → 5.99 W m⁻² from the cold to the warm state, RRTMG 3.57 → 4.66.
+        The refit should weight the forcing at warm states (300–315 K) and its temperature
+        dependence. Rough scaling: about 16 % less warming with RRTMG-like forcing.
+      - With the larger excess, I treat the ruling "proceed if cause found" as not yet
+        applicable. The cause is located but it is a scheme property, so it looks fixable.
+        P5 is not started.
+      - **Recommendation:** refit the semi-gray CO₂ term first, with forcing pairs over a range
+        of states including 300–315 K surfaces weighted. It reopens the cloud tuning anyway.
 12. **Equilibrium test: the 5-year T_s trend is below the noise of a 20 m slab with sea ice**
     (2026-11-21; SPEC.md §9.5.2, P4 acceptance 4).
     - **Evidence:** daily diagnostics, annual means, years 31–35 of the P4 slab pair (old
@@ -1749,3 +2019,29 @@ and the attribution of the 2×CO₂ warming.
     - **Proposed replacement (owner to decide):** the trend over the last 10 years of annual
       means (standard error ≈ 0.009 K/yr) below 0.02 K/yr, or the 5-year trend below
       max(0.02, 2 × its standard error), keeping the TOA condition unchanged.
+13. **P4: the convective cloud diagnosis gives a strong positive tropical cloud feedback**
+    (2026-11-21; P4 acceptance 3 and 4).
+    - **Evidence:** entry "P4 completion plan, steps 1–5", diagnosis section, and figures
+      `tropical_rh_cloud_vs_T.png` and `tropical_cl_cwp_vs_T.png`.
+      - Under 2×CO₂ the tropical layer cloud is unchanged against temperature.
+      - The convective cloud, 0.125 ln(1 + P) of each column's instantaneous precipitation,
+        falls by half because convection becomes intermittent: median tropical
+        precipitation 1.93 → 0.08 mm/day, 99th percentile 36 → 87, CAPE 508 → 1015 J kg⁻¹.
+      - Tropical cover falls from 0.70 to 0.57, and the tropical SW CRE weakens by
+        24 W m⁻².
+    - **Options:**
+      - (a) Base convective cloud on a time-averaged convective mass flux or precipitation,
+        e.g. a running mean over a few hours kept in the cloud memory, so that it measures
+        how often a column convects rather than single steps.
+      - (b) Tie anvil and detrained cloud to convective detrainment (the convective top), and
+        widen the RH window aloft (RH_c nearer 0.8), with the polar excess handled
+        separately (freeze-dry, or a polar-specific term).
+      - (c) Look first at why the SBM convection becomes intermittent: CAPE doubles, so the
+        trigger or the relaxation time may be the deeper cause.
+      - Whichever is chosen: single-column tests, screening with the fixed-SST +4 K pair
+        (`cases/bench/p4_feedback/`, about 1 h at T21), then one tuning pass at T42 aiming
+        for cover ≥ 0.55, then the gate with longer slab runs (≥ 25 years after a change).
+    - **Recommendation:** after the LW refit (question 11): (c) as a diagnostic, then (a),
+      which is the smallest change. (b) only if (a) leaves the cover/shape conflict at T42.
+      Not choosing anything by its effect on the warming; screening uses the fixed-SST
+      feedback as a diagnostic, and the tuning targets stay Earth-only.
