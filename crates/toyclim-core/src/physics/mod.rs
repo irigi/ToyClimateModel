@@ -196,16 +196,33 @@ const GRAY_FORCING_KEYS: &[&str] = &[
     "cloud_lw_tau",
 ];
 
+/// `shallow_default`: Frierson's "shallower" shallow convection unless the table says
+/// `shallow = "none"` (on for `[convection] scheme = "sbm"`, SPEC.md §9.4.4; off for the
+/// idealized forcing bundles, which keep the prototype behaviour).
 fn sbm(
     cond: &Condensable,
     t: &toml::Table,
     tau_key: &str,
     rh_key: &str,
+    shallow_default: bool,
 ) -> Result<SimplifiedBettsMiller, String> {
+    let shallow = match t.get("shallow") {
+        None => shallow_default,
+        Some(v) => match v.as_str() {
+            Some("shallower") => true,
+            Some("none") => false,
+            _ => {
+                return Err(format!(
+                    "[convection] shallow = {v}: expected \"shallower\" or \"none\""
+                ))
+            }
+        },
+    };
     Ok(SimplifiedBettsMiller {
         cond: cond.clone(),
         tau: 1.0 / rate(t, tau_key, 1.0 / 7200.0)?,
         rh_ref: num(t, rh_key, 0.7)?,
+        shallow,
         substeps: 1,
     })
 }
@@ -290,7 +307,7 @@ pub fn build(
             match f.get("convection").and_then(|v| v.as_str()).unwrap_or("none") {
                 "none" => {}
                 "sbm" | "simplified_betts_miller" => {
-                    schemes.push(Box::new(sbm(cond, f, "tau_convection", "rh_convection")?))
+                    schemes.push(Box::new(sbm(cond, f, "tau_convection", "rh_convection", false)?))
                 }
                 other => return Err(format!("unknown convection {other:?} (none, sbm)")),
             }
@@ -598,10 +615,10 @@ pub fn build_world(
             schemes.push(Box::new(DryAdjustment::default()));
         }
         "sbm" | "simplified_betts_miller" => {
-            check_keys("[convection]", &conv.params, &["tau", "rh_ref"])?;
+            check_keys("[convection]", &conv.params, &["tau", "rh_ref", "shallow"])?;
             let cond = moisture.ok_or("convection \"sbm\" needs a [moisture] block")?;
             schemes.push(Box::new(DryAdjustment::default()));
-            schemes.push(Box::new(sbm(cond, &conv.params, "tau", "rh_ref")?));
+            schemes.push(Box::new(sbm(cond, &conv.params, "tau", "rh_ref", true)?));
         }
         other => {
             return Err(format!(

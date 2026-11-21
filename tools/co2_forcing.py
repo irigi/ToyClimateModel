@@ -2,6 +2,7 @@
 completion plan, step 2; SPEC.md §9.6).
 
     .rrtmg/bin/python -I tools/co2_forcing.py out/<run> [--lon-stride 4] [--co2 400 800]
+        [--knobs-json <calibration.json> --tag <name>]
 
 `out/<run>` must hold 3-D snapshots `fields/t_*.npy`, `q_*.npy` and 2-D `ps_*.npy`, `ts_*.npy`
 (e.g. `cases/bench/p4_aquaplanet/snap_t21_400.toml`). Every snapshot after step 0 is used;
@@ -36,6 +37,9 @@ def main():
     ap.add_argument("run")
     ap.add_argument("--lon-stride", type=int, default=4)
     ap.add_argument("--co2", type=float, nargs=2, default=[400.0, 800.0])
+    ap.add_argument("--knobs-json", help="override the longwave/shortwave knobs with the 'knobs' of a "
+                    "calibration.json (candidate refits); the result is then written as co2_forcing_<tag>.json")
+    ap.add_argument("--tag", default="candidate")
     a = ap.parse_args()
     run = pathlib.Path(a.run)
     meta = json.loads((run / "meta.json").read_text())
@@ -44,6 +48,8 @@ def main():
     lat = np.asarray(meta["grid"]["lat"])
     nlon = len(meta["grid"]["lon"])
     knobs = {k: v for k, v in ((cfg.get("physics") or {}).get("radiation") or {}).items() if k != "scheme"}
+    if a.knobs_json:
+        knobs.update(json.loads(pathlib.Path(a.knobs_json).read_text())["knobs"])
     steps = sorted(int(p.stem.split("_")[1]) for p in (run / "fields").glob("t_*.npy"))
     steps = [s for s in steps if s > 0] or steps
     if not steps:
@@ -104,8 +110,9 @@ def main():
     res["ratio_semigray_to_rrtmg"] = res["semigray"]["forcing_toa_W_m2"] / res["rrtmg"]["forcing_toa_W_m2"]
     res.update({"run": str(run), "snapshots": steps, "columns": len(cols), "co2_ppm": [lo, hi],
                 "knobs": knobs})
-    (run / "co2_forcing.json").write_text(json.dumps(res, indent=1))
-    print(f"ratio semi-gray / RRTMG = {res['ratio_semigray_to_rrtmg']:.3f}; wrote {run / 'co2_forcing.json'}")
+    dest = run / (f"co2_forcing_{a.tag}.json" if a.knobs_json else "co2_forcing.json")
+    dest.write_text(json.dumps(res, indent=1))
+    print(f"ratio semi-gray / RRTMG = {res['ratio_semigray_to_rrtmg']:.3f}; wrote {dest}")
 
 
 if __name__ == "__main__":

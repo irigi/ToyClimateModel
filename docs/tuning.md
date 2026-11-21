@@ -35,6 +35,7 @@ until then are reproducible; do not tune).
 | 2026-11-18 | Diagnostic clouds (P4), all knobs | (new) | Not tuned yet: SPEC.md §9.4.7 starting values (table "Clouds" below); optics constants from Slingo (1989) and Ebert & Curry (1992) via the NCAR CAM source. |
 | 2026-11-21 | Freeze-dry low-cloud reduction (new physics, `freeze_dry_q`, `freeze_dry_min`, `freeze_dry_sigma`) | (new) off → on, 3e-3 kg/kg, 0.15, σ 0.75 | Not a fitted value: the form and constants of Vavrus & Waliser (2008) as in NCAR CAM `cloud_fraction.F90` (cam_cesm2_2_rel); the paper could not be fetched (HTTP 403); σ 0.75 for CAM's `premib` is unverified (σ 0.70 gave identical results at L26). Reason: P4 completion plan step 4, the RH_c knobs alone could not remove the polar cloud excess (below). T21 Earth AMIP 1 + 1 years: polar cover 0.86 → 0.81 with the old RH_c. |
 | 2026-11-21 | Clouds `rh_crit_surface`, `rh_crit_upper`, `water_ratio` (code defaults) | 0.90, 0.80, 0.02 → 0.95, 0.90, 0.03 | Earth targets only (Earth AMIP T21, 1 + 1 years, climatology year 2; observed planetary albedo ≈ 0.30, CRE ≈ −47 / +26 W m⁻² (CERES EBAF, quoted from memory, not checked; the P4 ranges are −30 to −60 / +15 to +35), the zonal shape of SPEC.md P4 criterion 3). Explored within the ranges: defaults, s 0.95, s 0.95 + u 0.85, n 1, n 8 (no freeze-dry) all left the North Pole at 0.83–0.89 and no northern storm-track maximum; with freeze-dry: s 0.95 + u 0.85 / 0.90 / 0.95, s 0.90 + u 0.90, s 0.95 + u 0.90 + β 0.03. Chosen: s 0.95, u 0.90, β 0.03: albedo 0.301, OLR 237.5, net +0.2, SW CRE −52.4, LW CRE +23.6, cover 0.534; northern storm-track maximum at 64° (local), southern maximum at the 69° band edge (shape row still fails at T21). β restores the albedo lost to the higher RH_c. Not chosen with any reference to the 2×CO₂ warming. Runs: `out/p4/rhc/`, cases `cases/bench/p4_earth/rhc/`. |
+| 2026-11-21 | SBM shallow convection (new physics, `[convection] shallow`) | (none: columns with CAPE > 0 and P_q ≤ 0 left alone) → "shallower" | Not a fitted value: closes the SPEC.md §9.4.4 gap ("the paper's shallow-convection treatment"). Frierson (2007, J. Atmos. Sci. 64, 1959–1976, §2c, eqs. 7–9; read from the author's copy, atmos.uw.edu/~dargan/papers/f07b.pdf): the paper's control. Reason: P4 open question 13; in the slab tropics 66 % (400 ppm) / 81 % (800 ppm) of column-steps had CAPE > 0 but were skipped, active convection 31 % → 16 %, CAPE 1012 → 2444 J/kg. Default for `[convection] scheme = "sbm"`; `shallow = "none"` restores the P1 behaviour; the idealized forcing bundles keep "none". Invalidates the P4 cloud tuning (to be redone). |
 
 ## Dynamical core (Part I; frozen regression base)
 
@@ -161,6 +162,7 @@ marked **[knob]** there).
 |---|---|---|---|---|
 | Dry adjustment | `[convection] scheme = "dry"` or with `"sbm"` | on | fixed | SPEC.md §9.4.3 |
 | SBM τ, RH_ref | `[convection] tau`, `rh_ref` | 2 h, 0.7 | knob (P5) | Frierson (2007) |
+| SBM shallow convection | `[convection] shallow` | "shallower" | fixed (published) | Frierson (2007) §2c, eqs. 7–9 (the paper's control) |
 
 ### Radiation (P3, `[radiation] scheme = "semigray"`; SPEC.md §9.4.1)
 

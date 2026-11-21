@@ -128,6 +128,12 @@ def toyclim(knobs, cols, tmp):
 def main():
     a = argparse.ArgumentParser()
     a.add_argument("--quick", action="store_true", help="smaller profile set (testing)")
+    a.add_argument("--forcing-scale", type=float, default=1.0,
+                   help="residual scale of the CO2 forcing pairs [W m-2] (P3 fit: 1.0; smaller = heavier)")
+    a.add_argument("--slope-scale", type=float, default=2.0,
+                   help="residual scale of the T_s pairs (clear-sky response) [W m-2] (P3 fit: 2.0)")
+    a.add_argument("--ts-max", type=float, default=310.0, help="warmest surface of the profile set [K] (P3: 310)")
+    a.add_argument("--out", default=str(OUT), help="output directory (default docs/radiation)")
     args = a.parse_args()
     from scipy.optimize import least_squares
 
@@ -136,7 +142,8 @@ def main():
     half = l26_half()
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="toyclim_cal_"))
 
-    tss = [250, 270, 290, 310] if args.quick else list(range(250, 311, 10))
+    out_dir = pathlib.Path(args.out)
+    tss = [250, 270, 290, 310] if args.quick else list(range(250, int(args.ts_max) + 1, 10))
     co2s = [100, 400, 2000] if args.quick else [100, 280, 400, 800, 2000, 10000]
     rhs = [0.5, 0.75, 1.0]
     fit_ps, extra_ps = [0.3e5, 0.5e5, 1e5], [2e5, 3e5]
@@ -183,7 +190,7 @@ def main():
         s_m = olr[pt[:, 1]] - olr[pt[:, 0]]
         s_r = ref_olr[pt[:, 1]] - ref_olr[pt[:, 0]]
         return np.concatenate([(olr - ref_olr) / 8.0, (dn - ref_dn) / 8.0,
-                               (f_m - f_r) / 1.0, (s_m - s_r) / 2.0])
+                               (f_m - f_r) / args.forcing_scale, (s_m - s_r) / args.slope_scale])
 
     x0 = np.array([0.1, 23.8, 254.0, 0.2023, 0.2150, 147.11, 1.0814e4, 0.0954, 0.0, 0.0,
                    2.0, 200.0, 254.0, 1.0, 0.4, 0.0])
@@ -273,8 +280,8 @@ def main():
     report = {"knobs": {k: (list(map(float, v)) if np.ndim(v) else float(v)) for k, v in knobs.items()},
               "earth_ozone": {"ozone_tau": float(oz[0]), "ozone_p": float(oz[1])},
               "lw_rows": rows, "sw_rows": swrows}
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "calibration.json").write_text(json.dumps(report, indent=1))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "calibration.json").write_text(json.dumps(report, indent=1))
 
     # forcing and slope diagnostics at 1 bar, RH 0.75
     def pick(ps, rh, co2, ts):
@@ -314,7 +321,7 @@ def main():
         sl = (pick(1e5, 0.75, 400, 300)["olr"] - pick(1e5, 0.75, 400, 270)["olr"]) / 30
         slr = (pick(1e5, 0.75, 400, 300)["olr_ref"] - pick(1e5, 0.75, 400, 270)["olr_ref"]) / 30
         lines.append(f"| dOLR/dT_s 270–300 K [W m⁻² K⁻¹] | {sl:.2f} | {slr:.2f} |")
-    (OUT / "calibration.md").write_text("\n".join(lines) + "\n")
+    (out_dir / "calibration.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 
     # figure
@@ -350,7 +357,7 @@ def main():
     ax[2].set_ylabel("toyclim")
     ax[2].set_title("shortwave absorption (dotted ±10 %)")
     ax[2].legend()
-    fig.savefig(OUT / "calibration.png", dpi=90)
+    fig.savefig(out_dir / "calibration.png", dpi=90)
 
 
 if __name__ == "__main__":
