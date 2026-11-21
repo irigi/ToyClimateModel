@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-21 (PR #8, draft): completion plan steps 1–5 done; knobs frozen. T42 gate: 1, 2 and 5 met; 3: shape met, cover 0.497 (floor 0.5); 4: 2×CO₂ +11.1 K (limit 6) from the convective-cloud diagnosis and the semi-gray CO₂ forcing (questions 11, 13); equilibrium test noise (question 12). Retests: questions 6 and 7 still fail |
+| P4 Clouds, Earth-like energy balance | 2026-11-21 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Causes found: missing shallow convection (now implemented, Frierson 2007; clouds to be re-tuned) and the semi-gray CO₂ forcing (refit in progress). Equilibrium test restated (question 12). Retests: questions 6 and 7 still fail |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -1697,6 +1697,67 @@ that the owner pasted in; its main points checked and adopted):
 No change after the gate.
 
 **Open questions:** 11 updated, 12 new, 7 updated.
+
+**Addendum (2026-11-21 evening, after the owner's answers to questions 11–13).**
+
+- *Fixed-SST pair* (APE Control + 0 / + 4 K, T21, 1 + 2 years, `out/p4/feedback/`):
+  - ΔT_s 4.00 K.
+  - Contributions to the global feedback (W m⁻² K⁻¹): SW CRE −0.42 at 0–30°, −0.40 at 30–60°,
+    −0.09 at 60–90°; LW CRE +0.42 in total.
+  - Tropical cover 0.639 → 0.625 (0–15°), SW CRE −76.7 → −82.0 W m⁻².
+  - **It does not reproduce the slab pair's tropical SW cloud term** (+0.81), so it cannot
+    serve as the screen as set up. The slab tropics warm from 299 to 310 K, where CAPE goes
+    from 1000 to 2400 J kg⁻¹; APE + 4 K spans 300–304 K. A larger offset would be the
+    variant to try.
+- *Intermittency test* (question 13; new diagnostics `conv_active`, `conv_skipped`;
+  `cases/bench/p4_aquaplanet/snapconv_t21_*`, 90 days from the year-45 restarts, climatology
+  every step). At 0–15°:
+
+  | | 400 ppm | 800 ppm |
+  |---|---|---|
+  | Column-steps with CAPE > 0 | 0.969 | 0.969 |
+  | Deep convection | 0.312 | 0.161 |
+  | Skipped (P_q ≤ 0) | 0.657 | 0.809 |
+  | Mean CAPE | 1012 J kg⁻¹ | 2444 J kg⁻¹ |
+  | Convective share of rain | 0.73 | 0.71 |
+
+  **The suspect is confirmed:** columns with CAPE but P_q ≤ 0 do nothing while CAPE builds.
+- *Shallow convection implemented:*
+  - Frierson (2007), §2c "shallower" scheme, eqs. 7–9: the paper's control, τ 2 h, RH 0.7.
+    Read from the author's copy; the AMS site refused automated access.
+  - Default on for `[convection] scheme = "sbm"`, key `shallow`. Single-column test: no
+    precipitation, column water and enthalpy conserved, moisture moved upward.
+  - Logged in `docs/tuning.md`.
+  - 90 days from the same restarts (`snapconv_shallow_t21_*`), 0–15°, 400 / 800 ppm:
+    - deep convection 0.68 / 0.50; shallow 0.17 / 0.27; skipped 0.07 / 0.17;
+    - CAPE 90 / 206 J kg⁻¹;
+    - large-scale rain 0.06 / 0.10 mm/day (before 1.28 / 1.68);
+    - tropical cover 0.48 / 0.36 (before 0.71 / 0.55); global cover 0.45 / 0.42 (before
+      0.60 / 0.54).
+  - The layer cloud had lived on grid-scale saturation events, which nearly vanish. The P4
+    cloud tuning has to be redone (RH window aloft; question 13 (b) is now likely needed).
+  - Tropical cover still falls with warming in these 90-day runs (−0.12, before −0.16).
+    The 2×CO₂ response has to be measured with a full slab pair after the re-tuning.
+- *CO₂ refit* (question 11): `tools/calibrate_radiation.py` has new options:
+  - `--forcing-scale` and `--slope-scale` (residual scales of the forcing and T_s pairs; P3
+    used 1.0 and 2.0);
+  - `--ts-max` (P3 used 310 K);
+  - `--out`.
+  `tools/co2_forcing.py --knobs-json` evaluates a candidate on saved model states. Two fits
+  (forcing scale 0.25 and 0.1 W m⁻², surfaces to 320 K) were running at the end of the
+  session; nothing adopted.
+- `scripts/regress` picked up the new binary partway through (shallow convection on), so its
+  result does not describe either version. Rerun when the convection change is settled.
+
+**Next steps** (owner's sequence):
+1. Finish the CO₂ refit: adopt it if the clear-sky response stays within a few % of RRTMG on
+   the model states, and report the P3 tests before and after.
+2. Re-tune the clouds once at T42 with shallow convection on and the refitted radiation,
+   aiming for cover ≥ 0.55. Look at question 13 (b) (RH window aloft, anvils tied to
+   convection) if cover and shape conflict again.
+3. Gate: T42 Earth AMIP 1 + 5 years, and slab pairs of ≥ 25 years judged by the restated
+   equilibrium test.
+P5 stays unstarted until then.
 
 ## Open questions for the owner
 
