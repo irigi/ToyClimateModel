@@ -1720,3 +1720,32 @@ and the attribution of the 2×CO₂ warming.
       (when P5 allows it) provided the excess has a documented physical cause and no fault
       is found in the scheme. The row stays open and is listed as a known limitation; the
       criterion is unchanged. Recheck the warming once the P6 ocean exists.
+    - **Steps 2–3 result (2026-11-21), old cloud knobs** (entry "P4 completion plan, steps 1–5"):
+      - sea ice off (`cases/bench/p4_aquaplanet/noice_t21_{400,800}.toml`, 12 years,
+        climatology years 9–12): 289.86 → 294.07 K, **+4.21 K**. With sea ice: +6.84 K
+        (years 31–35). Sea ice adds about 2.6 K (ice cover 0.131 → 0.021).
+      - Global clear-sky instantaneous 2×CO₂ forcing on 13 monthly states of the 400 ppm run
+        (6656 columns, `tools/co2_forcing.py`): semi-gray **3.78**, RRTMG **3.45 W m⁻²**
+        (+9 %); by band 0–30° 5.06 / 4.08 (+24 %), 30–60° 3.00 / 3.21, 60–90° 1.58 / 1.93.
+        At the model's sensitivity the excess is worth roughly 0.6 K.
+      - The sea-ice code matches SPEC.md §9.4.5 (Semtner zero-layer, CAM6 constants); no
+        defect found. Documented cause: the ice–albedo feedback of a thermodynamic-only ice
+        cover on a 20 m slab without ocean heat transport.
+      - Not changed: the semi-gray CO₂ term. Its tropical forcing is 24 % too strong and the
+        polar one 18 % too weak; the P3 calibration fits OLR to 8 W m⁻² rms and the forcing
+        differences only with weight 1 W m⁻². A refit is a radiation change that would
+        reopen P3 and the cloud tuning. **Owner:** refit the CO₂ term now (I would weight
+        the forcing pairs more heavily and accept a slightly larger OLR rms), or leave it as
+        a known limitation.
+12. **Equilibrium test: the 5-year T_s trend is below the noise of a 20 m slab with sea ice**
+    (2026-11-21; SPEC.md §9.5.2, P4 acceptance 4).
+    - **Evidence:** daily diagnostics, annual means, years 31–35 of the P4 slab pair (old
+      cloud knobs): trend +0.042 / +0.052 K/yr (limit 0.02); TOA − closure residual
+      +0.015 / +0.107 W m⁻² (limit 1). Interannual standard deviation of annual-mean T_s
+      0.080 / 0.094 K, so the standard error of a 5-point trend is 0.025 / 0.030 K/yr: the
+      test fails about half the time in a perfectly equilibrated run. The 20-year trends of
+      the same runs were −0.004 / +0.004 K/yr.
+    - **Not done:** searching for a 5-year window that passes.
+    - **Proposed replacement (owner to decide):** the trend over the last 10 years of annual
+      means (standard error ≈ 0.009 K/yr) below 0.02 K/yr, or the 5-year trend below
+      max(0.02, 2 × its standard error), keeping the TOA condition unchanged.
