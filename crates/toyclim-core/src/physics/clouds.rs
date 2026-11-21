@@ -17,7 +17,7 @@
 //!   subroutine `cldfrc`, branch `cam_cesm2_2_rel`): for σ ≥ σ_fd,
 //!   c_s ← c_s · max(f_min, min(1, q / q_fd)), with q_fd = 3e-3 kg kg⁻¹ and f_min = 0.15.
 //!   CAM applies it to its low-cloud RH cloud below the pressure bound `premib`, whose value
-//!   is not in that file; σ_fd = 0.75 (750 hPa) is unverified. Off unless `freeze_dry_q > 0`.
+//!   is not in that file; σ_fd = 0.75 (750 hPa) is unverified. On by default (P4 frozen knobs); `freeze_dry_q = 0` switches it off.
 //! - Combined at each level as independent covers: c = 1 − (1 − c_s)(1 − c_c).
 //! - In-cloud water mixing ratio r = min(β q_sat(T, p), r_max), split into ice and liquid
 //!   with f_ice(T) of the condensable; path r Δp / g.
@@ -55,15 +55,15 @@ impl DiagnosticClouds {
     pub fn new(cond: Condensable) -> Self {
         DiagnosticClouds {
             cond,
-            rh_crit_surface: 0.9,
-            rh_crit_upper: 0.8,
+            rh_crit_surface: 0.95,
+            rh_crit_upper: 0.9,
             rh_crit_exponent: 4.0,
             conv_coef: 0.125,
             conv_max: 0.8,
-            water_ratio: 0.02,
+            water_ratio: 0.03,
             water_max: 5e-4,
             sigma_min: 0.1,
-            freeze_dry_q: 0.0,
+            freeze_dry_q: 3e-3,
             freeze_dry_min: 0.15,
             freeze_dry_sigma: 0.75,
         }
@@ -176,18 +176,19 @@ mod tests {
         let c = DiagnosticClouds::stratiform(0.95, 0.8);
         assert!((c - (1.0 - 0.25f64.sqrt())).abs() < 1e-12);
         let s = scheme();
-        assert!((s.rh_crit(1.0) - 0.9).abs() < 1e-12);
-        assert!((s.rh_crit(0.4) - 0.8).abs() < 1e-6);
+        assert!((s.rh_crit(1.0) - 0.95).abs() < 1e-12);
+        assert!((s.rh_crit(0.4) - 0.9).abs() < 1e-6);
         assert_eq!(s.convective(0.0), 0.0);
         let ten = 10.0 / 86400.0;
         assert!((s.convective(ten) - 0.125 * 11f64.ln()).abs() < 1e-12);
         assert_eq!(s.convective(1.0), 0.8);
-        // freeze-dry: off by default; on, factor q / 3 g/kg between 0.15 and 1, low levels only
-        assert_eq!(s.freeze_dry(1e-4, 0.95), 1.0);
-        let f = DiagnosticClouds {
-            freeze_dry_q: 3e-3,
+        // freeze-dry: factor q / 3 g/kg between 0.15 and 1, low levels only; off with q_fd = 0
+        let off = DiagnosticClouds {
+            freeze_dry_q: 0.0,
             ..scheme()
         };
+        assert_eq!(off.freeze_dry(1e-4, 0.95), 1.0);
+        let f = scheme();
         assert!((f.freeze_dry(1.5e-3, 0.9) - 0.5).abs() < 1e-12);
         assert_eq!(f.freeze_dry(1e-4, 0.9), 0.15);
         assert_eq!(f.freeze_dry(5e-3, 0.9), 1.0);
@@ -216,11 +217,11 @@ mod tests {
             assert!(sfc.cloud[..26].iter().all(|&c| (0.0..=1.0).contains(&c)));
             sfc.cloud
         };
-        let off = scheme();
-        let on = DiagnosticClouds {
-            freeze_dry_q: 3e-3,
+        let off = DiagnosticClouds {
+            freeze_dry_q: 0.0,
             ..scheme()
         };
+        let on = scheme();
         let (a, b) = (run(&off, 245.0), run(&on, 245.0));
         assert!(b[25] < 0.5 * a[25] && b[25] > 0.0, "{} {}", a[25], b[25]);
         assert_eq!(a[5], b[5]); // aloft unchanged
