@@ -1738,14 +1738,30 @@ No change after the gate.
     cloud tuning has to be redone (RH window aloft; question 13 (b) is now likely needed).
   - Tropical cover still falls with warming in these 90-day runs (−0.12, before −0.16).
     The 2×CO₂ response has to be measured with a full slab pair after the re-tuning.
-- *CO₂ refit* (question 11): `tools/calibrate_radiation.py` has new options:
-  - `--forcing-scale` and `--slope-scale` (residual scales of the forcing and T_s pairs; P3
-    used 1.0 and 2.0);
-  - `--ts-max` (P3 used 310 K);
-  - `--out`.
-  `tools/co2_forcing.py --knobs-json` evaluates a candidate on saved model states. Two fits
-  (forcing scale 0.25 and 0.1 W m⁻², surfaces to 320 K) were running at the end of the
-  session; nothing adopted.
+- *CO₂ refit* (question 11):
+  - Tools: `tools/calibrate_radiation.py` gained `--forcing-scale` and `--slope-scale`
+    (residual scales of the CO₂ and T_s pairs; P3 used 1.0 and 2.0 W m⁻²), `--ts-max` (P3:
+    310 K) and `--out`. `tools/co2_forcing.py --knobs-json [--semigray-only]` evaluates a
+    candidate on saved model states. Fits are in `out/p4/radfit/`.
+  - Results. "Fitted set" means P3 criterion 2's set (T_s ≤ 310 K, 0.3–1 bar). "Model
+    states" are the 400 / 800 ppm snapshot states; RRTMG there gives forcing 3.57 / 4.66 and a
+    clear-sky response of −1.56 W m⁻² K⁻¹.
+
+    | Fit (forcing scale, surfaces to 320 K) | OLR rms / LW↓ rms on the fitted set (limit 8) | Forcing on model states, cold / warm | Clear-sky response |
+    |---|---|---|---|
+    | P3 (1.0, to 310 K) | 3.60 / 6.71 | 3.85 / 5.99 | −1.51 |
+    | 0.5 | 3.93 / 7.48 | 3.86 / 5.64 | −1.51 |
+    | 0.25 | 5.94 / **8.63** | 4.05 / 4.90 | −1.56 |
+    | 0.1 | OLR rms 23.8 at 1 bar | rejected | — |
+
+  - **No refit adopted.** The only candidate that brings the warm-state forcing near RRTMG
+    (0.25) breaks P3 criterion 2 (LW↓ 8.63 > 8) and overshoots the cold-state forcing. The
+    one that keeps criterion 2 (0.5) barely changes the warm-state forcing.
+  - With the present form, a ln(CO₂) optical depth with no dependence on humidity or
+    temperature, the knobs cannot hold both. Matching RRTMG's growth of the forcing (+30 %
+    from the cold to the warm state, now +56 %) needs a structural change to the CO₂ term,
+    e.g. an overlap with water vapour. That is a radiation-scheme change for the owner
+    (question 11).
 - `scripts/regress` (milestone ratchet, `out/p4/regress_gate.log`; all three parts started
   before shallow convection was built, so they describe the pre-shallow P4 code):
   - ignored tests pass;
@@ -2082,6 +2098,12 @@ P5 stays unstarted until then.
       warming is still above 6 K after questions 11 and 13 are done, with complete ice melt
       as the documented cause, the ruling above covers it. P5 stays unstarted until
       question 13 is settled (P5 must score frozen clouds).
+    - **Refit result (2026-11-21 evening):** not adopted. Weighting the forcing pairs ×4
+      fixes the warm-state forcing (4.90 against RRTMG 4.66; now 5.99) and keeps the
+      clear-sky response at RRTMG's (−1.56), but breaks P3 criterion 2 (LW↓ 8.63 W m⁻² rms
+      > 8). ×2 keeps criterion 2 but leaves the warm-state forcing at 5.64. The present CO₂
+      term cannot do both. **Owner:** a structural change to the CO₂ term (water-vapour
+      overlap), or accept the forcing error as a known limitation?
 12. **Equilibrium test: the 5-year T_s trend is below the noise of a 20 m slab with sea ice**
     (2026-11-21; SPEC.md §9.5.2, P4 acceptance 4).
     - **Evidence:** daily diagnostics, annual means, years 31–35 of the P4 slab pair (old

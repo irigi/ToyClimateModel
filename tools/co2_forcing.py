@@ -40,6 +40,7 @@ def main():
     ap.add_argument("--knobs-json", help="override the longwave/shortwave knobs with the 'knobs' of a "
                     "calibration.json (candidate refits); the result is then written as co2_forcing_<tag>.json")
     ap.add_argument("--tag", default="candidate")
+    ap.add_argument("--semigray-only", action="store_true", help="skip RRTMG (compare with an earlier co2_forcing.json)")
     a = ap.parse_args()
     run = pathlib.Path(a.run)
     meta = json.loads((run / "meta.json").read_text())
@@ -93,7 +94,7 @@ def main():
         return np.array(o), np.array(d)
 
     res = {}
-    for name, fn in [("semigray", semigray), ("rrtmg", ref)]:
+    for name, fn in [("semigray", semigray)] + ([] if a.semigray_only else [("rrtmg", ref)]):
         o1, d1 = fn(lo)
         o2, d2 = fn(hi)
         F, D = o1 - o2, d2 - d1
@@ -107,12 +108,18 @@ def main():
         print(f"{name:8s}: F = {res[name]['forcing_toa_W_m2']:.3f} W/m² (bands {bands}); "
               f"OLR({lo:g}) = {res[name]['olr_lo_W_m2']:.1f}; ΔLW↓sfc = {res[name]['lw_down_sfc_change_W_m2']:.3f}",
               flush=True)
-    res["ratio_semigray_to_rrtmg"] = res["semigray"]["forcing_toa_W_m2"] / res["rrtmg"]["forcing_toa_W_m2"]
+    if "rrtmg" not in res:
+        prev = json.loads((run / "co2_forcing.json").read_text()) if (run / "co2_forcing.json").exists() else None
+        if prev and prev.get("columns") == len(cols):
+            res["rrtmg"] = prev["rrtmg"]
+            res["rrtmg_from"] = str(run / "co2_forcing.json")
+    if "rrtmg" in res:
+        res["ratio_semigray_to_rrtmg"] = res["semigray"]["forcing_toa_W_m2"] / res["rrtmg"]["forcing_toa_W_m2"]
     res.update({"run": str(run), "snapshots": steps, "columns": len(cols), "co2_ppm": [lo, hi],
                 "knobs": knobs})
     dest = run / (f"co2_forcing_{a.tag}.json" if a.knobs_json else "co2_forcing.json")
     dest.write_text(json.dumps(res, indent=1))
-    print(f"ratio semi-gray / RRTMG = {res['ratio_semigray_to_rrtmg']:.3f}; wrote {dest}")
+    print(f"ratio semi-gray / RRTMG = {res.get('ratio_semigray_to_rrtmg', float('nan')):.3f}; wrote {dest}")
 
 
 if __name__ == "__main__":
