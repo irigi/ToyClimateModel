@@ -12,6 +12,8 @@ writes regridded arrays to `reference/derived/`:
 - `earth_heightmap.npy`: ETOPO5 elevation [m] as an equirectangular heightmap for the
   model's `geography` key (row 0 at 90°N, column 0 at 0°E; ≤ 0 is ocean);
 - `SOURCES.md`: URL, download date, citation and licence of every source.
+- CERES EBAF TOA fluxes, CRE and cloud area (`*_ceres.npy`, monthly), for the P4 cloud
+  comparison (`tools/cre_bands.py`).
 
 Regridding: the source is interpolated bilinearly (periodic in longitude) onto a 0.25°
 grid, then box-averaged onto the Gaussian cells (cell edges from the Gaussian weights,
@@ -101,6 +103,16 @@ SOURCES = {
         "resolution. Sci. Data 5, 180214. doi:10.6084/m9.figshare.6396959 (present "
         "1980-2016, 0.5° map).",
         "CC BY 4.0"),
+    "ceres_ebaf": (
+        "https://zenodo.org/api/records/10426438/files/CERES_EBAF_Ed4.1_2001-2020.nc/content",
+        "CERES_EBAF_Ed4.1_2001-2020.nc",
+        "Loeb, N.G. et al. (2018): Clouds and the Earth's Radiant Energy System (CERES) "
+        "Energy Balanced and Filled (EBAF) top-of-atmosphere (TOA) Edition-4.0 data "
+        "product. J. Climate 31, 895-918. Data: CERES EBAF TOA and Surface Edition 4.1, "
+        "doi:10.5067/TERRA-AQUA/CERES/EBAF_L3B.004.1 (NASA LaRC ASDC), monthly means "
+        "2001-2020 as extracted by T. Eidhammer (NCAR), Zenodo doi:10.5281/zenodo.10426438 "
+        "(the NASA copy needs an Earthdata login).",
+        "CC BY 4.0 (Zenodo extract); NASA data, no restrictions"),
 }
 
 
@@ -335,6 +347,17 @@ def derive(truncs):
                        0.0, 1.0),
         "snc": to_fine(snc, slat, slon),  # fraction, NaN south of ~0.5°N
     }
+    # CERES EBAF Ed4.1 TOA, 12-month climatology 2001-2020 (W m-2, positive as named;
+    # clear sky "for total region", the definition comparable with a model's clear-sky
+    # call; CRE = clear - all for SW (negative = cooling) and LW, as in the file)
+    for k, var in [("rsdt_ceres", "solar_mon"), ("rsut_ceres", "toa_sw_all_mon"),
+                   ("rsutcs_ceres", "toa_sw_clr_t_mon"), ("rlut_ceres", "toa_lw_all_mon"),
+                   ("rlutcs_ceres", "toa_lw_clr_t_mon"), ("cre_sw_ceres", "toa_cre_sw_mon"),
+                   ("cre_lw_ceres", "toa_cre_lw_mon"), ("cre_net_ceres", "toa_cre_net_mon")]:
+        fields[k] = fine("ceres_ebaf", var)
+    fields["clt_ceres"] = fine("ceres_ebaf", "cldarea_total_daynight_mon", scale=0.01)
+    # MODIS-derived visible cloud optical depth (daytime) in the EBAF file
+    fields["cldtau_ceres"] = fine("ceres_ebaf", "cldtau_total_day_mon")
     hgt, glat, glon, _, _ = nc("ncep_hgt_gauss", "hgt")
     fields["orog_tas_ref"] = to_fine(hgt[0] if hgt.ndim == 3 else hgt, glat, glon)
 

@@ -1,0 +1,82 @@
+# Diagnostic (P4 question 13 option (b), step 1.3): one year from the year-45 restart of out/p4/gate/slab_t21_800
+# (frozen P4 knobs, shallow convection off) with `[clouds] cre_split = true`: the radiation makes one more call
+# with the convective cloud removed (olr_nc, asr_nc), so CRE_conv = all-cloud − stratiform-only (not additive
+# under random overlap). Nothing else changes (byte check: shared outputs identical).
+# Run: toyclim run --config <this> --out <new dir> --restart out/p4/gate/slab_t21_800/restart
+schema = 2
+description = "CRE split (convective vs stratiform cloud), 1 year from the year-45 restart; P4 slab pair, 800 ppm"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "16801.5day"
+output_every = "30day"
+diagnostics_every = "1day"
+output_fields = ["ts"]
+initial_condition = { case = "jw06", perturbed = true }
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+[planet]
+preset = "earth"
+
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0008 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[radiation]
+scheme = "semigray"
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+[clouds]
+scheme = "diagnostic"
+cre_split = true
+
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+geography = "aquaplanet"
+
+[surface.ocean]
+model = "slab"
+albedo = 0.06
+mixed_layer_depth = 20.0
+initial = "tj16"
+
+[surface.sea_ice]
+enabled = true
+
+[diffusion]
+order = 4
+tau = "2.4h"
+[climatology]
+start = "16436.25day"
+every = "1h"
+maps = ["ts", "olr", "asr", "olr_cs", "asr_cs", "olr_nc", "asr_nc", "clt", "cc_conv", "cwp_conv", "precip_conv", "rsdt"]

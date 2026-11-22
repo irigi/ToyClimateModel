@@ -112,7 +112,9 @@ impl Primitive {
         if self.curr.ntracers() > 0 {
             v.extend_from_slice(&["q", "rh", "pw"]);
         }
-        if self.physics.memory().len() == self.tr.ngrid() * 3 * self.nlev() {
+        let mlen = self.physics.memory().len();
+        let (ng, nl) = (self.tr.ngrid(), self.nlev());
+        if mlen == ng * 3 * nl || mlen == ng * 4 * nl {
             v.extend_from_slice(&["cl", "cldwp"]);
         }
         v.extend_from_slice(&["t_low", "u_low", "v_low", "wind_low", "psl"]);

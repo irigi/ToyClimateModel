@@ -2016,6 +2016,134 @@ temperature; and it cools the stratosphere far too much under 2×CO₂: single-c
 **Next steps:** owner choice on question 13 (option (b), or tuning the convection knobs with
 shallow on). No T42 re-tune and no P5 until then.
 
+## 2026-11-22 (evening) — Question 13 option (b): diagnosis first (branch `p4-clouds`)
+
+Owner plan (review adopted): test the hypothesis that the excess tropical SW cloud feedback
+comes from the radiative character of the convective cloud (a full-depth tower carrying
+β·q_sat at every level) rather than from how often convection occurs; redesign the
+convective cloud (core + anvil) only if the diagnosis holds. No T42 re-tune, gate or P5.
+
+**Decision rule, thresholds fixed before any step 1 number was measured:**
+- (i) the model's 20°S–20°N net CRE (T42 Earth AMIP gate run) is more negative than
+  CERES EBAF by more than 10 W m⁻²;
+- (ii) the convective part (all-cloud minus stratiform-only radiation call) carries more
+  than half of the 800 − 400 ppm change in 20°S–20°N net CRE in the slab states.
+Both must hold to go on to the redesign.
+
+**Step 0 — diagnostic code** (no physics change):
+- `[clouds] cre_split = true`: the cloud memory gains a fourth block with the stratiform-only
+  fraction, the radiation makes one extra call without the convective cloud (same in-cloud
+  water) and reports `olr_nc`, `asr_nc`; clouds add `cc_conv` (c_c) and `cwp_conv` (its
+  in-cloud water path over the convective layers). Restarts written without the block are
+  accepted (zero-padded; logged).
+- `[convection] deep_requires_pt = true`: deep convection also needs P_T > 0, as Frierson
+  (2007) §2a–b ("The simplest criterion for deep convection is that both P_T and P_q are
+  positive"); off by default.
+- SCM tests `cre_split_memory`, `deep_convection_requires_pt_when_asked`; `scripts/check`
+  passes. Byte check against f34d016 with both keys off: identical (10-day
+  `ape_control_t21`, 300 files; P4 `aquaplanet_t21`, 295 files). With `cre_split` on:
+  every shared output identical, `diagnostics.csv` gains four columns.
+
+**Step 1.1 — CERES.** The NASA copy (EBAF-TOA Ed4.2.1) needs an Earthdata login, ESGF no
+longer indexes obs4MIPs CERES-EBAF. Fetched instead: the open CC-BY extract of CERES EBAF
+TOA and Surface **Ed4.1, 12-month climatology 2001–2020** (Zenodo doi:10.5281/zenodo.10426438,
+T. Eidhammer, NCAR; data doi:10.5067/TERRA-AQUA/CERES/EBAF_L3B.004.1; Loeb et al. 2018), now
+a source of `tools/fetch_reference.py` (`reference/derived/t<N>/*_ceres.npy`). Clear sky
+"for total region" (`clr_t`), the definition comparable with a model's clear-sky call.
+Global means on the T42 grid: SW / LW / net CRE −45.2 / +25.8 / −19.5 W m⁻², cloud area
+0.67, albedo 0.291 (`docs/tuning.md` updated; the values quoted earlier from memory,
+−47 / +26, were close).
+
+**Step 1.2 — T42 Earth AMIP gate run against CERES** (`tools/cre_bands.py`; figure
+`docs/figures/P4/cre_zonal_t42_vs_ceres.png`; W m⁻², annual means):
+
+| | 90–65°S | 65–40°S | 40–20°S | 20°S–20°N | 20–40°N | 40–65°N | 65–90°N | global |
+|---|---|---|---|---|---|---|---|---|
+| SW CRE CERES / model | −17.7 / −12.4 | −67.1 / −50.2 | −46.3 / −32.6 | **−44.8 / −63.2** | −38.5 / −33.4 | −48.6 / −37.2 | −24.3 / −26.4 | −45.2 / −44.6 |
+| LW CRE CERES / model | +14.9 / +15.5 | +29.6 / +27.0 | +23.4 / +13.9 | **+30.4 / +20.1** | +22.2 / +16.0 | +25.0 / +23.8 | +14.8 / +22.7 | +25.8 / +19.9 |
+| net CRE CERES / model | −2.8 / +3.1 | −37.5 / −23.3 | −22.8 / −18.7 | **−14.4 / −43.1** | −16.3 / −17.4 | −23.7 / −13.4 | −9.5 / −3.7 | −19.5 / −24.7 |
+| cover CERES / model | 0.69 / 0.57 | 0.87 / 0.55 | 0.63 / 0.33 | 0.65 / 0.57 | 0.54 / 0.37 | 0.71 / 0.50 | 0.72 / 0.66 | 0.67 / 0.50 |
+
+Figure (four panels, CERES dark grey, model blue): the model's tropical SW CRE is deeper
+than CERES (minimum −77 at 7°N against −58; −66 at 10°S against −47) although its tropical
+cover is lower (0.55–0.65 against 0.65–0.76); the tropical LW CRE is far too weak (ITCZ peak
+26 against 41 W m⁻², 13–18 in the southern tropics against 20–33); so the tropical net CRE
+reaches −50 where CERES has −15 to −20. Elsewhere the model is too dim: Southern Ocean SW
+−58 against −71 and cover 0.65 against 0.93; subtropical cover 0.30–0.33 against 0.55–0.60.
+Arctic LW CRE too strong (18–23 against 10–15). Tropical cloud too thick and too low, too
+little cloud everywhere else.
+
+**Step 1.3 — convective share of the CRE** (slab pair, frozen knobs, one year from the
+year-45 restarts with `cre_split = true`, `cases/bench/p4_aquaplanet/cresplit_t21_*.toml`,
+`tools/cre_split.py`; method: the second diagnostic radiation call in the model, the
+convective part = all-cloud − stratiform-only, which assigns the overlap to it; W m⁻²,
+SW / LW / net):
+
+| 20°S–20°N (T_s 297.9 → 308.6 K) | 400 ppm | 800 ppm | change |
+|---|---|---|---|
+| all cloud | −90.3 / +25.7 / −64.5 | −70.3 / +19.0 / −51.2 | +20.0 / −6.7 / **+13.3** |
+| stratiform only | −61.5 / +18.5 / −43.0 | −57.6 / +16.5 / −41.1 | +3.9 / −1.9 / +2.0 |
+| convective part | −28.7 / +7.3 / −21.5 | −12.6 / +2.5 / −10.1 | +16.1 / −4.8 / **+11.3** |
+
+| global (T_s 288.6 → 299.4 K) | 400 ppm | 800 ppm | change |
+|---|---|---|---|
+| all cloud | −62.4 / +24.4 / −38.0 | −61.1 / +23.4 / −37.6 | +1.3 / −1.0 / +0.3 |
+| stratiform only | −44.5 / +19.5 / −25.0 | −50.6 / +20.8 / −29.8 | −6.1 / +1.3 / −4.8 |
+| convective part | −17.9 / +4.9 / −12.9 | −10.5 / +2.7 / −7.8 | +7.4 / −2.3 / +5.2 |
+
+Tropical cover 0.668 → 0.530. The convective cloud's SW:LW ratio is 4:1 (net −21.5 W m⁻² in
+the tropics); globally its loss (+5.2) is offset by more stratiform cloud outside the
+tropics (−4.8).
+
+**Step 1.4 — in-cloud water path of the convective cloud** (30 days of every-step snapshots,
+`cases/bench/p4_aquaplanet/cwpsnap_t21_*.toml`, `tools/conv_cwp.py`; columns with c_c > 0,
+|φ| ≤ 20°):
+
+| | share of column-steps with convective cloud | c_c median / p90 | in-cloud path median / p90 | visible τ median (ice … liquid optics) | τ p90 |
+|---|---|---|---|---|---|
+| 400 ppm | 0.258 | 0.26 / 0.40 | 1259 / 1779 g m⁻² | 106 … 200 | 150 … 282 |
+| 800 ppm | 0.148 | 0.35 / 0.51 | 2184 / 3268 g m⁻² | 185 … 347 | 276 … 519 |
+
+(τ from the model's own optics, 84.5 m² kg⁻¹ for ice at 30 µm, Ebert & Curry, and 158.7 for
+liquid at 10 µm, Slingo 1989; the path is not split by phase in this diagnostic.)
+**Reference — not a published water-path range:** I could not fetch one. Hartmann & Berry
+(2017, JGR 122, doi:10.1002/2017JD026460) is only reachable as an abstract (it states that
+rainy cores have a negative and non-precipitating anvils a positive net effect, without
+numbers); the publisher PDF was not fetched (access refused), PMC returned a robot check.
+What was fetched: the CERES/MODIS daytime cloud optical depth in the same EBAF file,
+20°S–20°N mean 3.3, grid-point annual means median 3.1 / 90th percentile 5.2 (an all-cloud
+value, and MODIS-based EBAF optical depths are, as far as I know, not linear means — not
+verified). The model's convective cloud is 30–100 times thicker than the typical tropical
+cloud and thick throughout its depth, i.e. core-like wherever it exists.
+
+**Decision rule:** (i) tropical net CRE −43.1 against CERES −14.4, 28.7 W m⁻² more negative
+(threshold 10): **holds**. (ii) the convective part carries 85 % of the tropical net CRE
+change (+11.3 of +13.3; threshold 50 %): **holds**. **The hypothesis holds; step 2 is
+justified.**
+
+**Side item — deep convection requiring P_T > 0** (APE T21, 2 years, shallow none,
+`cases/bench/neale_hoskins2000/q13/ape_q13_reqpt_t21.toml`, year 2):
+
+| | none (P1 behaviour) | P_T > 0 required |
+|---|---|---|
+| Hadley [10¹⁰ kg s⁻¹] | 15.6 | 15.3 |
+| equatorial P [mm/day] | 9.6 | 9.5 (max 9.5 at 3°) |
+| 0–15° deep / skipped | 0.29 / 0.71 | 0.28 / 0.72 |
+| CAPE 0–15° [J kg⁻¹] | 902 | 879 |
+| six APE rows | 5 pass; 35–60° westerlies fail (min −7.24 m/s) | same 5 pass; same row fails (min −7.32) |
+| tropical easterlies mean / peak westerlies NH, SH / G / closure | −2.88 / 6.33, 6.27 / 1.34 / 0.09 W m⁻² | −2.98 / 6.40, 6.04 / 1.32 / 0.09 W m⁻² |
+
+The paper's condition barely changes anything: columns with P_q > 0 and P_T ≤ 0 are rare.
+Default unchanged; the owner decides.
+
+**Not in scope, recorded:** the Hadley collapse with shallow convection under prescribed
+SST stays open. Besides the SST, the slab rebuild of Frierson (2007) and the APE runs differ
+in the diurnal cycle (APE on, slab off), the surface albedo (0.06 against 0.38) and the
+instellation (1365 against 1361 W m⁻²); both use gray radiation without clouds, the same
+boundary layer and the same convection. The Earth AMIP regression adds semi-gray radiation,
+clouds and land.
+
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).

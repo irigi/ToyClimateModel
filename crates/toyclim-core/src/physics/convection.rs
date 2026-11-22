@@ -111,6 +111,13 @@ pub enum Shallow {
 /// else 0; their time means are frequencies) `conv_active` (deep convection),
 /// `conv_skipped` (CAPE > 0 but P_q ≤ 0 and no adjustment) and `conv_shallow` (shallow
 /// convection done).
+///
+/// Deep convection runs for P_q > 0 regardless of P_T (the P1 behaviour), unless
+/// `deep_requires_pt` is set: then also P_T > 0 is required, as in the paper (§2a, after
+/// eq. 4: "The simplest criterion for deep convection is that both P_T and P_q are
+/// positive"; §2b "Deep convection: P_T > 0, P_q > 0"); columns with P_q > 0 and
+/// P_T ≤ 0 are then left alone and counted in `conv_skipped`. Off by default (P4
+/// question 13 side item; the owner decides after seeing the APE numbers).
 pub struct SimplifiedBettsMiller {
     pub cond: Condensable,
     /// Relaxation time τ \[s\] (2 h).
@@ -120,6 +127,8 @@ pub struct SimplifiedBettsMiller {
     /// Shallow convection for P_q ≤ 0, P_T > 0 (key `shallow = "shallower" | "qref" |
     /// "none"`; none by default since 2026-11-22, P4 question 13).
     pub shallow: Shallow,
+    /// Require P_T > 0 for deep convection (key `deep_requires_pt`, default false).
+    pub deep_requires_pt: bool,
     /// RK4 sub-steps per layer for the parcel ascent. With the exact LCL search, one
     /// sub-step is accurate to ~0.001 K for L26-type layers (see the test).
     pub substeps: usize,
@@ -327,6 +336,10 @@ impl ColumnScheme for SimplifiedBettsMiller {
             }
             return;
         }
+        if self.deep_requires_pt && pt <= 0.0 {
+            diag[3] += 1.0;
+            return;
+        }
         diag[2] += 1.0;
         // energy closure: shift T_ref by a uniform ΔT so that heating balances drying,
         // Σ c_p (T_ref − T) dp = Σ L (q − q_ref) dp (q_ref held at the first-guess value)
@@ -375,6 +388,7 @@ mod tests {
             tau: 7200.0,
             rh_ref: 0.7,
             shallow: Shallow::None,
+            deep_requires_pt: false,
             substeps: n,
         };
         let mut b = vec![0.0; 26];
@@ -445,6 +459,7 @@ mod tests {
                 tau: 7200.0,
                 rh_ref: 0.7,
                 shallow,
+                deep_requires_pt: false,
                 substeps: 1,
             };
             let mut st = ColumnState::new(l, 1);
@@ -502,5 +517,59 @@ mod tests {
         assert_eq!(diag2[4], 0.0);
         assert_eq!(st2.t, t2);
         assert_eq!(st2.q, q2);
+    }
+    /// With `deep_requires_pt`, a moist column (P_q > 0) whose buoyant layer sits above a
+    /// deeper cold layer (P_T < 0) is left alone and counted as skipped; without the key it
+    /// convects (the P1 behaviour).
+    #[test]
+    fn deep_convection_requires_pt_when_asked() {
+        let geo = Geometry::l26();
+        let planet = Planet::earth();
+        let cond = Condensable::water();
+        let ctx = geo.ctx(&planet, None, 1800.0);
+        let l = geo.p.len();
+        let run = |req: bool| {
+            let sbm = SimplifiedBettsMiller {
+                cond: cond.clone(),
+                tau: 7200.0,
+                rh_ref: 0.7,
+                shallow: Shallow::None,
+                deep_requires_pt: req,
+                substeps: 1,
+            };
+            let mut st = ColumnState::new(l, 1);
+            st.begin(1800.0);
+            let q0 = 0.95 * cond.qsat(&planet, 300.0, geo.p[l - 1]);
+            let mut tp = vec![0.0; l];
+            sbm.parcel(&planet, &geo.p, 300.0, q0, &mut tp);
+            // levels l-2 .. l-7 warmer than the parcel (inhibition, 3 K), l-8 and l-9
+            // slightly buoyant (0.3 K), stable above
+            for k in 0..l {
+                st.t[k] = if k == l - 1 {
+                    300.0
+                } else if k >= l - 7 {
+                    tp[k] + 3.0
+                } else if k >= l - 9 {
+                    tp[k] - 0.3
+                } else {
+                    (tp[k] + 5.0).max(200.0)
+                };
+                st.q[k] = 0.95 * cond.qsat(&planet, st.t[k], geo.p[k]);
+            }
+            let (t0, qv) = (st.t.clone(), st.q.clone());
+            let mut sfc = SurfaceExchange::default();
+            let mut diag = [0.0; 5];
+            sbm.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(l));
+            (st, t0, qv, diag)
+        };
+        let (_, _, _, d) = run(false);
+        assert!(d[1] > 0.0, "CAPE {}", d[1]);
+        assert_eq!(d[2], 1.0, "deep convection expected without the key: {d:?}");
+        let (st, t0, q0, d) = run(true);
+        assert_eq!(d[2], 0.0);
+        assert_eq!(d[3], 1.0, "{d:?}");
+        assert_eq!(d[0], 0.0);
+        assert_eq!(st.t, t0);
+        assert_eq!(st.q, q0);
     }
 }

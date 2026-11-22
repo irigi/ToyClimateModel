@@ -65,6 +65,11 @@ pub struct TwoStream {
     /// Cloud optics; with them the scheme reads the clouds the cloud diagnosis left in
     /// [`SurfaceExchange::cloud`] in the previous physics step (SPEC.md §9.3.3).
     pub clouds: Option<CloudOpticsParams>,
+    /// Diagnostic CRE split (P4 question 13): with clouds whose memory carries the
+    /// stratiform-only fraction (fourth block, `[clouds] cre_split`), one more solve with the
+    /// convective cloud removed (same in-cloud water), reported as `olr_nc` and `asr_nc`.
+    /// The fluxes that heat the model are unchanged.
+    pub cre_split: bool,
 }
 
 impl TwoStream {
@@ -80,6 +85,7 @@ impl TwoStream {
             reflectance: 0.0,
             planetary_albedo: None,
             clouds: None,
+            cre_split: false,
         }
     }
 
@@ -226,6 +232,7 @@ pub struct RadWork {
 
 thread_local! {
     static WORK: std::cell::RefCell<(RadWork, Fluxes)> = std::cell::RefCell::default();
+    static WORK_NC: std::cell::RefCell<Fluxes> = std::cell::RefCell::default();
 }
 
 impl ColumnScheme for TwoStream {
@@ -233,7 +240,11 @@ impl ColumnScheme for TwoStream {
         "two_stream_radiation"
     }
     fn diagnostics(&self) -> &'static [&'static str] {
-        if self.clouds.is_some() {
+        if self.clouds.is_some() && self.cre_split {
+            &[
+                "rsdt", "olr", "asr", "rsds", "rlds", "clt", "olr_cs", "asr_cs", "olr_nc", "asr_nc",
+            ]
+        } else if self.clouds.is_some() {
             &[
                 "rsdt", "olr", "asr", "rsds", "rlds", "clt", "olr_cs", "asr_cs",
             ]
@@ -250,11 +261,27 @@ impl ColumnScheme for TwoStream {
         _work: &mut Workspace,
     ) {
         let l = st.nlev;
+        let split = self.cre_split && self.clouds.is_some() && sfc.cloud.len() >= 4 * l;
+        let mut nc = (0.0, 0.0);
         let f = WORK.with(|w| {
             let (work, f) = &mut *w.borrow_mut();
             let mut cl = std::mem::take(&mut work.clouds);
             let cloudy = self.cloud_optics(sfc, l, &mut cl);
             self.fluxes_with(ctx, st, sfc, cloudy.then_some(&cl), f, work);
+            if split {
+                // the same clouds without the convective part (stratiform-only fraction)
+                WORK_NC.with(|g| {
+                    let g = &mut *g.borrow_mut();
+                    let strat = &sfc.cloud[3 * l..4 * l];
+                    let any = cloudy && strat.iter().any(|&c| c > 0.0);
+                    if any {
+                        cl.frac.clear();
+                        cl.frac.extend_from_slice(strat);
+                    }
+                    self.fluxes_with(ctx, st, sfc, any.then_some(&cl), g, work);
+                    nc = (g.lw_up[0], g.sw_net[0]);
+                });
+            }
             work.clouds = cl;
             std::mem::take(f)
         });
@@ -287,6 +314,10 @@ impl ColumnScheme for TwoStream {
             diag[5] += f.cloud_cover;
             diag[6] += f.clear_olr;
             diag[7] += ctx.insolation - f.clear_sw_up_top;
+            if self.cre_split {
+                diag[8] += if split { nc.0 } else { f.lw_up[0] };
+                diag[9] += if split { nc.1 } else { f.sw_net[0] };
+            }
         }
         // hand the flux arrays back for the next column
         WORK.with(|w| w.borrow_mut().1 = f);

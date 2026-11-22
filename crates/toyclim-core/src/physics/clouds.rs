@@ -25,6 +25,13 @@
 //!
 //! Diagnostic: `clwvi`, the grid-mean condensed water path \[kg m⁻²\] (the total cover
 //! `clt` comes from the radiation, which uses these clouds in the next step).
+//!
+//! Optional CRE split (`cre_split`, diagnostic only, P4 question 13): the memory gains a
+//! fourth block with the stratiform-only fraction (c_s after freeze-dry), from which the
+//! radiation makes an extra call without the convective cloud (`olr_nc`, `asr_nc`); and
+//! two more diagnostics, `cc_conv` (the convective fraction c_c of the column) and
+//! `cwp_conv` (its in-cloud water path Σ r Δp / g over the convective layers, 0 without
+//! convective cloud). Nothing else changes.
 
 use super::column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
 use super::condensation::Condensable;
@@ -49,6 +56,8 @@ pub struct DiagnosticClouds {
     pub freeze_dry_q: f64,
     pub freeze_dry_min: f64,
     pub freeze_dry_sigma: f64,
+    /// Diagnostic split of the cloud radiative effect into stratiform and convective parts.
+    pub cre_split: bool,
 }
 
 impl DiagnosticClouds {
@@ -66,6 +75,7 @@ impl DiagnosticClouds {
             freeze_dry_q: 3e-3,
             freeze_dry_min: 0.15,
             freeze_dry_sigma: 0.75,
+            cre_split: false,
         }
     }
 
@@ -109,10 +119,18 @@ impl ColumnScheme for DiagnosticClouds {
         "diagnostic_clouds"
     }
     fn diagnostics(&self) -> &'static [&'static str] {
-        &["clwvi"]
+        if self.cre_split {
+            &["clwvi", "cc_conv", "cwp_conv"]
+        } else {
+            &["clwvi"]
+        }
     }
     fn memory(&self, nlev: usize) -> usize {
-        3 * nlev
+        if self.cre_split {
+            4 * nlev
+        } else {
+            3 * nlev
+        }
     }
     fn apply(
         &self,
@@ -125,13 +143,13 @@ impl ColumnScheme for DiagnosticClouds {
         let l = st.nlev;
         let m = &mut sfc.cloud;
         m.clear();
-        m.resize(3 * l, 0.0);
+        m.resize(self.memory(l), 0.0);
         let Some(q) = st.humidity() else {
             return;
         };
         let (planet, g) = (ctx.planet, ctx.planet.gravity);
         let cc = self.convective(st.conv_precip);
-        let mut path = 0.0;
+        let (mut path, mut conv_path) = (0.0, 0.0);
         for k in 0..l {
             if ctx.sigma[k] < self.sigma_min {
                 continue;
@@ -149,6 +167,12 @@ impl ColumnScheme for DiagnosticClouds {
                 continue;
             }
             let w = (self.water_ratio * qs).min(self.water_max) * ctx.dp[k] / g;
+            if self.cre_split {
+                m[3 * l + k] = cs;
+                if cv > 0.0 {
+                    conv_path += w;
+                }
+            }
             let fi = self.cond.ice_fraction(st.t[k]);
             m[k] = c;
             m[l + k] = (1.0 - fi) * w;
@@ -156,6 +180,10 @@ impl ColumnScheme for DiagnosticClouds {
             path += c * w;
         }
         diag[0] += path;
+        if self.cre_split && conv_path > 0.0 {
+            diag[1] += cc;
+            diag[2] += conv_path;
+        }
     }
 }
 
@@ -226,6 +254,62 @@ mod tests {
         assert!(b[25] < 0.5 * a[25] && b[25] > 0.0, "{} {}", a[25], b[25]);
         assert_eq!(a[5], b[5]); // aloft unchanged
         assert_eq!(run(&off, 300.0), run(&on, 300.0));
+    }
+
+    /// CRE split: same fraction and water blocks as without it, a fourth block with the
+    /// stratiform-only fraction (≤ the total), and the convective fraction and in-cloud path.
+    #[test]
+    fn cre_split_memory() {
+        let geo = Geometry::l26();
+        let planet = crate::planet::Planet::earth();
+        let ctx = geo.ctx(&planet, None, 1200.0);
+        let run = |s: &DiagnosticClouds| {
+            let mut st = ColumnState::new(26, 1);
+            st.begin(1200.0);
+            for k in 0..26 {
+                st.t[k] = 295.0 - 70.0 * (1.0 - ctx.sigma[k]);
+                st.q[k] = 0.93 * s.cond.qsat(ctx.planet, st.t[k], ctx.p[k]);
+            }
+            st.conv_precip = 20.0 / 86400.0;
+            st.conv_top = 8;
+            let mut sfc = SurfaceExchange::default();
+            let mut diag = [0.0; 3];
+            s.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(26));
+            assert!(st.dt.iter().chain(&st.dq).all(|&x| x == 0.0));
+            (sfc.cloud, diag)
+        };
+        let (a, da) = run(&scheme());
+        let on = DiagnosticClouds {
+            cre_split: true,
+            ..scheme()
+        };
+        let (b, db) = run(&on);
+        assert_eq!(a.len(), 78);
+        assert_eq!(b.len(), 104);
+        assert_eq!(&a[..], &b[..78]);
+        assert_eq!(da[0], db[0]);
+        let cc = on.convective(20.0 / 86400.0);
+        assert!((db[1] - cc).abs() < 1e-12);
+        assert!(db[2] > 0.0);
+        for k in 0..26 {
+            assert!(b[78 + k] <= b[k] + 1e-15);
+            if (8..25).contains(&k) && b[k] > 0.0 {
+                let expect = 1.0 - (1.0 - b[78 + k]) * (1.0 - cc);
+                assert!((b[k] - expect).abs() < 1e-12, "{k}");
+            }
+        }
+        // without convection the stratiform-only block equals the total
+        let mut st = ColumnState::new(26, 1);
+        st.begin(1200.0);
+        for k in 0..26 {
+            st.t[k] = 295.0 - 70.0 * (1.0 - ctx.sigma[k]);
+            st.q[k] = 0.93 * on.cond.qsat(ctx.planet, st.t[k], ctx.p[k]);
+        }
+        let mut sfc = SurfaceExchange::default();
+        let mut d = [0.0; 3];
+        on.apply(&ctx, &mut st, &mut sfc, &mut d, &mut Workspace::new(26));
+        assert_eq!(&sfc.cloud[..26], &sfc.cloud[78..104]);
+        assert_eq!(d[1], 0.0);
     }
 
     /// The scheme leaves T and q alone, stores fractions in [0, 1] and positive paths, and

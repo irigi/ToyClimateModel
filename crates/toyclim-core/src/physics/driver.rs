@@ -224,7 +224,21 @@ impl PhysicsDriver {
     }
 
     /// Restore the per-column memory (restart); `m` must have the length of [`Self::memory`].
+    /// One exception: a restart written without the diagnostic CRE-split block of the cloud
+    /// memory (3·L slots per column where this run keeps 4·L) is accepted and the extra
+    /// block starts at zero (it is rewritten in the first physics step).
     pub fn set_memory(&mut self, m: &[Real]) -> Result<(), String> {
+        let n = self.insol.len();
+        let l = self.sigma.len();
+        if self.mem_len == 4 * l && n > 0 && m.len() == n * 3 * l {
+            log::info!("restart: cloud memory without the CRE-split block, padded with zeros");
+            for p in 0..n {
+                let dst = &mut self.memory[p * 4 * l..(p + 1) * 4 * l];
+                dst[..3 * l].copy_from_slice(&m[p * 3 * l..(p + 1) * 3 * l]);
+                dst[3 * l..].fill(0.0);
+            }
+            return Ok(());
+        }
         if m.len() != self.memory().len() {
             return Err(format!(
                 "physics memory: {} values, expected {}",

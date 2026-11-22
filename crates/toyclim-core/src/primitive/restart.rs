@@ -108,10 +108,16 @@ impl Primitive {
                 .iter()
                 .find(|(name, _)| name == "physics_memory")
                 .ok_or("restart lacks physics_memory (the clouds of the last step)")?;
-            if a.1.len() != n.div_ceil(2) {
+            // a restart without the diagnostic CRE-split block holds 3/4 of the memory
+            // (see `PhysicsDriver::set_memory`, which checks the layout)
+            let stored = if a.1.len() == n.div_ceil(2) {
+                n
+            } else if n % 4 == 0 && a.1.len() == (n / 4 * 3).div_ceil(2) {
+                n / 4 * 3
+            } else {
                 return Err("physics_memory: wrong size".into());
-            }
-            let mut m = vec![0.0 as Real; n];
+            };
+            let mut m = vec![0.0 as Real; stored];
             unpack(&a.1, &mut m);
             self.physics.set_memory(&m)?;
         }

@@ -87,12 +87,13 @@ impl Primitive {
             // cloud scheme's per-column memory `[frac | liquid | ice]` (only scheme with memory)
             "cl" | "cldwp" => {
                 let m = self.physics.memory();
-                if m.len() != n * 3 * l {
+                if m.len() != n * 3 * l && m.len() != n * 4 * l {
                     return None;
                 }
+                let s = m.len() / n; // 3·L, or 4·L with the CRE-split block
                 for k in 0..l {
                     for p in 0..n {
-                        let c = &m[p * 3 * l..(p + 1) * 3 * l];
+                        let c = &m[p * s..(p + 1) * s];
                         out.push(if name == "cl" {
                             c[k]
                         } else {

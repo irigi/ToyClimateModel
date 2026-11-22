@@ -225,6 +225,7 @@ fn sbm(
         tau: 1.0 / rate(t, tau_key, 1.0 / 7200.0)?,
         rh_ref: num(t, rh_key, 0.7)?,
         shallow,
+        deep_requires_pt: boolean(t, "deep_requires_pt", false)?,
         substeps: 1,
     })
 }
@@ -588,6 +589,7 @@ pub fn build_world(
                 return Err("[radiation] reflectance must be in [0, 1)".into());
             }
             ts.clouds = diagnostic.as_ref().map(|d| d.1.clone());
+            ts.cre_split = diagnostic.as_ref().is_some_and(|d| d.0.cre_split);
             schemes.push(Box::new(ts));
         }
         other => {
@@ -625,7 +627,11 @@ pub fn build_world(
             schemes.push(Box::new(DryAdjustment::default()));
         }
         "sbm" | "simplified_betts_miller" => {
-            check_keys("[convection]", &conv.params, &["tau", "rh_ref", "shallow"])?;
+            check_keys(
+                "[convection]",
+                &conv.params,
+                &["tau", "rh_ref", "shallow", "deep_requires_pt"],
+            )?;
             let cond = moisture.ok_or("convection \"sbm\" needs a [moisture] block")?;
             schemes.push(Box::new(DryAdjustment::default()));
             schemes.push(Box::new(sbm(cond, &conv.params, "tau", "rh_ref")?));
@@ -681,6 +687,7 @@ pub const CLOUD_KEYS: &[&str] = &[
     "r_liquid",
     "r_ice",
     "k_lw_liquid",
+    "cre_split",
 ];
 
 fn diagnostic_clouds(
@@ -703,6 +710,7 @@ fn diagnostic_clouds(
         freeze_dry_q: num(p, "freeze_dry_q", d.freeze_dry_q)?,
         freeze_dry_min: num(p, "freeze_dry_min", d.freeze_dry_min)?,
         freeze_dry_sigma: num(p, "freeze_dry_sigma", d.freeze_dry_sigma)?,
+        cre_split: boolean(p, "cre_split", false)?,
         ..d
     };
     for (k, v) in [
