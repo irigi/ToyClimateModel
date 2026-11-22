@@ -474,11 +474,19 @@ pub fn semigray(p: &toml::Table, co2_ppm: f64) -> Result<radiation::semigray::Se
         lw_p_ref: num(p, "lw_p_ref", d.lw_p_ref)?,
         lw_n_co2: num(p, "lw_n_co2", d.lw_n_co2)?,
         lw_co2_curvature: num(p, "lw_co2_curvature", d.lw_co2_curvature)?,
+        lw_co2_band: array(p, "lw_co2_band", d.lw_co2_band)?,
         co2_ppm,
         ..d
     };
     if !(0.0..=1.0).contains(&sg.lw_strong_share) {
         return Err("[radiation] lw_strong_share must be in [0, 1]".into());
+    }
+    if sg.lw_co2_band[0] < 0.0
+        || sg.lw_co2_band[1] <= 0.0
+        || sg.lw_co2_band[2] < 0.0
+        || sg.lw_co2_band[3] <= 0.0
+    {
+        return Err("[radiation] lw_co2_band = [l >= 0, c_ref > 0, kappa0 >= 0, c_win > 0]".into());
     }
     if !(0.0..=1.0).contains(&sg.nir_weak_share) {
         return Err("[radiation] nir_weak_share must be in [0, 1]".into());

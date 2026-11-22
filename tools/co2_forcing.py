@@ -2,7 +2,7 @@
 completion plan, step 2; SPEC.md §9.6).
 
     .rrtmg/bin/python -I tools/co2_forcing.py out/<run> [--lon-stride 4] [--co2 400 800]
-        [--knobs-json <calibration.json> --tag <name>]
+        [--knobs-json <calibration.json> --tag <name>] [--q-scale 0.5 --tag <name>]
 
 `out/<run>` must hold 3-D snapshots `fields/t_*.npy`, `q_*.npy` and 2-D `ps_*.npy`, `ts_*.npy`
 (e.g. `cases/bench/p4_aquaplanet/snap_t21_400.toml`). Every snapshot after step 0 is used;
@@ -41,6 +41,11 @@ def main():
                     "calibration.json (candidate refits); the result is then written as co2_forcing_<tag>.json")
     ap.add_argument("--tag", default="candidate")
     ap.add_argument("--semigray-only", action="store_true", help="skip RRTMG (compare with an earlier co2_forcing.json)")
+    ap.add_argument("--q-scale", type=float, default=1.0, help="multiply the specific humidity of every column "
+                    "(overlap test; the result is written as co2_forcing_<tag>.json)")
+    ap.add_argument("--strat-from", help="hybrid-state test: replace the temperature above sigma = --strat-sigma "
+                    "by the time-mean temperature of this run (same grid); written as co2_forcing_<tag>.json")
+    ap.add_argument("--strat-sigma", type=float, default=0.1)
     a = ap.parse_args()
     run = pathlib.Path(a.run)
     meta = json.loads((run / "meta.json").read_text())
@@ -55,15 +60,25 @@ def main():
     steps = [s for s in steps if s > 0] or steps
     if not steps:
         sys.exit(f"{run}/fields has no t_*.npy snapshots")
+    strat = None
+    if a.strat_from:
+        o = pathlib.Path(a.strat_from)
+        ost = sorted(int(p.stem.split("_")[1]) for p in (o / "fields").glob("t_*.npy"))
+        strat = np.mean([np.load(o / "fields" / f"t_{s:06d}.npy") for s in ost if s > 0], axis=0)
+        full = 0.5 * (half[1:] + half[:-1])
+        top = full < a.strat_sigma
     lo, hi = a.co2
     cols, wts, lats = [], [], []
     for s in steps:
         f = lambda n: np.load(run / "fields" / f"{n}_{s:06d}.npy")  # noqa: E731
         t, q, ps, ts = f("t"), f("q"), f("ps"), f("ts")
+        if strat is not None:
+            t = t.copy()
+            t[top] = strat[top]
         for j in range(len(lat)):
             for i in range(0, nlon, a.lon_stride):
                 ph = half * float(ps[j, i])
-                cols.append((ph, t[:, j, i].astype(float), np.maximum(q[:, j, i].astype(float), 0.0),
+                cols.append((ph, t[:, j, i].astype(float), a.q_scale * np.maximum(q[:, j, i].astype(float), 0.0),
                              float(ts[j, i])))
                 wts.append(np.cos(lat[j]))
                 lats.append(np.degrees(lat[j]))
@@ -110,14 +125,16 @@ def main():
               flush=True)
     if "rrtmg" not in res:
         prev = json.loads((run / "co2_forcing.json").read_text()) if (run / "co2_forcing.json").exists() else None
-        if prev and prev.get("columns") == len(cols):
+        if prev and prev.get("columns") == len(cols) and a.q_scale == 1.0 and not a.strat_from:
             res["rrtmg"] = prev["rrtmg"]
             res["rrtmg_from"] = str(run / "co2_forcing.json")
     if "rrtmg" in res:
         res["ratio_semigray_to_rrtmg"] = res["semigray"]["forcing_toa_W_m2"] / res["rrtmg"]["forcing_toa_W_m2"]
     res.update({"run": str(run), "snapshots": steps, "columns": len(cols), "co2_ppm": [lo, hi],
-                "knobs": knobs})
-    dest = run / (f"co2_forcing_{a.tag}.json" if a.knobs_json else "co2_forcing.json")
+                "knobs": knobs, "q_scale": a.q_scale,
+                "strat_from": a.strat_from, "strat_sigma": a.strat_sigma})
+    tagged = a.knobs_json or a.q_scale != 1.0 or a.strat_from
+    dest = run / (f"co2_forcing_{a.tag}.json" if tagged else "co2_forcing.json")
     dest.write_text(json.dumps(res, indent=1))
     print(f"ratio semi-gray / RRTMG = {res.get('ratio_semigray_to_rrtmg', float('nan')):.3f}; wrote {dest}")
 
