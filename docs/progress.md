@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-21 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Causes found: missing shallow convection (implemented, Frierson 2007; untuned it degrades APE Hadley/ITCZ and Earth precipitation, question 13) and the semi-gray CO₂ forcing (too sensitive to stratospheric temperature; a Jeevanjee et al. CO₂ band fixes the state forcing but no fit also keeps the clear-sky response and criterion 2, not adopted, question 11). Equilibrium test restated (question 12). Retests: questions 6 and 7 still fail. Owner decisions pending on 11 and 13 |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Owner choice pending: (b) or convection-knob tuning with shallow on. Questions 6 and 7 still fail |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -1878,6 +1878,144 @@ latitude band, OLR, and OLR differences between sets) in `out/p4/radfit/`:
 **Next steps:** owner decisions on questions 11 and 13 (below). Nothing builds on shallow
 convection or the CO₂ band until then. P5 not started.
 
+## 2026-11-22 (afternoon) — Owner decisions on questions 11 and 13 carried out (branch `p4-clouds`)
+
+Owner: question 11 option (iii) with three additions (stratosphere varied in the calibration
+set, two-stage fit, single-column stratospheric check against RRTMG; adopt only if P3 tests
+and criterion 2 pass, forcing within 10 % on all four states and clear-sky response within
+5 %; if it fails again accept the limitation, naming both the forcing error and the
+stratospheric cooling; option (ii) not to be taken). Question 13: shallow convection off by
+default now; test option (a) offline before coding it; in parallel try the paper's other
+shallow treatment; check the implementation against the paper's own results; if (a) and
+the other treatment both fail, stop and report. No T42 re-tune and no P5 until both are
+settled.
+
+### Question 13
+
+**Step 1 — shallow off by default.** `[convection] shallow` now takes "none" (default),
+"shallower" (Frierson 2007 eqs. 7–9) or "qref" (eqs. 10–15, new); code and key kept, SPEC.md
+§9.4.4 gap recorded as open. Byte check against commit 662f27f (pre-shallow), 10-day
+`ape_control_t21` and P4 `aquaplanet_t21`: identical outputs except that `diagnostics.csv`
+gains the three columns conv_active / conv_skipped / conv_shallow (0 differing shared
+cells). `scripts/regress` (log `out/p4/q13/regress_shallow_off.log`): identical to the
+pre-shallow log line for line apart from timings — ignored tests and HS T42 pass, APE T21
+gate fails only the question 6 row (lowest-level westerlies 35–60°), as before.
+`docs/tuning.md` logs the change.
+
+**Step 2 — option (a) offline** (`tools/conv_cloud_offline.py`; 60 days from the year-45 slab
+restarts at 400 / 800 ppm, convective precipitation every step,
+`cases/bench/p4_aquaplanet/snapseries_t21_*.toml`; c_c = min(0.8, 0.125 ln(1 + P̄)) with P̄
+the running mean; mean c_c, 400 → 800 ppm):
+
+| P̄ | 0–15° | 0–30° |
+|---|---|---|
+| instantaneous | 0.083 → 0.055 (−34 %); cloudy fraction 0.30 → 0.16 | 0.065 → 0.043 (−33 %) |
+| 3 h box / exponential | −27 % / −24 % | −24 % / −20 % |
+| 6 h box / exponential | −25 % / −21 % | −21 % / −17 % |
+| 24 h box / exponential | −19 % / −13 %; box 0.099 → 0.080, cloudy 0.49 → 0.43 | −16 % / −10 % |
+
+Mean convective precipitation 0–15° rises 3.45 → 4.18 mm/day. (The owner's reference 0.140 → 0.114,
+−19 %, came from total, not convective, snapshot precipitation unweighted over 0–15°; the cloud
+scheme uses convective precipitation, whose instantaneous fall is −34 %. Every physical
+averaging time of 3–6 h still falls −21 to −27 %, i.e. at least as much as the reference.) A
+physical averaging time of a few hours removes only a quarter to a third of the fall; even a
+24 h mean keeps two thirds of it, and half the tropical columns have no convective rain in a
+day at 800 ppm. **(a) fails; not built; step 3 skipped.**
+
+**Step 4 — the reference-humidity treatment ("qref") on APE T21, 2 years** (cases
+`cases/bench/neale_hoskins2000/q13/ape_q13_*_t21.toml`, year 2;
+`tools/shallow_compare.py`; figure `docs/figures/P4/ape_shallow_variants.png`):
+
+| | none | shallower | qref |
+|---|---|---|---|
+| Hadley [10¹⁰ kg s⁻¹] | 15.6 | 4.7 | 5.5 |
+| equatorial P [mm/day] | 9.6 | 6.3 | 6.7 |
+| P maximum | 9.8 at 3° | 7.3 at 25° | 7.1 at 25° |
+| 0–15° deep / skipped / shallow | 0.29 / 0.71 / 0.00 | 0.62 / 0.01 / 0.37 | 0.64 / 0.00 / 0.36 |
+| CAPE 0–15° [J kg⁻¹] | 902 | 185 | 159 |
+| convective share of rain | 0.80 | 1.00 | 1.00 |
+
+Figure: "none" has a sharp equatorial peak (9.8 mm/day), minima near ±14° and secondary
+peaks at ±25°; both shallow variants flatten the tropics to 6–7 mm/day with the maxima at
+±25°. **qref fails** the same way as shallower: it removes the skipped columns but not the
+circulation collapse.
+
+**Step 5 — against the paper's own results.** Frierson (2007) Table 1 (T42 gray slab,
+equatorial P [W m⁻²] / maximum ψ [10⁹ kg s⁻¹]): none 386 / 250, shallower 291 / 184, qref
+285 / 183. The paper's setup rebuilt (`cases/bench/frierson2007/f07_*_t42.toml`: perpetual
+equinox, no diurnal cycle, 2.4 m slab, albedo 0.38, no sea ice, the APE gray scheme and the
+same k-profile boundary layer; 548 days, last 365 averaged; differences listed in the case
+header); figure `docs/figures/P4/f07_shallow_variants_t42.png`:
+
+| | ours P / ψ | ratio to none | paper ratio |
+|---|---|---|---|
+| none T42 | 341 / 218 | — | — |
+| shallower T42 | 265 / 158 | 0.78 / 0.73 | 0.75 / 0.74 |
+| qref T42 | 269 / 160 | 0.79 / 0.73 | 0.74 / 0.73 |
+| none T21 (same case at T21, APE numerics) | 284 / 221 | — | — |
+| shallower T21 | 239 / 164 | 0.84 / 0.74 | — |
+
+Figure: all three T42 runs keep a single equatorial peak (11.8 → 9.2–9.3 mm/day with
+shallow), the subtropical minima at ±15–20° fill slightly (3.4 → 4.0), the ±32° storm-track
+maxima (≈ 5 mm/day) are unchanged; shallower and qref overlap. **The implementation
+reproduces the paper's effect** (Hadley −27 % against −26 %), at T42 and at T21, with the same
+boundary layer — so neither the implementation nor double counting with the boundary-layer
+mixing explains the APE collapse. Resolution does not either. What differs is the prescribed
+SST: with a slab the scheme costs a quarter of the Hadley cell, with the APE "Control" SST
+(and in Earth AMIP, also prescribed SST) it costs 70 %. Not investigated further (the owner's
+stop rule). Also recorded: our deep convection does not require P_T > 0 (the paper requires
+P_q > 0 and P_T > 0); this applies with or without shallow convection.
+
+**Step 6 — stop.** (a) failed offline and the other shallow treatment fails on APE. The
+remaining choice is the owner's: option (b) (anvil/detrained cloud tied to the convective
+top) or tuning the convection knobs with shallow on.
+
+### Question 11
+
+**Check 3 first — single-column RCE, 400 → 800 ppm** (`tools/rce_rrtmg.py`: climlab RRTMG
+on L26, RH 0.7, moist-adiabatic adjustment, 340.25 W m⁻² at cos z 0.5, planetary albedo 0.300
+/ 0.296 by surface albedo 0.346; `tools/rce_strat.py`: the toyclim SCM cases
+`cases/bench/p3_rce/rce_{400,800}.toml` with a calibration's longwave knobs; ΔT [K]):
+
+| | 2.4 | 7.2 | 13.8 | 23.7 | 37 | 52.9 | 69.9 | 100.4 hPa | T_s |
+|---|---|---|---|---|---|---|---|---|---|
+| RRTMG | −1.0 | −1.7 | −1.7 | −1.5 | −1.0 | −0.4 | 0.0 | +0.3 | 284.01 → 286.86 (+2.84) |
+| P3 (default) | −8.7 | −9.0 | −7.5 | −6.7 | −6.4 | −5.9 | −4.9 | −2.6 | 285.20 → 289.15 (+3.95) |
+| band3 | −9.3 | −7.2 | −2.2 | +0.7 | +0.5 | +0.1 | +0.1 | +0.6 | +2.58 |
+| ts1 (below) | −9.6 | −6.5 | −2.1 | −0.5 | −0.3 | −0.1 | 0.0 | 0.0 | 284.29 → 286.50 (+2.21) |
+
+The P3 term cools the whole SCM stratosphere 4–8× more than RRTMG (and the 3-D slab
+stratosphere 31 K at 14 hPa, from a much warmer 231 K start; the SCM starts at 189.5 K).
+The band brings 14–100 hPa close to RRTMG but the top two levels still cool 6–10 K.
+
+**Two-stage fit `ts1`** (`tools/calibrate_radiation.py --co2-band --two-stage --strat-temps
+185 215 230 --state-cols cold cold_wstrat warm warm_cstrat`, start band3; 1710 RRTMG
+columns; output `out/p4/radfit/ts1/`). Stage 1: water-vapour and dry terms at 400 ppm (OLR,
+LW↓, T_s pairs, state OLR and state OLR changes); stage 2: only the band [l, c_ref, κ₀, c_win]
+on the CO₂ pairs and the state forcing. Result: band 11.4 cm⁻¹, 122 ppm, 147 m² kg⁻¹, 51 ppm.
+
+| condition | ts1 | limit | |
+|---|---|---|---|
+| criterion 2, 200 K set, OLR / LW↓ rms | 3.79 / **10.00** (0.3 bar LW↓ 15.0) | 8 | **fails** |
+| state forcing, cold / cold+warm strat / warm / warm+cold strat | 3.43 / 4.15 / 4.51 / 3.78 against 3.59 / 4.39 / 4.65 / 3.88 (−4.4 / −5.4 / −2.9 / −2.5 %) | 10 % | passes |
+| clear-sky response | **−1.622** against −1.541 (+5.2 %) | 5 % | fails (just) |
+| adiabat 290 K 400 → 800 / slope 270–300 K | 3.54 / 1.911 against 4.12 / 1.916 | — | — |
+
+Fitting the water-vapour terms with the varied-stratosphere columns and the state OLR
+spends the LW↓ accuracy at 0.3 bar. P3 tests not run (criterion 2 already fails).
+**Not adopted. The owner's rule applies: the limitation is accepted.** Defaults unchanged.
+
+**The limitation, as it will be stated:** the semi-gray CO₂ term (P3 calibration) gives a
+2×CO₂ clear-sky forcing 8 % too strong on the cold (400 ppm) state and 29 % too strong on the
+warm (800 ppm) state against RRTMG (3.85 / 5.99 against 3.57 / 4.66 W m⁻²), because its
+opacity grows as ln(CO₂/360 ppm) and makes the forcing 2.5× too sensitive to stratospheric
+temperature; and it cools the stratosphere far too much under 2×CO₂: single-column RCE
+−7.5 K at 14 hPa against RRTMG −1.7 K, and in the 3-D slab run 31 K at 14 hPa (global mean
+231 → 200 K) against about 5–10 K at 10 hPa in comprehensive models.
+
+**Next steps:** owner choice on question 13 (option (b), or tuning the convection knobs with
+shallow on). No T42 re-tune and no P5 until then.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -2222,6 +2360,17 @@ convection or the CO₂ band until then. P5 not started.
     - **Recommendation:** (iii), capped at another half day. The band is clearly the
       better physics for the state dependence (+33 % against RRTMG's +30 %, old term +56 %),
       and the remaining conflict appeared only after the state columns entered the fit.
+    - **Owner decision (2026-11-22): (iii) with additions** (stratosphere varied in the
+      calibration set, two-stage fit, SCM stratospheric check; adoption: P3 tests and
+      criterion 2, forcing within 10 % on all four states, response within 5 %; if it fails
+      again accept the limitation naming both the forcing error and the stratospheric
+      cooling; not (ii)).
+    - **Result (2026-11-22 afternoon):** two-stage fit ts1: forcing within 5.4 % on all four
+      states, but criterion 2 fails (LW↓ rms 10.0, 0.3 bar 15.0) and the response is +5.2 %
+      (−1.622 against −1.541). Not adopted. **Limitation accepted** (wording in the entry
+      "Owner decisions on questions 11 and 13 carried out"): forcing +8 % cold / +29 % warm;
+      stratospheric 2×CO₂ cooling SCM −7.5 K at 14 hPa against RRTMG −1.7 K, 3-D −31 K.
+      **Settled.**
 12. **Equilibrium test: the 5-year T_s trend is below the noise of a 20 m slab with sea ice**
     (2026-11-21; SPEC.md §9.5.2, P4 acceptance 4).
     - **Evidence:** daily diagnostics, annual means, years 31–35 of the P4 slab pair (old
@@ -2298,3 +2447,20 @@ convection or the CO₂ band until then. P5 not started.
     - **Recommendation:** (ii) now, with (a) and the +10 K screen; keep the shallow scheme
       as an option. Not chosen by its effect on the warming: the reason is the APE and Earth
       precipitation regression.
+    - **Owner decision (2026-11-22):** shallow off by default now; test (a) offline first;
+      try the reference-humidity treatment on APE; check against the paper; if both fail,
+      stop and report.
+    - **Result (2026-11-22 afternoon):** shallow "none" by default, regress identical to the
+      pre-shallow code. (a) fails offline: a 3–6 h running mean keeps 66–79 % of the
+      convective-cloud fall (0–15°: −34 % instantaneous, −21 to −27 % with 3–6 h, −13 to
+      −19 % with 24 h). "qref" on APE T21: Hadley 5.5 against 15.6 (shallower 4.7). In the
+      paper's slab setup our shallower/qref reproduce Table 1 (Hadley ×0.73 against ×0.74,
+      equatorial P ×0.78 against ×0.75), also at T21: the APE collapse comes with prescribed
+      SST, not from the implementation, resolution or the boundary layer.
+    - **Owner, choose:** (b) anvil/detrained cloud tied to the convective top (with shallow
+      off), or tuning the convection knobs (τ, RH_SBM) with shallow on. **Recommendation:**
+      (b). The shallow scheme is correct but its prescribed-SST effect on the Hadley cell
+      (−70 %) would have to be tuned away through the very knobs that set the ITCZ, and the
+      offline test shows the cloud fall is a property of the instantaneous closure on
+      intermittent convection, which (b) replaces with a detrainment-based measure. Not
+      chosen by its effect on the warming.
