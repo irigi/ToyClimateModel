@@ -74,6 +74,17 @@ impl ColumnScheme for DryAdjustment {
     }
 }
 
+/// Shallow-convection variant of [`SimplifiedBettsMiller`] (Frierson 2007, §2c).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shallow {
+    /// Columns with P_q ≤ 0 are left alone.
+    None,
+    /// Lowered depth p_shall (eqs. 7–9), the paper's control.
+    Shallower,
+    /// Full depth, humidity reference scaled (eqs. 10–15).
+    Qref,
+}
+
 /// Simplified Betts–Miller convection (Frierson 2007, J. Atmos. Sci. 64, 1959–1976).
 ///
 /// A parcel from the lowest level is lifted dry-adiabatically to its lifting condensation
@@ -90,7 +101,12 @@ impl ColumnScheme for DryAdjustment {
 /// zero), and T, q relax within that layer with T_ref2 = T_ref − Δk/c_p (eqs. 8–9; with eq. 7
 /// this makes the net heating zero). Moisture is moved upward, nothing precipitates. When
 /// no such level exists (the lowest layer is already drier than q_ref), nothing is done.
-/// `shallow` off: those columns are left alone (the P1 behaviour).
+/// The paper's other variant, the "qref" scheme (§2c, eqs. 10–15), keeps the full depth to
+/// the level of zero buoyancy and scales the humidity reference by a uniform fraction,
+/// q_ref2 = f_q q_ref with f_q = ∫ q dp / ∫ q_ref dp (eqs. 10–13: zero net drying), and shifts
+/// T_ref by a uniform amount so that the net heating is zero (eqs. 14–15; the paper's sign
+/// convention for Δp is not legible in the copy, the condition "predicted precipitation zero"
+/// fixes it). `shallow` none (the default): those columns are left alone (the P1 behaviour).
 /// Diagnostics: `precip_conv` \[kg m⁻² s⁻¹\], `cape` \[J/kg\]; indicators (1 in the step,
 /// else 0; their time means are frequencies) `conv_active` (deep convection),
 /// `conv_skipped` (CAPE > 0 but P_q ≤ 0 and no adjustment) and `conv_shallow` (shallow
@@ -101,9 +117,9 @@ pub struct SimplifiedBettsMiller {
     pub tau: f64,
     /// Reference relative humidity (0.7).
     pub rh_ref: f64,
-    /// Frierson's "shallower" shallow convection for P_q ≤ 0, P_T > 0 (on by default for
-    /// `[convection] scheme = "sbm"`, key `shallow = "shallower" | "none"`).
-    pub shallow: bool,
+    /// Shallow convection for P_q ≤ 0, P_T > 0 (key `shallow = "shallower" | "qref" |
+    /// "none"`; none by default since 2026-11-22, P4 question 13).
+    pub shallow: Shallow,
     /// RK4 sub-steps per layer for the parcel ascent. With the exact LCL search, one
     /// sub-step is accurate to ~0.001 K for L26-type layers (see the test).
     pub substeps: usize,
@@ -215,6 +231,32 @@ impl SimplifiedBettsMiller {
         }
         true
     }
+
+    /// Frierson's "qref" shallow convection (see the type's doc comment) over `top..l`.
+    /// Returns false when the column holds no reference humidity (nothing done).
+    fn qref_adjust(&self, ctx: &ColumnCtx, st: &mut ColumnState, tp: &[f64], top: usize) -> bool {
+        let l = st.nlev;
+        let planet = ctx.planet;
+        let (p, dp) = (ctx.p, ctx.dp);
+        let (mut qsum, mut qrsum, mut heat, mut mass) = (0.0, 0.0, 0.0, 0.0);
+        for k in top..l {
+            qsum += st.q[k] * dp[k];
+            qrsum += self.rh_ref * self.cond.qsat(planet, tp[k], p[k]) * dp[k];
+            heat += (tp[k] - st.t[k]) * dp[k];
+            mass += dp[k];
+        }
+        if qrsum <= 0.0 {
+            return false;
+        }
+        let fq = qsum / qrsum; // eqs. 12–13
+        let dtref = -heat / mass; // eqs. 14–15: zero net heating
+        for k in top..l {
+            let qref = fq * self.rh_ref * self.cond.qsat(planet, tp[k], p[k]);
+            st.add_t(k, (tp[k] + dtref - st.t[k]) / self.tau);
+            st.add_q(0, k, -(st.q[k] - qref) / self.tau);
+        }
+        true
+    }
 }
 
 impl ColumnScheme for SimplifiedBettsMiller {
@@ -272,7 +314,13 @@ impl ColumnScheme for SimplifiedBettsMiller {
             pt += cp / lv * (tp[k] - st.t[k]) * dp[k];
         }
         if pq <= 0.0 {
-            if self.shallow && pt > 0.0 && self.shallow_adjust(ctx, st, tp, top) {
+            let done = pt > 0.0
+                && match self.shallow {
+                    Shallow::None => false,
+                    Shallow::Shallower => self.shallow_adjust(ctx, st, tp, top),
+                    Shallow::Qref => self.qref_adjust(ctx, st, tp, top),
+                };
+            if done {
                 diag[4] += 1.0;
             } else {
                 diag[3] += 1.0;
@@ -326,7 +374,7 @@ mod tests {
             cond: Condensable::water(),
             tau: 7200.0,
             rh_ref: 0.7,
-            shallow: false,
+            shallow: Shallow::None,
             substeps: n,
         };
         let mut b = vec![0.0; 26];
@@ -380,17 +428,18 @@ mod tests {
         }
     }
 
-    /// Frierson's "shallower" shallow convection on a column with a moist boundary layer
-    /// under a dry free troposphere (CAPE > 0, P_q < 0): no precipitation, column moisture
-    /// and enthalpy conserved, moisture moved upward, and nothing at all without `shallow`.
+    /// Frierson's "shallower" and "qref" shallow convection on a column with a moist
+    /// boundary layer under a dry free troposphere (CAPE > 0, P_q < 0): no precipitation,
+    /// column moisture and enthalpy conserved, moisture moved upward, and nothing at all
+    /// without shallow convection.
     #[test]
-    fn shallower_shallow_convection_conserves_and_moistens_aloft() {
+    fn shallow_convection_conserves_and_moistens_aloft() {
         let geo = Geometry::l26();
         let planet = Planet::earth();
         let cond = Condensable::water();
         let ctx = geo.ctx(&planet, None, 1800.0);
         let l = geo.p.len();
-        let run = |shallow: bool| {
+        let run = |shallow: Shallow| {
             let sbm = SimplifiedBettsMiller {
                 cond: cond.clone(),
                 tau: 7200.0,
@@ -420,30 +469,35 @@ mod tests {
             sbm.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(l));
             (st, t0, q0v, sfc, diag)
         };
-        let (st, t0, q0, sfc, diag) = run(true);
-        assert!(diag[1] > 0.0, "CAPE {}", diag[1]);
-        assert_eq!(diag[2], 0.0, "deep convection fired");
-        assert_eq!(diag[4], 1.0, "shallow convection not done: {diag:?}");
-        assert_eq!(diag[0], 0.0);
-        assert_eq!(sfc.rain + sfc.snow, 0.0);
-        let g = planet.gravity;
-        let dw: f64 = (0..l).map(|k| (st.q[k] - q0[k]) * geo.dp[k] / g).sum();
-        let dh: f64 = (0..l)
-            .map(|k| planet.cp * (st.t[k] - t0[k]) * geo.dp[k] / g)
-            .sum();
-        let moved: f64 = (0..l)
-            .map(|k| (st.q[k] - q0[k]).abs() * geo.dp[k] / g)
-            .sum();
-        assert!(moved > 1e-3, "nothing moved: {moved} kg/m²");
-        assert!(
-            dw.abs() < 1e-9 * moved.max(1.0) + 1e-12,
-            "water change {dw} kg/m²"
-        );
-        assert!(dh.abs() < 1e-6, "enthalpy change {dh} J/m²");
-        assert!(st.q[l - 1] < q0[l - 1], "boundary layer not dried");
-        let up = (0..l - 1).any(|k| geo.p[k] < 0.85e5 && st.q[k] > q0[k]);
-        assert!(up, "nothing moistened above the boundary layer");
-        let (st2, t2, q2, _, diag2) = run(false);
+        for variant in [Shallow::Shallower, Shallow::Qref] {
+            let (st, t0, q0, sfc, diag) = run(variant);
+            assert!(diag[1] > 0.0, "CAPE {}", diag[1]);
+            assert_eq!(diag[2], 0.0, "deep convection fired");
+            assert_eq!(
+                diag[4], 1.0,
+                "{variant:?}: shallow convection not done: {diag:?}"
+            );
+            assert_eq!(diag[0], 0.0);
+            assert_eq!(sfc.rain + sfc.snow, 0.0);
+            let g = planet.gravity;
+            let dw: f64 = (0..l).map(|k| (st.q[k] - q0[k]) * geo.dp[k] / g).sum();
+            let dh: f64 = (0..l)
+                .map(|k| planet.cp * (st.t[k] - t0[k]) * geo.dp[k] / g)
+                .sum();
+            let moved: f64 = (0..l)
+                .map(|k| (st.q[k] - q0[k]).abs() * geo.dp[k] / g)
+                .sum();
+            assert!(moved > 1e-3, "nothing moved: {moved} kg/m²");
+            assert!(
+                dw.abs() < 1e-9 * moved.max(1.0) + 1e-12,
+                "water change {dw} kg/m²"
+            );
+            assert!(dh.abs() < 1e-6, "enthalpy change {dh} J/m²");
+            assert!(st.q[l - 1] < q0[l - 1], "boundary layer not dried");
+            let up = (0..l - 1).any(|k| geo.p[k] < 0.85e5 && st.q[k] > q0[k]);
+            assert!(up, "nothing moistened above the boundary layer");
+        }
+        let (st2, t2, q2, _, diag2) = run(Shallow::None);
         assert_eq!(diag2[3], 1.0);
         assert_eq!(diag2[4], 0.0);
         assert_eq!(st2.t, t2);

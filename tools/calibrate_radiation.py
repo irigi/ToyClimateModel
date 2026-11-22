@@ -54,8 +54,8 @@ def qsat(t, p):
     return RD / RV * E0 / p * np.exp(-(LV / RV) * (1.0 / t - 1.0 / T0))
 
 
-def moist_adiabat(ts, ps, rh, half):
-    """Layer T and q (top first) on σ half levels `half` × ps."""
+def moist_adiabat(ts, ps, rh, half, t_strat=T_STRAT):
+    """Layer T and q (top first) on σ half levels `half` × ps, isothermal at `t_strat` above."""
     ph = half * ps
     p = 0.5 * (ph[1:] + ph[:-1])
     n = len(p)
@@ -69,10 +69,10 @@ def moist_adiabat(ts, ps, rh, half):
             qs = qsat(tc, pp)
             tc += h * RD * tc / CP * (1 + LV * qs / (RD * tc)) / (1 + LV * LV * qs / (CP * RV * tc * tc))
             lp += h
-        tc = max(tc, T_STRAT)
+        tc = max(tc, t_strat)
         t[k] = tc
         q[k] = rh * qsat(tc, p[k])
-    trop = t > T_STRAT
+    trop = t > t_strat
     qmin = q[trop].min() if trop.any() else q.min()
     q[~trop] = np.minimum(q[~trop], qmin)
     return ph, t, q
@@ -144,6 +144,13 @@ def main():
                    "(default: docs/radiation, the band at the paper's values)")
     a.add_argument("--state-scale", type=float, default=0.2,
                    help="residual scale of the state forcing by band [W m-2]; the state OLR uses 5x this")
+    a.add_argument("--strat-temps", type=float, nargs="*", default=[],
+                   help="extra isothermal stratosphere temperatures [K] for the fitted longwave set (P4 question 11); "
+                        "P3 criterion 2 is still reported on the 200 K set")
+    a.add_argument("--two-stage", action="store_true",
+                   help="with --co2-band: stage 1 fits the water-vapour and dry terms to the 400 ppm columns (OLR, "
+                        "LW down, T_s pairs) and the 400 ppm state OLR with the band held; stage 2 fits only the band "
+                        "to the CO2 pairs and the state forcing")
     args = a.parse_args()
     from scipy.optimize import least_squares
 
@@ -160,14 +167,17 @@ def main():
 
     # ---- longwave reference
     lw = []
-    for ps in fit_ps + extra_ps:
-        for ts in tss:
-            for rh in rhs:
-                ph, t, q = moist_adiabat(ts, ps, rh, half)
-                for co2 in co2s:
-                    ref = rrtmg(ph, t, q, ts, co2)
-                    lw.append({"ps": ps, "ts": ts, "rh": rh, "co2": co2, "ref": ref,
-                               "col": column(ph, t, q, ts, co2)})
+    for t_strat in [T_STRAT] + [x for x in args.strat_temps if x != T_STRAT]:
+        for ps in fit_ps + (extra_ps if t_strat == T_STRAT else []):
+            for ts in tss:
+                if ts <= t_strat + 20:
+                    continue
+                for rh in rhs:
+                    ph, t, q = moist_adiabat(ts, ps, rh, half, t_strat)
+                    for co2 in co2s:
+                        ref = rrtmg(ph, t, q, ts, co2)
+                        lw.append({"ps": ps, "ts": ts, "rh": rh, "co2": co2, "ref": ref, "t_strat": t_strat,
+                                   "col": column(ph, t, q, ts, co2)})
     print(f"longwave: {len(lw)} RRTMG columns", flush=True)
     fit_lw = [c for c in lw if c["ps"] in fit_ps]
     cols_lw = [c["col"] for c in fit_lw]
@@ -208,21 +218,42 @@ def main():
 
     # sensitivities: OLR differences between neighbouring CO2 values (forcing) and between
     # neighbouring surface temperatures (the clear-sky feedback), against RRTMG
-    idx = {(c["ps"], c["ts"], c["rh"], c["co2"]): i for i, c in enumerate(fit_lw)}
+    idx = {(c["t_strat"], c["ps"], c["ts"], c["rh"], c["co2"]): i for i, c in enumerate(fit_lw)}
     pairs_co2, pairs_ts = [], []
-    for (ps, ts, rh, co2), i in idx.items():
+    for (tst, ps, ts, rh, co2), i in idx.items():
         k = co2s.index(co2)
         if k + 1 < len(co2s):
-            pairs_co2.append((i, idx[(ps, ts, rh, co2s[k + 1])]))
+            pairs_co2.append((i, idx[(tst, ps, ts, rh, co2s[k + 1])]))
         k = tss.index(ts)
-        if k + 1 < len(tss):
-            pairs_ts.append((i, idx[(ps, tss[k + 1], rh, co2)]))
+        if k + 1 < len(tss) and (tst, ps, tss[k + 1], rh, co2) in idx:
+            pairs_ts.append((i, idx[(tst, ps, tss[k + 1], rh, co2)]))
     pc, pt = np.array(pairs_co2), np.array(pairs_ts)
+    at400 = np.array([c["co2"] == 400 for c in fit_lw])
+    pt400 = pt[at400[pt[:, 0]]]
+
+    stage = {"n": 0}  # 0: joint fit; 1: water vapour and dry terms; 2: CO2 band only
 
     def lw_res(x):
         r = toyclim(lw_knobs(x), cols_all, tmp)
         olr_all = np.array([c["olr"] for c in r])
         sd = state_diag(olr_all)
+        if stage["n"] == 1:
+            olr = olr_all[:len(cols_lw)]
+            dn = np.array([c["lw_down_sfc"] for c in r[:len(cols_lw)]])
+            s_m = olr[pt400[:, 1]] - olr[pt400[:, 0]]
+            s_r = ref_olr[pt400[:, 1]] - ref_olr[pt400[:, 0]]
+            # state OLR at the lower CO2 amount, and its change from the first state set
+            # (cold -> warm: the clear-sky response)
+            st1 = [(d["olr"] - d["olr_ref"]) / (5 * args.state_scale) for d in sd]
+            st1 += [((d["olr"] - sd[0]["olr"]) - (d["olr_ref"] - sd[0]["olr_ref"])) / args.state_scale for d in sd[1:]]
+            return np.concatenate([(olr[at400] - ref_olr[at400]) / 8.0, (dn[at400] - ref_dn[at400]) / 8.0,
+                                   (s_m - s_r) / args.slope_scale, st1])
+        if stage["n"] == 2:
+            olr = olr_all[:len(cols_lw)]
+            f_m = olr[pc[:, 0]] - olr[pc[:, 1]]
+            f_r = ref_olr[pc[:, 0]] - ref_olr[pc[:, 1]]
+            st2 = [e / args.state_scale for d in sd for e in d["F_band_err"]]
+            return np.concatenate([(f_m - f_r) / args.forcing_scale, st2])
         st_res = [e / args.state_scale for d in sd for e in d["F_band_err"]] + \
                  [(d["olr"] - d["olr_ref"]) / (5 * args.state_scale) for d in sd]
         # OLR differences between consecutive state sets (cold -> warm: the clear-sky
@@ -264,9 +295,34 @@ def main():
         x[free] = y
         return x
 
-    s = least_squares(lambda y: lw_res(_expand(y)), x0[free], bounds=(lo[free], hi[free]),
-                      x_scale=np.maximum(np.abs(x0[free]), 0.05), max_nfev=400)
-    xl = _expand(s.x)
+    if args.two_stage:
+        if not args.co2_band:
+            sys.exit("--two-stage needs --co2-band")
+        band_idx = np.arange(16, 20)
+        for n in (1, 2):
+            stage["n"] = n
+            fr = free.copy()
+            if n == 1:
+                fr[band_idx] = False
+            else:
+                fr[:16] = False
+            free_n = fr
+
+            def _exp(y, fr=free_n):
+                x = x0.copy()
+                x[fr] = y
+                return x
+
+            s = least_squares(lambda y: lw_res(_exp(y)), x0[free_n], bounds=(lo[free_n], hi[free_n]),
+                              x_scale=np.maximum(np.abs(x0[free_n]), 0.05), max_nfev=400)
+            x0 = _exp(s.x)
+            print(f"stage {n}: cost {s.cost:.3f}, x = {np.round(x0, 5)}", flush=True)
+        stage["n"] = 0
+        xl = x0.copy()
+    else:
+        s = least_squares(lambda y: lw_res(_expand(y)), x0[free], bounds=(lo[free], hi[free]),
+                          x_scale=np.maximum(np.abs(x0[free]), 0.05), max_nfev=400)
+        xl = _expand(s.x)
     sdiag = state_diag(np.array([c["olr"] for c in toyclim(lw_knobs(xl), cols_all, tmp)]))
     for d in sdiag:
         print(f"state {d['name']}: F {d['F']:.3f} (RRTMG {d['F_ref']:.3f}), band errors "
@@ -335,7 +391,7 @@ def main():
     r_sw3 = toyclim({**knobs, "ozone_tau": oz[0], "ozone_p": oz[1]}, cols3, tmp)
     rows = []
     for c, r in zip(lw, r_lw):
-        rows.append({"ps": c["ps"], "ts": c["ts"], "rh": c["rh"], "co2": c["co2"],
+        rows.append({"ps": c["ps"], "ts": c["ts"], "rh": c["rh"], "co2": c["co2"], "t_strat": c["t_strat"],
                      "olr": r["olr"], "olr_ref": c["ref"]["olr"],
                      "lw_down_sfc": r["lw_down_sfc"], "lw_down_sfc_ref": c["ref"]["lw_down_sfc"]})
     swrows = []
@@ -358,7 +414,8 @@ def main():
 
     # forcing and slope diagnostics at 1 bar, RH 0.75
     def pick(ps, rh, co2, ts):
-        return next(x for x in rows if x["ps"] == ps and x["rh"] == rh and x["co2"] == co2 and x["ts"] == ts)
+        return next(x for x in rows if x["ps"] == ps and x["rh"] == rh and x["co2"] == co2 and x["ts"] == ts
+                    and x["t_strat"] == T_STRAT)
 
     lines = ["# Semi-gray radiation calibration (P3)", "",
              "Generated by `tools/calibrate_radiation.py` (RRTMG via climlab "
@@ -371,10 +428,14 @@ def main():
               "## Longwave residuals [W m⁻²]", "",
               "| p_s | columns | OLR max | OLR rms | LW↓sfc max | LW↓sfc rms |", "|---|---|---|---|---|---|"]
     for ps in fit_ps + extra_ps:
-        sel = [x for x in rows if x["ps"] == ps]
+        sel = [x for x in rows if x["ps"] == ps and x["t_strat"] == T_STRAT]
         m1, r1, m2, r2 = stats(sel)
         tag = " (fitted)" if ps in fit_ps else " (extrapolated reference)"
         lines.append(f"| {ps / 1e5:.1f} bar{tag} | {len(sel)} | {m1:.2f} | {r1:.2f} | {m2:.2f} | {r2:.2f} |")
+    for tst in sorted({x["t_strat"] for x in rows} - {T_STRAT}):
+        sel = [x for x in rows if x["t_strat"] == tst]
+        m1, r1, m2, r2 = stats(sel)
+        lines.append(f"| 0.3–1 bar, {tst:g} K stratosphere (fitted) | {len(sel)} | {m1:.2f} | {r1:.2f} | {m2:.2f} | {r2:.2f} |")
     lines += ["", "## Shortwave residuals (Sun, 400 ppm)", "",
               "| set | atmospheric absorption: max relative error | rms relative | reflected at top: max abs [W m⁻²] |",
               "|---|---|---|---|"]
@@ -405,7 +466,7 @@ def main():
 
     fig, ax = plt.subplots(1, 3, figsize=(16, 4.8), constrained_layout=True)
     for co2, col in zip([100, 400, 2000, 10000], ["C0", "C1", "C2", "C3"]):
-        sel = [x for x in rows if x["ps"] == 1e5 and x["rh"] == 0.75 and x["co2"] == co2]
+        sel = [x for x in rows if x["ps"] == 1e5 and x["rh"] == 0.75 and x["co2"] == co2 and x["t_strat"] == T_STRAT]
         if not sel:
             continue
         ts = [x["ts"] for x in sel]

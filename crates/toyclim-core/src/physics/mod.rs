@@ -27,7 +27,7 @@ use crate::config::{Duration, PhysicsConfig, SchemeConfig};
 use crate::planet::Planet;
 use boundary_layer::KProfile;
 use condensation::{LargeScaleCondensation, PrecipitationFall};
-use convection::{DryAdjustment, SimplifiedBettsMiller};
+use convection::{DryAdjustment, Shallow, SimplifiedBettsMiller};
 use damping::Sponge;
 use idealized::held_suarez::{Damping, HeldSuarez, TidallyLocked};
 use idealized::tj16::{SurfaceTemperature, Tj16BoundaryLayer, Tj16SurfaceFluxes};
@@ -196,24 +196,26 @@ const GRAY_FORCING_KEYS: &[&str] = &[
     "cloud_lw_tau",
 ];
 
-/// `shallow_default`: Frierson's "shallower" shallow convection unless the table says
-/// `shallow = "none"` (on for `[convection] scheme = "sbm"`, SPEC.md §9.4.4; off for the
-/// idealized forcing bundles, which keep the prototype behaviour).
+/// Shallow convection: Frierson's (2007) "shallower" or "qref" scheme with
+/// `shallow = "shallower" | "qref"`; off by default (`"none"`). It was the default for `[convection] scheme = "sbm"` on 2026-11-21
+/// and was switched off on 2026-11-22 after the untuned scores (P4 question 13: APE T21
+/// Hadley cell 16.3 → 4.9 ×10¹⁰ kg s⁻¹, Earth zonal precipitation correlation
+/// 0.82 → 0.66). The SPEC.md §9.4.4 shallow-convection gap stays open.
 fn sbm(
     cond: &Condensable,
     t: &toml::Table,
     tau_key: &str,
     rh_key: &str,
-    shallow_default: bool,
 ) -> Result<SimplifiedBettsMiller, String> {
     let shallow = match t.get("shallow") {
-        None => shallow_default,
+        None => Shallow::None,
         Some(v) => match v.as_str() {
-            Some("shallower") => true,
-            Some("none") => false,
+            Some("shallower") => Shallow::Shallower,
+            Some("qref") => Shallow::Qref,
+            Some("none") => Shallow::None,
             _ => {
                 return Err(format!(
-                    "[convection] shallow = {v}: expected \"shallower\" or \"none\""
+                    "[convection] shallow = {v}: expected \"shallower\", \"qref\" or \"none\""
                 ))
             }
         },
@@ -307,7 +309,7 @@ pub fn build(
             match f.get("convection").and_then(|v| v.as_str()).unwrap_or("none") {
                 "none" => {}
                 "sbm" | "simplified_betts_miller" => {
-                    schemes.push(Box::new(sbm(cond, f, "tau_convection", "rh_convection", false)?))
+                    schemes.push(Box::new(sbm(cond, f, "tau_convection", "rh_convection")?))
                 }
                 other => return Err(format!("unknown convection {other:?} (none, sbm)")),
             }
@@ -626,7 +628,7 @@ pub fn build_world(
             check_keys("[convection]", &conv.params, &["tau", "rh_ref", "shallow"])?;
             let cond = moisture.ok_or("convection \"sbm\" needs a [moisture] block")?;
             schemes.push(Box::new(DryAdjustment::default()));
-            schemes.push(Box::new(sbm(cond, &conv.params, "tau", "rh_ref", true)?));
+            schemes.push(Box::new(sbm(cond, &conv.params, "tau", "rh_ref")?));
         }
         other => {
             return Err(format!(
