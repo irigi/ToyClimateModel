@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-21 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Causes found: missing shallow convection (now implemented, Frierson 2007; clouds to be re-tuned) and the semi-gray CO₂ forcing (refit in progress). Equilibrium test restated (question 12). Retests: questions 6 and 7 still fail |
+| P4 Clouds, Earth-like energy balance | 2026-11-21 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Causes found: missing shallow convection (implemented, Frierson 2007; untuned it degrades APE Hadley/ITCZ and Earth precipitation, question 13) and the semi-gray CO₂ forcing (too sensitive to stratospheric temperature; a Jeevanjee et al. CO₂ band fixes the state forcing but no fit also keeps the clear-sky response and criterion 2, not adopted, question 11). Equilibrium test restated (question 12). Retests: questions 6 and 7 still fail. Owner decisions pending on 11 and 13 |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -1781,6 +1781,103 @@ No change after the gate.
    equilibrium test.
 P5 stays unstarted until then.
 
+## 2026-11-22 — Question 11: structural check and the CO₂ band (branch `p4-clouds`)
+
+Owner adopted a review (Fable) of the refit result: check first which CO₂ term carries the
+growth and whether overlap is the cause; if structural, build a dedicated CO₂ band from a
+published form, adopt only if P3 tests 1–7 and criterion 2 pass, the forcing on both model
+states is within about 10 % of RRTMG and the clear-sky response stays within a few % of
+RRTMG; time box about half a day, otherwise accept the limitation (×2 fit not adopted
+either). Also: score the untuned shallow-convection model first.
+
+**Check 1 — which term** (`tools/co2_forcing.py --knobs-json --semigray-only`, forcing
+400 → 800 ppm on the cold / warm snapshot states, W m⁻²):
+
+| CO₂ term kept | cold | warm |
+|---|---|---|
+| window term d_w only | 3.10 | 2.81 |
+| strong-rest term d₂ only | 0.75 | 3.18 |
+| both (P3) | 3.85 | 5.99 |
+| RRTMG | 3.57 | 4.66 |
+
+Every other placement (weak rest; any term with pressure exponent 1) gives a forcing that
+falls from the cold to the warm state. Only the strong-rest term with n_c = 0 grows (×4).
+
+**Check 2 — water vapour** (`--q-scale 0.5`, humidity halved): RRTMG 3.95 / 5.29 (+10 % /
++14 %), semi-gray 4.98 / 7.36 (+29 % / +23 %). Overlap is real in both, and semi-gray
+overdoes it, but RRTMG still grows +34 % from cold to warm without it. **Overlap is not
+what keeps RRTMG's growth small.**
+
+**The cause: the stratosphere.** The 2×CO₂ state's stratosphere is far colder: global mean
+231 → 200 K at 14 hPa, 221 → 201 K at 37 hPa (comprehensive models: about 5–10 K at
+10 hPa). Hybrid states (`--strat-from`, temperature above σ = 0.1 swapped; RRTMG on 512
+columns, `tools/state_columns.py`):
+
+| forcing [W m⁻²] | cold | cold + warm strat | warm + cold strat | warm |
+|---|---|---|---|---|
+| RRTMG | 3.59 | 4.39 | 3.88 | 4.65 |
+| semi-gray (P3) | 3.85 | 5.86 | 4.00 | 5.99 |
+
+- In both, most of the growth is stratospheric. Semi-gray's sensitivity to the stratosphere
+  is about 2.5× RRTMG's (2.0 against 0.8 W m⁻²).
+- The P3 term's opacity goes as ln(CO₂/360 ppm): 0.11 at 400 ppm, 0.94 at 800 ppm, so a
+  doubling multiplies the strong band's stratospheric emissivity about 9× (real band:
+  widening by about 18 %). This likely explains the excessive stratospheric cooling too.
+- **Why the q11 refits could not fix it:** the calibration columns are moist adiabats under
+  a fixed 200 K isothermal stratosphere, so the fit never saw this dependence.
+
+**The CO₂ band** (commit d7658c8; `lw_co2_band = [l, c_ref, κ₀, c_win]`, off by default,
+byte-identical results with it off, unit test `co2_band`). From Jeevanjee, Seeley, Paynter
+& Fueglistaler (2021, J. Climate 34, 9463; the published PDF from the author's page,
+transcribed into the module doc): κ(ν) = κ₀ exp(−|ν−ν₀|/l), ν₀ = 667.5 cm⁻¹,
+κ₀ = 50 m² kg⁻¹ at 100 hPa, l = 10.2 cm⁻¹, linear pressure broadening, D = 1.5; forcing
+= 2l ln(q_f/q_i)[πB(ν₀,T_em) − πB(ν₀,T_strat)] (eqs. 7, 13). A fourth gray band of width
+2l ln(CO₂/c_ref) emitting from the band-centre level, its widening beyond c_win taken from
+the window (the "+" wing) and the weak rest band (the "−" wing), the core from the rest
+bands. The old ln(CO₂/360) terms are fixed at 0 in these fits. Fits with
+`tools/calibrate_radiation.py --co2-band --state-cols` (the four state sets: forcing by
+latitude band, OLR, and OLR differences between sets) in `out/p4/radfit/`:
+
+| fit | band [l, c_ref, κ₀, c_win] | fitted-set OLR / LW↓ rms (limit 8) | state forcing error, cold / warm / hybrids | clear-sky response (RRTMG −1.54 on these columns) | adiabat 290 K, 400→800 (RRTMG 4.12) |
+|---|---|---|---|---|---|
+| P3 | — | 3.60 / 6.71 | +8 % / +29 % / — | −1.51 | 4.91 |
+| old terms + states | — | 3.54 / 6.79 | −2 / +12 / +13, −3 % | −1.48 | 4.32 |
+| old terms + states + response pairs | — | 3.77 / 7.33 | −9 / +13 / +10, −5 % | −1.50 | 4.23 |
+| band1 (all from rest) | 12.5, 12.0, 112, — | 3.29 / 6.55 | −1 / −5 / −7, −1 % | **−1.00** | 2.99 |
+| band2 (+ response pairs) | 12.7, 17.9, 205, — | 4.13 / **8.06** | −1 / −16 / −17, −3 % | −1.21 | 2.39 |
+| band3 (halves from window and weak band) | 10.8, 51.3, 80.0, = c_ref | 3.68 / 5.60 | −6 / −3 / −3, −7 % | −1.39 | 3.63 |
+| band4 (band3 + c_win) | stuck at the start | = band3 | = band3 | −1.39 | 3.63 |
+| band5 (band3, response ×2) | 12.1, 128, 122, 125 | 2.93 / **9.57** | −5 / 0 / −3, −3 % | −1.44 | 3.68 |
+
+- The band does what the old term cannot: forcing on all four states within 7 % (band3,
+  band5), with growth +33 % against RRTMG's +30 %; band3's l and κ₀ come out near the
+  paper's values (10.8 cm⁻¹, 80 m² kg⁻¹).
+- But no fit also holds the clear-sky response and criterion 2: band3 keeps criterion 2 and
+  loses 10 % of the response (−1.39); band5 recovers part of it (−1.44) and breaks LW↓ at
+  0.3 bar (rms 14.5). c_win moves the base OLR but not the response (−1.39 to −1.41 for
+  c_win 51–350 ppm).
+- The old terms with the state constraints keep the response and criterion 2 but still put
+  the warm state 12–13 % high.
+- **Time box reached; nothing adopted** (the rule above). The defaults are unchanged.
+
+**Untuned shallow convection scored** (`out/p4/shallow_score/`, binary
+`out/p4/toyclim_shallow`; figure `docs/figures/P4/ape_shallow_effect.png`):
+- APE Control T21 (1 + 3 years): fails only the question 6 row, as before (minimum −7.03 m/s
+  at 35–60°; before −6.85), but the tropics change a lot: Hadley maximum 16.3 → 4.9 ×10¹⁰
+  kg s⁻¹, equatorial rain 9.8 → 6.4 mm/day with the ±13° minima filled (2.4 → 5.2), the
+  rain maximum moves to ±25°, tropical surface easterlies −3.5 → −2.3 m/s, large-scale rain
+  at the equator 1.9 → 0.01 mm/day. The figure: precipitation flattens across the tropics,
+  low-level wind and precipitable water barely change outside them.
+- Earth AMIP T42 (1 + 5 years, frozen cloud knobs; before → after): albedo 0.280 → 0.258,
+  OLR 242.5 → 240.7, net TOA +2.5 → +11.3, cover 0.497 → 0.450, SW / LW CRE −44.6 / +19.9 →
+  −37.6 / +20.6 (earth_energy: albedo, net TOA, cover and shape fail). P5 preview 16 → 15
+  of 19: zonal precipitation correlation 0.820 → **0.663**, storm index G 1.90 → **2.04**
+  (fails), NH February snow 24.3 → 23.3 Mkm², cost 52 → 54 min per model year.
+- This is a regression of accepted behaviour, not only a cloud re-tune. Question 13 updated.
+
+**Next steps:** owner decisions on questions 11 and 13 (below). Nothing builds on shallow
+convection or the CO₂ band until then. P5 not started.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -2104,6 +2201,27 @@ P5 stays unstarted until then.
       > 8). ×2 keeps criterion 2 but leaves the warm-state forcing at 5.64. The present CO₂
       term cannot do both. **Owner:** a structural change to the CO₂ term (water-vapour
       overlap), or accept the forcing error as a known limitation?
+    - **Owner decision (2026-11-21, adopting a review):** check which term and whether
+      overlap is the cause; if structural, a CO₂ band from a published form, adopt only if
+      P3 tests and criterion 2 pass, state forcing within about 10 % and the clear-sky
+      response within a few % of RRTMG; time box half a day, else accept the limitation.
+    - **Result (2026-11-22; entry "Question 11: structural check and the CO₂ band"):** the
+      cause is not overlap but stratospheric temperature: the P3 term's ln(CO₂/360)
+      opacity makes the forcing 2.5× too sensitive to it, and the calibration set (fixed
+      200 K stratosphere) never constrained it. The Jeevanjee et al. band, fitted with
+      model-state columns, gets the state forcing within 7 % but no fit also keeps the
+      clear-sky response (best −1.39 / −1.44 against −1.54) and criterion 2 (band5 LW↓
+      9.57). Time box reached; nothing adopted; defaults unchanged.
+    - **Owner, choose one:**
+      - (i) accept the limitation (the rule as given): forcing +8 % cold / +29 % warm,
+        clear-sky response −1.51;
+      - (ii) adopt band3 with its clear-sky response 10 % weak (−1.39), i.e. relax the
+        response guard to "within 10 %" — that is your criterion to change, not mine;
+      - (iii) more time on the band: add calibration columns with a range of stratospheric
+        temperatures (the blind spot) and refit, which may hold all three.
+    - **Recommendation:** (iii), capped at another half day. The band is clearly the
+      better physics for the state dependence (+33 % against RRTMG's +30 %, old term +56 %),
+      and the remaining conflict appeared only after the state columns entered the fit.
 12. **Equilibrium test: the 5-year T_s trend is below the noise of a 20 m slab with sea ice**
     (2026-11-21; SPEC.md §9.5.2, P4 acceptance 4).
     - **Evidence:** daily diagnostics, annual means, years 31–35 of the P4 slab pair (old
@@ -2165,3 +2283,18 @@ P5 stays unstarted until then.
         (otherwise it cannot serve as the screen); refit CO₂ (question 11); intermittency
         test and the convection fix; screen with the +4 K pair; tune once at T42; gate with
         slab pairs of ≥ 25 years.
+    - **Result (2026-11-21/22):** confirmed (P_q ≤ 0 skips 0.66 → 0.81 of tropical
+      column-steps, CAPE doubles); Frierson (2007) "shallower" implemented with an SCM
+      test, default on (commit 7a78d63). Untuned, it degrades accepted behaviour: APE
+      Hadley maximum 16.3 → 4.9 ×10¹⁰ kg s⁻¹ and the equatorial rain peak flattened; Earth
+      T42 zonal precipitation correlation 0.820 → 0.663, storm index G 1.90 → 2.04 (fail),
+      cover 0.497 → 0.450, net TOA +11.3 W m⁻². It also leaves 17 % of warm-state tropical
+      column-steps skipped and tropical cover still falls 0.12 under 2×CO₂.
+    - **Owner, choose:** (i) keep shallow on and re-tune (the shallow scheme has no free
+      parameters in the paper beyond τ, so the re-tune would be the cloud knobs only, and
+      the Hadley/ITCZ change would remain); (ii) shallow off by default and go to (a), the
+      running-mean convective cloud with a physical averaging time; (iii) both, judged by
+      the +4 K screen rebuilt at about +10 K (the review's suggestion, to reach 300–310 K).
+    - **Recommendation:** (ii) now, with (a) and the +10 K screen; keep the shallow scheme
+      as an option. Not chosen by its effect on the warming: the reason is the APE and Earth
+      precipitation regression.
