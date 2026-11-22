@@ -112,7 +112,7 @@ impl Primitive {
             // (see `PhysicsDriver::set_memory`, which checks the layout)
             let stored = if a.1.len() == n.div_ceil(2) {
                 n
-            } else if n % 4 == 0 && a.1.len() == (n / 4 * 3).div_ceil(2) {
+            } else if n.is_multiple_of(4) && a.1.len() == (n / 4 * 3).div_ceil(2) {
                 n / 4 * 3
             } else {
                 return Err("physics_memory: wrong size".into());

@@ -23,6 +23,39 @@
 //!   with f_ice(T) of the condensable; path r Δp / g.
 //! - No clouds above σ_min.
 //!
+//! Convective cloud geometry, `convective` = "column" (default, the P4 scheme) or "anvil"
+//! (P4 question 13 option (b)), after Slingo (1987, Q. J. R. Meteorol. Soc. 113, 899–927,
+//! §3c and Table 3; read from the PDF supplied by the owner, 2026-11-22). Transcribed:
+//! - eq. (1) C_c = a + b ln P, P the convective precipitation at cloud base [mm day⁻¹],
+//!   a, b "empirical constants" not printed; Table 1 (C_c 0, 0.1 … 0.8 at P 0.14, 0.31,
+//!   0.70, 1.6, 3.4, 7.7, 17, 38, 85 mm day⁻¹) gives b = 0.8 / ln(85 / 0.14) = 0.1248 and
+//!   a = −b ln 0.14 = 0.2454; C_c ≤ 0.8;
+//! - "in cases of deep convection only 25% of the predicted amount is allowed to occupy the
+//!   full depth, the remaining 75% being treated as low-level shallow convection";
+//! - eq. (2) anvil cirrus C_H = 2.0 (C_c − 0.3), "provided that convection extends above
+//!   400 mb and the convective cloudiness exceeds 40% (i.e. equivalent precipitation rate
+//!   of greater than 3.4 mm d⁻¹)"; layer clouds occupy one model layer;
+//! - Table 3 (sensitivity study, which improved the tropical OLR): liquid water contents
+//!   cumulonimbus 2.5, cumulus 1.0, anvil cirrus 0.035 g m⁻³; control 0.01 q_s ρ;
+//! - P is averaged over three hours and the lowest base / highest top over that time are
+//!   used (not done here: the instantaneous values, as in "column"; option (a) of question 13
+//!   was tested offline and not built).
+//!
+//! Here: the convective cover C_c keeps this scheme's law min(c_max, b' ln(1 + P)) (knobs
+//! `conv_coef`, `conv_max`). If the convective top is above σ = `deep_sigma` (0.4, the
+//! paper's 400 mb at p_s = 1000 hPa) the column is "deep": a core of `core_share` (0.25)
+//! C_c fills the convecting depth, the rest (1 − share) C_c sits at σ ≥ `shallow_sigma`
+//! (0.8, about 2 km, the paper's low/middle threshold; the paper does not give the depth of
+//! its low-level part — my reading); otherwise C_c fills the convecting depth as before. The
+//! anvil, C_H = min(1, 2 (a + b ln P − 0.3)) with the paper's a, b and only when
+//! a + b ln P > 0.4 (P > 3.4 mm day⁻¹), occupies the top convecting layer (the highest
+//! layer at σ ≥ σ_min if the top is above it), with in-cloud water `anvil_water`
+//! (0.035 g m⁻³ × the layer depth, Table 3). The convective in-cloud water per layer is
+//! min(β q_sat, r_max) as for stratiform cloud, but its column total over the convective
+//! layers is capped at `conv_water_path` (a knob, not from the paper; 1 kg m⁻² initially).
+//! Where convective and stratiform cloud share a layer the stored in-cloud water is their
+//! area-weighted mean.
+//!
 //! Diagnostic: `clwvi`, the grid-mean condensed water path \[kg m⁻²\] (the total cover
 //! `clt` comes from the radiation, which uses these clouds in the next step).
 //!
@@ -58,7 +91,30 @@ pub struct DiagnosticClouds {
     pub freeze_dry_sigma: f64,
     /// Diagnostic split of the cloud radiative effect into stratiform and convective parts.
     pub cre_split: bool,
+    /// Convective cloud geometry.
+    pub convective: ConvectiveCloud,
+    /// "anvil": share of C_c in the full-depth core, σ of the top above which convection is
+    /// deep, σ at and below which the shallow remainder sits, anvil in-cloud water content
+    /// \[kg m⁻³\], cap of the convective in-cloud water path \[kg m⁻²\].
+    pub core_share: f64,
+    pub deep_sigma: f64,
+    pub shallow_sigma: f64,
+    pub anvil_water: f64,
+    pub conv_water_path: f64,
 }
+
+/// Convective cloud geometry of [`DiagnosticClouds`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvectiveCloud {
+    /// C_c over the whole convecting depth with β q_sat in-cloud water (the P4 scheme).
+    Column,
+    /// Slingo (1987): core + low-level shallow part + anvil at the top, capped water path.
+    Anvil,
+}
+
+/// Slingo (1987) eq. (1) constants from his Table 1 (P in mm day⁻¹).
+const SLINGO_A: f64 = 0.2454;
+const SLINGO_B: f64 = 0.1248;
 
 impl DiagnosticClouds {
     pub fn new(cond: Condensable) -> Self {
@@ -76,6 +132,12 @@ impl DiagnosticClouds {
             freeze_dry_min: 0.15,
             freeze_dry_sigma: 0.75,
             cre_split: false,
+            convective: ConvectiveCloud::Column,
+            core_share: 0.25,
+            deep_sigma: 0.4,
+            shallow_sigma: 0.8,
+            anvil_water: 3.5e-5,
+            conv_water_path: 1.0,
         }
     }
 
@@ -102,6 +164,21 @@ impl DiagnosticClouds {
             1.0
         } else {
             (q / self.freeze_dry_q).clamp(self.freeze_dry_min, 1.0)
+        }
+    }
+
+    /// Slingo's (1987) anvil cover for convective precipitation `p` \[kg m⁻² s⁻¹\]: eq. (2)
+    /// with his eq. (1) (Table 1 constants), zero unless his C_c exceeds 0.4.
+    pub fn anvil(p: f64) -> f64 {
+        let pmm = p * 86400.0;
+        if pmm <= 0.0 {
+            return 0.0;
+        }
+        let c = SLINGO_A + SLINGO_B * pmm.ln();
+        if c <= 0.4 {
+            0.0
+        } else {
+            (2.0 * (c.min(0.8) - 0.3)).min(1.0)
         }
     }
 
@@ -147,6 +224,10 @@ impl ColumnScheme for DiagnosticClouds {
         let Some(q) = st.humidity() else {
             return;
         };
+        if self.convective == ConvectiveCloud::Anvil {
+            self.apply_anvil(ctx, st, q, m, diag);
+            return;
+        }
         let (planet, g) = (ctx.planet, ctx.planet.gravity);
         let cc = self.convective(st.conv_precip);
         let (mut path, mut conv_path) = (0.0, 0.0);
@@ -172,6 +253,100 @@ impl ColumnScheme for DiagnosticClouds {
                 if cv > 0.0 {
                     conv_path += w;
                 }
+            }
+            let fi = self.cond.ice_fraction(st.t[k]);
+            m[k] = c;
+            m[l + k] = (1.0 - fi) * w;
+            m[2 * l + k] = fi * w;
+            path += c * w;
+        }
+        diag[0] += path;
+        if self.cre_split && conv_path > 0.0 {
+            diag[1] += cc;
+            diag[2] += conv_path;
+        }
+    }
+}
+
+impl DiagnosticClouds {
+    /// The "anvil" geometry (see the module documentation).
+    fn apply_anvil(
+        &self,
+        ctx: &ColumnCtx,
+        st: &ColumnState,
+        q: &[f64],
+        m: &mut [f64],
+        diag: &mut [f64],
+    ) {
+        let l = st.nlev;
+        let (planet, g) = (ctx.planet, ctx.planet.gravity);
+        let cc = self.convective(st.conv_precip);
+        let top = st.conv_top;
+        let active = cc > 0.0 && top + 1 < l;
+        let deep = active && ctx.sigma[top] < self.deep_sigma;
+        // convective fraction per layer (core and shallow part independent within a layer)
+        let conv_frac = |k: usize| -> f64 {
+            if !active || k < top || k + 1 >= l || ctx.sigma[k] < self.sigma_min {
+                return 0.0;
+            }
+            if deep {
+                let core = self.core_share * cc;
+                let low = if ctx.sigma[k] >= self.shallow_sigma {
+                    (1.0 - self.core_share) * cc
+                } else {
+                    0.0
+                };
+                1.0 - (1.0 - core) * (1.0 - low)
+            } else {
+                cc
+            }
+        };
+        let raw = |k: usize| {
+            let qs = self.cond.qsat(planet, st.t[k], ctx.p[k]);
+            (self.water_ratio * qs).min(self.water_max) * ctx.dp[k] / g
+        };
+        let total: f64 = (0..l).filter(|&k| conv_frac(k) > 0.0).map(raw).sum();
+        let scale = if total > self.conv_water_path && total > 0.0 {
+            self.conv_water_path / total
+        } else {
+            1.0
+        };
+        // anvil layer: the top convecting layer, or the highest one below σ_min
+        let anvil_k = (top..l - 1).find(|&k| ctx.sigma[k] >= self.sigma_min);
+        let ca = if deep {
+            Self::anvil(st.conv_precip)
+        } else {
+            0.0
+        };
+        let (mut path, mut conv_path) = (0.0, 0.0);
+        for k in 0..l {
+            if ctx.sigma[k] < self.sigma_min {
+                continue;
+            }
+            let qs = self.cond.qsat(planet, st.t[k], ctx.p[k]);
+            let cs = Self::stratiform(q[k] / qs, self.rh_crit(ctx.sigma[k]))
+                * self.freeze_dry(q[k], ctx.sigma[k]);
+            let ws = raw(k);
+            let mut cv = conv_frac(k);
+            let mut wv = scale * ws;
+            if cv > 0.0 {
+                conv_path += wv;
+            }
+            if ca > 0.0 && anvil_k == Some(k) {
+                // anvil and convective cloud of the layer as independent covers
+                let rho = ctx.p[k] / (planet.gas_constant * st.t[k]);
+                let wa = self.anvil_water * ctx.dp[k] / (rho * g);
+                let c2 = 1.0 - (1.0 - cv) * (1.0 - ca);
+                wv = (cv * wv + (c2 - cv) * wa) / c2;
+                cv = c2;
+            }
+            let c = 1.0 - (1.0 - cs) * (1.0 - cv);
+            if c <= 0.0 {
+                continue;
+            }
+            let w = (cs * ws + (c - cs) * wv) / c;
+            if self.cre_split {
+                m[3 * l + k] = cs;
             }
             let fi = self.cond.ice_fraction(st.t[k]);
             m[k] = c;
@@ -348,5 +523,92 @@ mod tests {
         assert!(cloud_cover(&m[..26]) >= 1.0 - 1e-12 && diag[0] > 0.0);
         // warm layer liquid, cold layer ice
         assert!(m[26 + 20] > 0.0);
+    }
+    /// Slingo (1987) anvil cover: zero up to his C_c = 0.4 (P = 3.4 mm/day), 2 (C_c − 0.3)
+    /// above, 1 at his cap (P ≥ 85 mm/day).
+    #[test]
+    fn anvil_cover_follows_slingo() {
+        let mmd = 1.0 / 86400.0;
+        assert_eq!(DiagnosticClouds::anvil(0.0), 0.0);
+        assert_eq!(DiagnosticClouds::anvil(3.3 * mmd), 0.0);
+        assert!(DiagnosticClouds::anvil(3.6 * mmd) > 0.2);
+        // Table 1: C_c = 0.6 at 17 mm/day -> C_H = 0.6
+        assert!((DiagnosticClouds::anvil(17.0 * mmd) - 0.6).abs() < 0.01);
+        assert!((DiagnosticClouds::anvil(85.0 * mmd) - 1.0).abs() < 1e-3);
+        assert_eq!(DiagnosticClouds::anvil(500.0 * mmd), 1.0);
+    }
+
+    /// "anvil" geometry in a dry column (no stratiform cloud): deep convection gives the core
+    /// share over the depth, the shallow remainder at σ ≥ 0.8, an anvil in the top layer with
+    /// thin cloud, the convective water path capped; shallow convection fills its depth with
+    /// C_c and has no anvil; no tendencies; "column" is unchanged by the new knobs.
+    #[test]
+    fn anvil_geometry_column() {
+        let geo = Geometry::l26();
+        let planet = crate::planet::Planet::earth();
+        let ctx = geo.ctx(&planet, None, 1200.0);
+        let s = DiagnosticClouds {
+            convective: ConvectiveCloud::Anvil,
+            cre_split: true,
+            conv_water_path: 0.2,
+            ..scheme()
+        };
+        let p = 30.0 / 86400.0;
+        let run = |s: &DiagnosticClouds, top: usize| {
+            let mut st = ColumnState::new(26, 1);
+            st.begin(1200.0);
+            for k in 0..26 {
+                st.t[k] = (300.0 - 80.0 * (1.0 - ctx.sigma[k])).max(200.0);
+                st.q[k] = 0.3 * s.cond.qsat(ctx.planet, st.t[k], ctx.p[k]);
+            }
+            st.conv_precip = p;
+            st.conv_top = top;
+            let mut sfc = SurfaceExchange::default();
+            let mut diag = [0.0; 3];
+            s.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(26));
+            assert!(st.dt.iter().chain(&st.dq).all(|&x| x == 0.0));
+            (sfc.cloud, diag)
+        };
+        let cc = s.convective(p);
+        let ca = DiagnosticClouds::anvil(p);
+        assert!(ca > 0.5);
+        // deep: top in the upper troposphere
+        let top = (0..26).find(|&k| ctx.sigma[k] >= 0.2).unwrap();
+        let (m, d) = run(&s, top);
+        assert!(m[..26].iter().all(|&c| (0.0..=1.0).contains(&c)));
+        assert!(m[78..].iter().all(|&c| c == 0.0)); // no stratiform cloud
+        for k in 0..26 {
+            let sg = ctx.sigma[k];
+            if k < top || k == 25 {
+                assert_eq!(m[k], 0.0, "{k}");
+            } else if k == top {
+                let c = 1.0 - (1.0 - 0.25 * cc) * (1.0 - ca);
+                assert!((m[k] - c).abs() < 1e-12, "anvil layer {k}: {}", m[k]);
+                // thin: in-cloud water close to 0.035 g/m³ of the layer, far below the core's
+                let w = m[26 + k] + m[52 + k];
+                assert!(w < 0.05, "anvil water {w}");
+            } else if sg >= 0.8 {
+                let c = 1.0 - (1.0 - 0.25 * cc) * (1.0 - 0.75 * cc);
+                assert!((m[k] - c).abs() < 1e-12, "{k}");
+            } else {
+                assert!((m[k] - 0.25 * cc).abs() < 1e-12, "{k}");
+            }
+        }
+        assert!((d[1] - cc).abs() < 1e-12);
+        assert!((d[2] - 0.2).abs() < 1e-9, "capped convective path {}", d[2]);
+        // shallow: top at σ ≈ 0.6, C_c over the depth, no anvil
+        let top_s = (0..26).find(|&k| ctx.sigma[k] >= 0.6).unwrap();
+        let (m2, _) = run(&s, top_s);
+        for k in top_s..25 {
+            assert!((m2[k] - cc).abs() < 1e-12, "{k}");
+        }
+        assert_eq!(m2[top_s - 1], 0.0);
+        // "column" ignores the anvil knobs
+        let col = DiagnosticClouds {
+            conv_water_path: 0.2,
+            core_share: 0.5,
+            ..scheme()
+        };
+        assert_eq!(run(&col, top).0, run(&scheme(), top).0);
     }
 }

@@ -688,6 +688,12 @@ pub const CLOUD_KEYS: &[&str] = &[
     "r_ice",
     "k_lw_liquid",
     "cre_split",
+    "convective",
+    "core_share",
+    "deep_sigma",
+    "shallow_sigma",
+    "anvil_water",
+    "conv_water_path",
 ];
 
 fn diagnostic_clouds(
@@ -711,6 +717,23 @@ fn diagnostic_clouds(
         freeze_dry_min: num(p, "freeze_dry_min", d.freeze_dry_min)?,
         freeze_dry_sigma: num(p, "freeze_dry_sigma", d.freeze_dry_sigma)?,
         cre_split: boolean(p, "cre_split", false)?,
+        convective: match p.get("convective") {
+            None => clouds::ConvectiveCloud::Column,
+            Some(v) => match v.as_str() {
+                Some("column") => clouds::ConvectiveCloud::Column,
+                Some("anvil") => clouds::ConvectiveCloud::Anvil,
+                _ => {
+                    return Err(format!(
+                        "[clouds] convective = {v}: expected \"column\" or \"anvil\""
+                    ))
+                }
+            },
+        },
+        core_share: num(p, "core_share", d.core_share)?,
+        deep_sigma: num(p, "deep_sigma", d.deep_sigma)?,
+        shallow_sigma: num(p, "shallow_sigma", d.shallow_sigma)?,
+        anvil_water: num(p, "anvil_water", d.anvil_water)?,
+        conv_water_path: num(p, "conv_water_path", d.conv_water_path)?,
         ..d
     };
     for (k, v) in [
@@ -728,6 +751,23 @@ fn diagnostic_clouds(
         ("water_max", c.water_max),
         ("freeze_dry_q", c.freeze_dry_q),
         ("freeze_dry_min", c.freeze_dry_min),
+    ] {
+        if v.is_nan() || v < 0.0 {
+            return Err(format!("[clouds] {k} must be ≥ 0"));
+        }
+    }
+    for (k, v) in [
+        ("core_share", c.core_share),
+        ("deep_sigma", c.deep_sigma),
+        ("shallow_sigma", c.shallow_sigma),
+    ] {
+        if !(0.0..=1.0).contains(&v) {
+            return Err(format!("[clouds] {k} must be in [0, 1]"));
+        }
+    }
+    for (k, v) in [
+        ("anvil_water", c.anvil_water),
+        ("conv_water_path", c.conv_water_path),
     ] {
         if v.is_nan() || v < 0.0 {
             return Err(format!("[clouds] {k} must be ≥ 0"));
