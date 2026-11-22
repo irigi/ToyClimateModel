@@ -2143,6 +2143,81 @@ instellation (1365 against 1361 W m⁻²); both use gray radiation without cloud
 boundary layer and the same convection. The Earth AMIP regression adds semi-gray radiation,
 clouds and land.
 
+**Step 2 — convective cloud after Slingo (1987)** (commit 08c362b; `[clouds] convective =
+"anvil"`, default "column"):
+
+- *Source.* Slingo (1987, QJRMS 113, 899–927), from the PDF the owner supplied, §3c,
+  Table 1 and Table 3; transcribed into the `clouds.rs` doc comment:
+  - eq. (1): C_c = a + b ln P, with a = 0.2454 and b = 0.1248 (Table 1, P in mm/day);
+  - "only 25%" of C_c spans the full depth; the rest is low-level;
+  - eq. (2): anvil C_H = 2(C_c − 0.3) when the top is above 400 mb and C_c > 0.4;
+  - Table 3: anvil 0.035 g m⁻³; control in-cloud water 0.01 q_s ρ.
+- *Not fetched:* the NCAR CAM3 note, and Hartmann & Berry (2017) beyond its abstract.
+- *Not done:* Slingo averages P over 3 h; this implementation uses the step's P.
+- *Scheme.* The convective fraction keeps its "column" form. A deep tower (top above
+  `deep_sigma` 0.4) splits it into:
+  - a core `core_share` (0.25) over the convective depth;
+  - the remaining 75 % at σ ≥ `shallow_sigma` (0.8);
+  - an anvil from eq. (2) at the first level at or below the convective top that is not
+    above `sigma_min`.
+- *Water.* The convective in-cloud water is β q_sat per level as before, but scaled so its
+  column total is at most `conv_water_path`. The anvil water is `anvil_water`·Δp/(ρg). Both
+  are combined with the stratiform cloud as independent covers.
+- *Other constraints.* No latitude, longitude or planet knob; no T or q tendency;
+  `sigma_min` unchanged.
+- *Tests.* SCM tests `anvil_cover_follows_slingo` and `anvil_geometry_column`. Byte check
+  with the default "column": identical (10-day `ape_control_t21`, P4 `aquaplanet_t21`).
+
+**Step 3 — exploratory T21 Earth AMIP tuning** (1 + 1 years each, year 2, Earth targets
+only; every variant in `docs/tuning.md`; figures `cre_zonal_t21_anvil_{variants,batch2,batch3}.png`):
+
+| variant (all "anvil" except the first) | albedo | cover | global SW / LW CRE | 20°S–20°N SW / LW / net CRE |
+|---|---|---|---|---|
+| CERES EBAF Ed4.1 | 0.291 (T42) | 0.67 | −45.3 / +25.8 | −43.9 / +29.3 / −14.6 |
+| column (frozen knobs) | 0.301 | 0.534 | −52.4 / +23.6 | −75.5 / +23.9 / −51.6 |
+| anvil defaults | 0.296 | 0.526 | −50.5 / +24.6 | −71.5 / +26.3 / −45.2 |
+| + RH_c aloft 0.85 | 0.309 | 0.554 | −55.1 / +26.1 | −77.4 / +27.3 / −50.2 |
+| + RH_c aloft 0.80 | 0.318 | 0.573 | −58.3 / +27.7 | −82.3 / +29.0 / −53.3 |
+| `conv_water_path` 0.3 (a_w03) | 0.292 | 0.537 | −49.2 / +24.7 | −68.7 / +26.8 / −42.0 |
+| a_w03 + `anvil_water` 3e-5 | 0.291 | 0.538 | −48.9 / +24.5 | −68.3 / +27.1 / −41.2 |
+| … + RH_c aloft 0.85 | 0.299 | 0.558 | −51.7 / +26.0 | −72.3 / +28.0 / −44.3 |
+| a_w03 + β 0.02 + RH_c aloft 0.85 | 0.295 | 0.558 | −50.3 / +23.1 | −72.4 / +25.5 / −46.9 |
+| **a_w03 + `water_max` 2e-4 + RH_c aloft 0.80 (b_wm2u80)** | 0.303 | 0.577 | −52.9 / +27.8 | −70.4 / +29.4 / **−41.0** |
+| a_w03 + β 0.01 (Slingo's control) | 0.269 | 0.540 | −41.4 / +17.8 | −62.4 / +21.3 / −41.2 |
+| … + RH_c aloft 0.85 | 0.274 | 0.555 | −43.1 / +18.7 | −64.0 / +21.9 / −42.2 |
+| … + RH_c aloft 0.80 | 0.284 | 0.581 | −46.4 / +20.1 | −68.5 / +23.3 / −45.2 |
+| … + RH_c surface 0.90 | 0.288 | 0.589 | −48.1 / +20.1 | −71.2 / +23.4 / −47.8 |
+
+- *Scorecard.* Every variant passes P4 rows 1–2 and the cover range, except β 0.01 alone,
+  where the albedo is 0.269. The shape row (subtropical minima, storm-track maxima) fails in
+  all of them, as it does for "column".
+- *What the anvil geometry changes.* It removes 6–10 of the ≈ 37 W m⁻² tropical net CRE
+  excess. The ITCZ SW minimum rises from −95 to −80…−85 W m⁻², and the ITCZ LW peak rises
+  to 37–42, matching CERES 40.
+- *What remains.* The tropical SW CRE stays at −62 to −82 against CERES −44, whatever the
+  water knobs. The tropical stratiform cloud is optically saturated, so its reflection
+  follows its fraction, not its water.
+- *β 0.01.* It dims the extratropics (40–65°S SW −36…−43 against −66; global LW +18…+20
+  against +26) without fixing the tropics.
+- **The tropical net CRE excess, about 26 W m⁻² in the best variant, is not removed by any
+  variant tried.** It sits mostly in the RH-based tropical cloud, not the convective cloud.
+- *Choice for step 4.* **b_wm2u80**, on Earth targets only, before any slab run: tied-best
+  tropical net CRE with cover ≥ 0.55, and the closest global LW and Southern Ocean SW. It is
+  not a default.
+
+**Step 4.1 — does a fixed-SST +10 K pair reproduce the tropical cloud loss with the current
+scheme?**
+- *Setup.* APE Control +0 / +10 K, T21, frozen knobs, "column" (`ape_t21_p10k.toml`; the
+  +0 run is the existing p0k run).
+- *0–30° SW CRE contribution:* −0.078 W m⁻² K⁻¹, against +0.81 in the slab pair; the
+  criterion was positive and at least half of +0.81.
+- *Tropical cover:* falls, 0.639 → 0.573, but the tropical SW CRE does not weaken
+  (−76.7 → −77.0 W m⁻²).
+- **Not reproduced, so the new scheme was not screened with it.** Candidate differences from the slab pair, none tested:
+  the slab's own SST pattern change, sea ice, and the CO₂ forcing itself.
+
+**Step 4.2 — slab pair with the new scheme:** see the next entry.
+
 
 ## Open questions for the owner
 
