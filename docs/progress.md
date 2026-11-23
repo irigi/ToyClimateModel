@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Owner choice pending: (b) or convection-knob tuning with shallow on. Questions 6 and 7 still fail |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); owner choice pending. Questions 6 and 7 still fail |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -2216,8 +2216,98 @@ scheme?**
 - **Not reproduced, so the new scheme was not screened with it.** Candidate differences from the slab pair, none tested:
   the slab's own SST pattern change, sea ice, and the CO₂ forcing itself.
 
-**Step 4.2 — slab pair with the new scheme:** see the next entry.
+**Step 4.2 — slab pair with the new scheme:** see the next entry (2026-11-23).
 
+
+## 2026-11-23 (night) — Question 13 option (b), step 4.2: slab pair with the anvil scheme (branch `p4-clouds`)
+
+**Run.**
+- `cases/bench/p4_aquaplanet/anvil_t21_{400,800}.toml`: frozen P4 knobs + the step 3
+  choice b_wm2u80 (`convective` "anvil", `conv_water_path` 0.3, `water_max` 2e-4,
+  `rh_crit_upper` 0.80).
+- 25 years from the year-45 restarts of the frozen-knob pair, years 46–70; 8 threads each,
+  6.8 h wall (0.37 model days/s).
+- Climatology and the equilibrium test over years 61–70 (`out/p4/anvil_slab/`).
+
+**Restated equilibrium test** (`tools/equilibrium.py`, 10 years):
+
+| | annual-mean T_s, years 61–70 [K] | trend (limit 0.02 K/yr) | TOA − closure residual (limit ±0.3 W m⁻²) | result |
+|---|---|---|---|---|
+| 400 ppm | 294.96 295.01 295.01 294.70 295.25 295.17 295.24 295.21 295.16 295.10 | +0.030 | −0.09 | **not equilibrated** |
+| 800 ppm | 305.17 304.99 304.71 304.81 304.80 304.69 304.48 304.45 304.25 304.56 | −0.079 | −0.21 | **not equilibrated** |
+
+- Both pass the TOA test and fail the trend test.
+- The 400 ppm trend is within the year-to-year noise; the 294.70 K year dominates it.
+- The 800 ppm run is still cooling slowly towards its own state, after a fast initial
+  warming. Its ΔT may be overestimated by a few tenths of a kelvin.
+- 25 years were not enough after a scheme change. I did not extend the runs.
+
+**Mean states (years 61–70) against the frozen-knob pair** (frozen: 400 ppm years 41–45,
+800 ppm years 51–55):
+
+| | frozen 400 | frozen 800 | anvil 400 | anvil 800 |
+|---|---|---|---|---|
+| global T_s [K] | 288.5 | 299.6 | **295.1** | 304.7 |
+| global sea-ice fraction | 0.107 | 0.000 | **0.000** | 0.000 |
+| global SW / LW CRE [W m⁻²] | −62.5 / +24.7 | −59.5 / +23.4 | −65.8 / +31.0 | −55.5 / +27.3 |
+| 20°S–20°N T_s [K] | 298.0 | 309.0 | 303.7 | 315.1 |
+| 20°S–20°N SW / LW CRE | −90.4 / +26.1 | −67.3 / +18.7 | −78.1 / +29.0 | −51.1 / +19.1 |
+| 20°S–20°N cover | 0.668 | 0.509 | 0.660 | 0.432 |
+
+- With the anvil scheme the 400 ppm aquaplanet is 6.6 K warmer and ice-free. The main
+  cause is the larger LW CRE (+31.0 against +24.7). The tuning was on Earth AMIP, where
+  the SSTs are prescribed and the aquaplanet temperature plays no part.
+
+**Feedbacks** (`tools/feedbacks.py`; semi-gray forcing 3.775 W m⁻² from
+`out/p4/snap_t21_400/co2_forcing.json`, as before; W m⁻² K⁻¹ contributions to the global
+value; the first two columns repeat the entry of 2026-11-21, the second recomputed now
+and identical):
+
+| | Old knobs, years 31–35 | Frozen, 800 ppm at years 51–55 | **Anvil (b_wm2u80), years 61–70** |
+|---|---|---|---|
+| ΔT_s | 6.84 K | 11.06 K | **9.61 K** |
+| Clear-sky LW (0–30 / 30–60 / 60–90°) | −1.20 | −1.38 (−0.57 / −0.43 / −0.38) | −1.20 (−0.60 / −0.47 / −0.14) |
+| Clear-sky SW (ice) | +1.43 | +0.90 | **+0.17** |
+| SW CRE (0–30° / 30–60° / 60–90°) | −0.62 (+0.42 / −0.45 / −0.59) | +0.28 (+0.81 / −0.24 / −0.29) | **+1.07 (+1.08 / +0.01 / −0.02)** |
+| LW CRE | −0.12 | −0.12 | −0.39 (−0.38 in 0–30°) |
+| Sum | −0.50 | −0.32 | −0.35 |
+| Implied equilibrium ΔT | 7.5 K | 11.7 K | 10.9 K |
+
+**Reading.**
+- *ΔT.* The warming is 1.4 K smaller, but not because the tropical cloud feedback is
+  smaller.
+  - Its 400 ppm state already has no sea ice, so the ice-albedo term falls from +0.90 to
+    +0.17.
+  - The tropical SW cloud term grows, from +0.81 to +1.08, and is only partly offset by
+    the LW CRE term (−0.38).
+- *Tropical cloud.* Tropical cover falls 0.66 → 0.43, more than in the frozen pair (0.67 →
+  0.51), and the tropical SW CRE weakens by 27 W m⁻².
+- *Owner's hypothesis.* **For the scheme as tuned here, the hypothesis that the excess
+  tropical cloud feedback comes from the thickness of the convective cloud is not
+  supported:** making that cloud optically realistic did not reduce the feedback.
+- *Not measured.* I did not split the change into its convective and stratiform parts for
+  this pair (no `cre_split` run). The share carried by the anvil's own 2×CO₂ loss, as
+  against the RH-based tropical cloud, which step 3 shows to be the bulk of the tropical
+  CRE, is therefore not measured. A one-year `cre_split` run from the year-70 restarts
+  would measure it.
+- *Choice of variant.* The comparison carries two confounders. It is made at different base
+  temperatures: tropical 303.7 → 315.1 K here, against 298.0 → 309.0 K in the frozen pair.
+  And b_wm2u80 also changes RH_c aloft, 0.90 → 0.80. Nothing here was chosen by the
+  warming; b_wm2u80 was fixed on Earth targets before these runs.
+
+**Stopped here, as the plan says.**
+- No T42 re-tune, no gate, no P5.
+- The "anvil" option stays off by default, and the code is unchanged since 08c362b.
+
+**Not verified / not fetched in this option (b) work:**
+- *Not fetched:*
+  - a published convective water-path range: Hartmann & Berry (2017) only as an abstract;
+  - the CAM3/4 notes (certificate error / 401).
+- *Not done:*
+  - Slingo's 3-hourly averaging of P;
+  - the +10 K screen of the new scheme (the current scheme did not reproduce the loss);
+  - equilibrium of the anvil pair (trend test fails);
+  - the convective/stratiform split of the anvil pair's feedback.
 
 ## Open questions for the owner
 
@@ -2666,4 +2756,31 @@ scheme?**
       (−70 %) would have to be tuned away through the very knobs that set the ITCZ, and the
       offline test shows the cloud fall is a property of the instantaneous closure on
       intermittent convection, which (b) replaces with a detrainment-based measure. Not
+      chosen by its effect on the warming.
+    - **Owner decision (2026-11-22 evening):** (b) after a diagnosis; shallow off.
+    - **Result (2026-11-22/23):**
+      - *Diagnosis held:*
+        - tropical net CRE −43.1 against CERES EBAF −14.4 W m⁻²;
+        - the convective part carried 85 % of the tropical 2×CO₂ net CRE change;
+        - convective in-cloud path 1.3–2.2 kg m⁻².
+      - *Scheme:* the Slingo (1987) core + anvil geometry with a capped convective water
+        path, implemented as `convective = "anvil"`, off by default.
+      - *T21 Earth tuning:* tropical net CRE at best −41.0 (from −51.6). The remaining
+        excess is in the RH-based tropical cloud, and the shape row still fails.
+      - *+10 K fixed-SST pair:* does not reproduce the tropical cloud loss.
+      - *Slab pair with the best variant (25 years, not equilibrated by the trend test):*
+        - ΔT 9.61 K against 11.06;
+        - but tropical SW cloud term +1.08 against +0.81;
+        - the smaller ΔT comes from the 400 ppm state being 6.6 K warmer and ice-free.
+      - **The redesign did not reduce the tropical cloud feedback.**
+    - **Owner, choose:**
+      - (i) measure the convective/stratiform split of the anvil pair (1 year
+        `cre_split` from the year-70 restarts, about 20 min) before deciding anything;
+      - (ii) treat the RH-based tropical cloud: its 2×CO₂ loss and its too-thick
+        present-day state (tropical SW CRE −70 against −44) are now the larger part;
+      - (iii) accept the tropical cloud feedback as a limitation of the diagnostic cloud
+        scheme, keep "column", and go to the T42 re-tune and the gate with the frozen knobs.
+    - **Recommendation:** (i) first, because it is cheap and tells whether (ii) is the right
+      target. Then (iii) unless (i) points at a single, published fix: a diagnostic RH
+      cloud scheme cannot be expected to produce a well-constrained cloud feedback. Not
       chosen by its effect on the warming.
