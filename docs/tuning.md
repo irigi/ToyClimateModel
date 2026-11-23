@@ -228,5 +228,5 @@ constants are published values, not tuned.
 | Threshold RH of eq. (6) ("slingo", `low_rh = "slingo"`) | `low_rh_crit` | 0.8 | 0.7–0.9 | knob (P4) | Slingo (1987) eq. (6): 0.8, "somewhat arbitrary and may be model dependent" (p. 904) |
 | ω of full RH low cloud, eq. (7) ("slingo") | `low_omega` | 0.1 Pa s⁻¹ | — | fixed (published) | Slingo (1987) eq. (7): zero for ω ≥ 0, linear to ω = −0.1 Pa s⁻¹ |
 | Inversion search below ("slingo") | `inv_pressure` | 75000 Pa | — | fixed (published) | Slingo (1987) eq. (8): "the most stable layer below 750 mb" |
-| Inversion cloud C' = −a Δθ/Δp − b, Δθ/Δp in K hPa⁻¹ ("slingo") | `inv_slope`, `inv_offset` | 6.67 hPa K⁻¹, 0.667 | 3.3–10, 0.33–1.0 | knob (P4) | Slingo (1987) eq. (8); "a different vertical resolution may need changes, particularly to … Eq. (8)" (p. 916) |
+| Inversion cloud C' = −a Δθ/Δp − b, Δθ/Δp in K hPa⁻¹ ("slingo") | `inv_slope`, `inv_offset` | 6.67 hPa K⁻¹, 0.667 | 3.3–10, 0.33–1.0 | knob (P4) | Slingo (1987) eq. (8); "a different vertical resolution may need changes, particularly to … Eq. (8)" (p. 923) |
 | RH at the inversion base: none below 0.6, linear to full at 0.8 ("slingo") | (code) | 0.6, 0.8 | — | fixed (published) | Slingo (1987) eq. (9) |

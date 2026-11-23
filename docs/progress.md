@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); proposal Slingo (1987) low cloud, owner choice pending; heat-transport pair running. Questions 6 and 7 still fail |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm at 305 K, 800 ppm failed the humidity envelope at 311 K. Question 6 closed as a limitation; 7 to be rerun before P6 |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -2459,6 +2459,127 @@ from the year-6 restart, two runs with identical states: convective split, and
 **Not done:** the SST warming/pattern separation run; the ω-dependence check on saved states
 (how much of the 5–20° low cloud sits in subsidence); item 4 results.
 
+## 2026-11-23 (afternoon) — Owner steps 1–3 for question 13 (iv): separating run, Slingo low cloud, L26 inversion check; **stopped at step 3** (branch `p4-clouds`)
+
+Owner decisions of the morning recorded under question 14 before starting. Machine kept at 16
+threads: the heat-transport pair was pinned to 12 cores (`taskset`), the other runs to 4–6.
+
+**Step 1 — separating run** (`cases/bench/p4_review/fx_s400p12_c400_t21.toml`, 1 + 2 years):
+the 400 ppm slab SST and ice plus a uniform 12.20 K (the 20°S–20°N annual mean of the 800 − 400
+slab SST difference), 400 ppm CO₂. 20°S–20°N, same quantities as the factorial
+(`tools/review_round.py`, `out/p4/review/separating.json`):
+
+| | S4C4 | S4+12C4 | S8C4 | S8C8 |
+|---|---|---|---|---|
+| T_s [K] | 297.87 | 310.08 | 310.08 | 310.08 |
+| SW / LW / net CRE | −89.6 / +25.8 / −63.8 | −82.1 / +20.5 / −61.6 | −69.3 / +20.0 / −49.2 | −63.8 / +18.6 / −45.3 |
+| net CRE without the convective cloud (stratiform) | −42.0 | −49.7 | −38.8 | −35.1 |
+| net CRE of the convective cloud | −21.8 | −11.9 | −10.4 | −10.2 |
+| cover | 0.666 | 0.570 | 0.517 | 0.485 |
+| deep-convection / skipped frequency | 0.310 / 0.631 | 0.171 / 0.741 | 0.155 / 0.729 | 0.151 / 0.716 |
+| CAPE [J kg⁻¹] | 830 | 2546 | 2077 | 1892 |
+| low stratiform max (σ 0.867) | 0.312 | 0.325 | 0.258 | 0.227 |
+
+- Uniform warming (S4+12C4 − S4C4): net +2.2 W m⁻² — convective part +9.9 (deep convection
+  halves, CAPE triples), stratiform −7.7 (more subtropical cloud, SW CRE −90 at 20–30° in the
+  zonal mean).
+- SST pattern at the same tropical mean (S8C4 − S4+12C4): net +12.4 — stratiform +10.9,
+  convective +1.5.
+- So of the SST-driven +14.6, the warmer base state removes convective cloud but adds
+  stratiform cloud (nearly cancelling), and the slab's SST pattern removes the stratiform
+  cloud (85 % of the total). Record only.
+- Figure `docs/figures/P4/review_separating.png`: the uniform case (orange) is noisy and
+  reflects most at 20–30°; the slab-pattern cases (green, red) coincide; the equatorial
+  convective SW CRE falls −53 → −35 (uniform) → −24 (pattern).
+
+**Heat-transport slab pair** (record only, owner decision; item 4 of the review round,
+`cases/bench/p4_review/oht_t21_*.toml`, Q₀ = 50 W m⁻², from the frozen pair's restarts):
+- 400 ppm: annual global T_s 289.4 → 305.1 K over 13 years (still running; result below
+  when it finishes);
+- 800 ppm: 300.7 → 311.0 K over 11 years, still rising 0.2–0.5 K/yr, then **stopped at day
+  24144 (year 67)**: "specific humidity above 0.1 kg/kg for 101 consecutive steps: the
+  atmosphere is outside the dilute envelope this model supports (SPEC.md §9.4.4)". No restart
+  was written (restarts are written at the end only).
+- With this heat transport the 400 ppm aquaplanet is 16 K warmer than the frozen pair's and
+  far outside 283–293 K; both states lose their sea ice. A rough difference of the last annual
+  means is 311.0 − 305.1 ≈ 6 K, but neither run is equilibrated and the 800 ppm one failed, so
+  it is not a warming estimate.
+
+**Step 2 — Slingo (1987) low cloud** (commit 415e65d), `[clouds] low_cloud = "slingo"`, off by
+default:
+- eqs. (5)–(9) transcribed in `physics/clouds/low.rs` with the citation; the equations were
+  checked on the page images (the PDF text layer garbles eq. 9: it reads
+  C_L = C_L'{1.0 − (0.8 − RH_base)/0.2}). Eq. (6) with RH_e (eq. 5) or the Sundqvist law
+  (`low_rh`), gated by eq. (7) at σ ≥ 0.8 (Fig. 1); inversion cloud from the most stable
+  pair of levels below 750 hPa (eq. 8) with the RH-at-base factor (eq. 9), placed at the base
+  level, combined with the RH cloud as the maximum (the paper says only that the two "combine
+  without difficulty"); no cloud in the lowest layer (as in the paper). Not done: the paper's
+  one-layer-per-region placement. Knobs in `docs/tuning.md`.
+- ω in the column physics: `ColumnCtx::omega`, computed by the driver from the physics state
+  only when a scheme asks (`ColumnScheme::needs_omega`), by the Simmons–Burridge
+  discretisation of the dynamics (`SigmaLevels::omega_over_p`, unit test: ω/p = −δ for uniform
+  divergence); snapshot field `omega` on request.
+- SCM tests: `slingo_low_suppressed_under_subsidence` (ω = +0.05, 0, −0.05, −0.1, −0.3 Pa/s →
+  0, 0, ½, 1, 1 of [(RH − 0.8)/0.2]², eq. (5) with convection, the Sundqvist law),
+  `slingo_inversion_cloud` (15 K over 80 hPa → C' = 6.67·0.1875 − 0.667 at the base, RH_base
+  0.9/0.8/0.7/0.6/0.5 → factor 1/1/½/0/0, both geometries, with and without `cre_split`;
+  surface inversion ignored; saturation at 1), `slingo_random_columns_in_range` (400 random
+  columns: fractions in [0, 1], no T or q tendency). Freeze-dry and σ_min unchanged.
+- Byte check with the option off against the q13b references: identical (10-day
+  `aquaplanet_t21`, 294 files; `ape_control_t21`, 299 files). `cargo test --release` all
+  pass (core 120 + 7 ignored), clippy, fmt.
+- `physics/clouds.rs` (1121 lines with the new code; it was 702) split into
+  `physics/clouds/{mod, anvil, low, config, tests}.rs` and the cloud config moved out of
+  `physics/mod.rs` (877 → 680), so no file in `toyclim-core/src` is over 700 lines (P0 rule).
+
+**Step 3 — does L26 resolve the inversion Slingo's eq. (8) uses?** Frozen-knob Earth AMIP,
+physics unchanged: T21 1 + 1 years (`cases/bench/p4_slingo/earth_base_t21.toml`) and the T42
+gate continued one year from its year-6 restart (`earth_inv_t42.toml`), 5-daily `t`, `rh`,
+`omega`, `ps` (73–74 snapshots in the analysis year). `tools/inversion_check.py` applies eqs.
+(8)–(9) exactly as the code does, per snapshot and column. Ocean points; box regions (mine;
+Klein & Hartmann 1993 could not be fetched, HTTP 403, no open copy found, so no observed LTS
+values are quoted); peak = the stratocumulus season of each deck.
+
+| region (peak season) | T21 Δθ/Δp [K/hPa] | T21 P(< −0.1) | T21 C_inv | T42 Δθ/Δp | T42 P(< −0.1) | T42 C' (eq. 8) | T42 C_inv (eqs. 8–9) | T42 LTS [K] | T42 ω ≥ 0 share, σ ≥ 0.8 |
+|---|---|---|---|---|---|---|---|---|---|
+| Peru (SON) | −0.100 | 0.41 | 0.02 | −0.122 | 0.84 | 0.16 | 0.09 | 21.7 | 0.85 |
+| Namibia (JJASON) | −0.094 | 0.45 | 0.01 | −0.125 | 0.81 | 0.19 | 0.06 | 19.7 | 0.71 |
+| California (JJA) | −0.096 | 0.44 | 0.00 | −0.109 | 0.67 | 0.11 | 0.05 | 21.0 | 0.55 |
+| Canary (JJA) | −0.085 | 0.17 | 0.01 | −0.107 | 0.57 | 0.09 | 0.04 | 19.7 | 0.82 |
+| Australia (DJF) | −0.062 | 0.00 | 0.00 | −0.088 | 0.21 | 0.02 | 0.01 | 16.0 | 0.91 |
+| trades 5–20°N (all) | −0.052 | 0.00 | 0.00 | −0.057 | 0.02 | 0.00 | 0.00 | 11.8 | 0.49 |
+| trades 5–20°S (all) | −0.057 | 0.03 | 0.00 | −0.064 | 0.07 | 0.01 | 0.00 | 12.3 | 0.52 |
+| warm pool (all) | −0.048 | 0.00 | 0.00 | −0.056 | 0.00 | 0.00 | 0.00 | 10.5 | 0.49 |
+
+No region at either resolution has a single snapshot below −0.25 K/hPa (full cover by eq. 8).
+
+- **Trade belts: not resolved.** The most stable layer at 5–20° is as stable as over the warm
+  pool (−0.057/−0.064 against −0.056 K/hPa at T42); its mean θ profile is smooth
+  (300.6, 300.7, 300.9, 302.7, 307.1, 313.0 K at σ 0.993 … 0.696).
+- **Stratocumulus decks: an inversion exists but L26 spreads it over two layers.** Peru T42:
+  θ 291.9, 292.1, 293.5, 300.3, 308.0, 313.5 K at σ 0.993, 0.971, 0.930, 0.867, 0.787, 0.696
+  — a well-mixed layer, then 6.8 K across 0.930 → 0.867 (63 hPa) and 7.7 K across 0.867 →
+  0.787 (80 hPa), about 14.5 K over 143 hPa. LTS 20–22 K in the decks against 10.5–12 K in the
+  trades and warm pool, so the bulk stability contrast is there; but per layer the decks sit
+  just past Slingo's zero point (−0.1 K/hPa), so eq. (8) with the paper's constants gives a
+  deck cover of 0.09–0.19 (T42) and 0.01–0.05 (T21), and 0.04–0.09 after eq. (9) (base RH
+  often below 0.8).
+- The eq. (7) gate works where intended: ω ≥ 0 at σ ≥ 0.8 in 55–91 % of the snapshots over the
+  decks and the eastern subtropical oceans (figure), about half over the trades and warm pool.
+- Figures `docs/figures/P4/inversion_check_t21.png`, `inversion_check_t42.png` (maps of the
+  mean Δθ/Δp, C', C_inv, the subsidence share; mean θ profiles): the most stable layers
+  (about −0.12 to −0.15 K/hPa) hug the eastern-boundary coasts of the Americas and Africa;
+  C' and C_inv are pale everywhere; the subsidence share is red over the subtropical oceans
+  and blue along the ITCZ and storm tracks; the deck profiles show the two-layer jump, the
+  trade and warm-pool profiles none.
+
+**Stop condition reached** ("step 3 fails (inversion not resolved)"): nothing tuned, no
+variant run, steps 4–8 not started. Proposal in question 13.
+
+**Not done:** steps 4–8; any run with `low_cloud = "slingo"` in 3-D (the SCM tests are its only
+tests); observed LTS values (paper not fetched).
+
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -2977,6 +3098,33 @@ from the year-6 restart, two runs with identical states: convective split, and
       boundary-layer stratiform cloud (an Earth-target defect, hidden in P4's global means by
       too little cloud elsewhere); the tropical 2×CO₂ cloud loss is an SST response; the low
       cloud fix is justified by CERES, not by the warming.
+    - **Result (2026-11-23 afternoon, entry "Owner steps 1–3"):** steps 1–2 done (separating
+      run: the slab SST pattern carries 85 % of the SST-driven loss, through the stratiform
+      cloud; Slingo low cloud implemented, off by default, byte-identical). **Step 3 fails, so
+      stopped:** L26 does not resolve the trade inversion (5–20° most stable layer −0.06 K/hPa,
+      as over the warm pool); in the stratocumulus decks the ≈ 14 K inversion is spread over
+      two layers (σ 0.93 → 0.79), each just past Slingo's zero point, so eq. (8) gives a deck
+      cover of 0.09–0.19 at T42 (0.04–0.09 with eq. 9) and none in the trades. The eq. (7)
+      subsidence gate is resolved (ω ≥ 0 in 55–91 % of snapshots over the decks).
+    - **Owner, choose:**
+      - (v) keep Slingo's form and re-derive the eq. (8) constants for L26 — the paper says
+        they depend on vertical resolution (p. 923) and gives a second set for another model
+        (Slingo 1980, not fetched) — by an Earth target (CERES bands and deck cover); this
+        rescales a stability the model barely resolves, so the deck cloud would rest on a
+        fitted threshold;
+      - (vi) replace eq. (8) by a bulk-stability stratus law (Klein & Hartmann 1993, stratus
+        amount linear in θ700 − θ_s; as I recall, NCAR CCM3/CAM3 use it for marine stratus — not verified): LTS is resolved at
+        L26 (20–22 K in the decks against 10.5–12 K elsewhere). Needs the paper (HTTP 403 from
+        AMS; the owner may have a copy) or the CAM source for the constants; eqs. (6)–(7) stay;
+      - (vii) add boundary-layer levels (e.g. 3–4 more between σ 0.75 and 0.95) so that the
+        inversion falls in one layer: a dynamical-core and regression change, all accepted
+        gates rerun;
+      - (viii) eqs. (6)–(7) only (ω-gated RH low cloud, no inversion cloud) as a screen of how
+        much of the tropical excess the subsidence gate removes; the subtropical cover, already
+        0.33 against about 0.6, would fall further.
+    - **Recommendation:** (vi) with eqs. (6)–(7): it uses the stability measure L26 does
+      resolve and is the published successor used at similar resolutions; (v) as the fallback
+      if the paper cannot be obtained. Not (vii) in P4. Nothing implemented.
 14. **Owner decisions of 2026-11-23 closing the review session** (recorded before starting).
     - **Q6** (APE westerlies end at 51°): closed as a known limitation; criterion unchanged.
       It fails the same way with gray, semi-gray, clouds and T63. The Earth jet and
