@@ -1,0 +1,97 @@
+# DIAGNOSTIC ONLY (P4 question 13, review round of 2026-11-23, item 2): fixed-SST factorial on the frozen-knob
+# slab pair. SST and sea-ice concentration: the monthly climatology of the 800 ppm slab state (years
+# 56-57 of out/p4/review/slabref_800, tools/slab_bc.py); CO2 400 ppm. Same orbit (seasons, diurnal cycle), physics and
+# frozen knobs as the slab pair, `cre_split` on (extra radiation call without the convective cloud).
+# 400/400 must match the slab's tropical CRE (method check); 800/800 must reproduce the slab's cloud loss;
+# 800 SST/400 CO2 = warming + pattern; 400 SST/800 CO2 = direct CO2 effect. Prescribed ice has a fixed floe
+# thickness (the slab mean) and no snow, so the polar surface differs from the slab; tropics are the target.
+# Run: toyclim run --config <this> --out out/p4/review/fx_s800_c400
+schema = 2
+description = "Review round 2026-11-23, item 2: fixed-SST factorial, frozen-knob slab SST/ice of the 800 ppm state with 400 ppm CO2, T21, 1 + 2 years"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "1095.75day"
+output_every = "5day"
+diagnostics_every = "1day"
+output_fields = ["ts", "cl", "cl_split"]
+initial_condition = { case = "jw06", perturbed = true }
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+# year: the original 365.25 days (derived: 365.256 d), kept so that results are
+# unchanged; checked against the derived value (< 1%).
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+# Earth preset: rotation rate 7.292e-5 s⁻¹ (Williamson et al. 1992).
+[planet]
+preset = "earth"
+
+# R_d and c_p: the Williamson et al. (1992) values used by the dynamical core, checked
+# against the mixture (287.04 / 1005.0 J kg⁻¹ K⁻¹).
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[radiation]
+scheme = "semigray"
+# Earth ozone column of the calibration (docs/radiation/calibration.md)
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
+[clouds]
+scheme = "diagnostic"
+cre_split = true
+
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+geography = "aquaplanet"
+
+[surface.ocean]
+model = "prescribed"
+sst = "out/p4/review/bc/slab800_tos.npy"
+sea_ice = "out/p4/review/bc/slab800_sic.npy"
+# mean sic-weighted slab ice thickness per hemisphere (tools/slab_bc.py), north / south
+ice_thickness = [2.00, 1.00]
+albedo = 0.06
+initial = "tj16"
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "365.25day"
+every = "1h"
+maps = ["ts", "tos", "sic", "olr", "asr", "olr_cs", "asr_cs", "olr_nc", "asr_nc", "clt", "clwvi", "cc_conv", "cwp_conv", "precip", "precip_conv", "precip_ls", "conv_active", "conv_skipped", "cape", "rsdt"]

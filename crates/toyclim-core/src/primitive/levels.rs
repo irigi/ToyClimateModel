@@ -84,7 +84,20 @@ impl Primitive {
             }
             // clouds of the last physics step (SPEC.md §9.5.1 `cl`): fraction per layer, and
             // `cldwp`, the in-cloud condensate path per layer (liquid + ice) [kg m⁻²]; from the
-            // cloud scheme's per-column memory `[frac | liquid | ice]` (only scheme with memory)
+            // cloud scheme's per-column memory `[frac | liquid | ice]` (only scheme with memory);
+            // `cl_split`, the fourth block written with `[clouds] cre_split` (stratiform-only
+            // fraction, or the fraction without low stratiform cloud with `cre_split_low_sigma`)
+            "cl_split" => {
+                let m = self.physics.memory();
+                if m.len() != n * 4 * l {
+                    return None;
+                }
+                for k in 0..l {
+                    for p in 0..n {
+                        out.push(m[p * 4 * l + 3 * l + k]);
+                    }
+                }
+            }
             "cl" | "cldwp" => {
                 let m = self.physics.memory();
                 if m.len() != n * 3 * l && m.len() != n * 4 * l {

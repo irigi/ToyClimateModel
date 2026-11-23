@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); owner choice pending. Questions 6 and 7 still fail |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); proposal Slingo (1987) low cloud, owner choice pending; heat-transport pair running. Questions 6 and 7 still fail |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -2309,6 +2309,156 @@ and identical):
   - equilibrium of the anvil pair (trend test fails);
   - the convective/stratiform split of the anvil pair's feedback.
 
+## 2026-11-23 — Question 13, review round: where the tropical cloud loss and the Earth excess sit (branch `p4-clouds`)
+
+Owner plan (review adopted): one diagnostic round before deciding: (1) split the anvil
+pair's feedback; (2) fixed-SST factorial on the frozen slab pair's own SST and ice; (3) locate
+the Earth tropical CRE excess by level; (4) overnight, the frozen slab pair with ocean heat
+transport, diagnostic only. Stop after the round and propose, do not implement. No tuning.
+
+**Code (diagnostic only, off by default).**
+- `[clouds] cre_split_low_sigma = σ_low` (needs `cre_split`): the extra radiation call drops
+  the *stratiform* cloud at σ ≥ σ_low (keeps the convective cloud) instead of dropping the
+  convective cloud. SCM test `cre_split_low_memory` (column and anvil geometries).
+- Snapshot field `cl_split` (the fourth cloud-memory block).
+- Byte check against the q13b references with the option off: identical (10-day
+  `aquaplanet_t21`, 292 files; `ape_control_t21`, 297 files). `cargo fmt --check`, clippy pass.
+- Tools: `tools/slab_bc.py` (prescribed SST/ice from a slab run's monthly climatology),
+  `tools/review_round.py` (20°S–20°N CRE split, cover, convection statistics, cloud profiles
+  from snapshots; `--fig`). Cases in `cases/bench/p4_review/`, output in `out/p4/review/`.
+  Binary `out/p4/toyclim_rev`, 4 threads per run.
+
+**Item 1 — the anvil pair split** (year 71 from the year-70 restarts, T21, `anvsplit_t21_*`;
+20°S–20°N, W m⁻², SW / LW / net; figure `review_anvil_split.png`):
+
+| | 400 ppm (303.4 K) | 800 ppm (314.7 K) | change |
+|---|---|---|---|
+| all cloud | −78.1 / +29.4 / −48.7 | −52.6 / +18.8 / −33.8 | +25.5 / −10.6 / **+14.9** |
+| stratiform only | −60.0 / +22.3 / −37.7 | −45.2 / +16.1 / −29.0 | +14.8 / −6.2 / **+8.7** |
+| convective part | −18.1 / +7.1 / −11.0 | −7.4 / +2.6 / −4.8 | +10.7 / −4.5 / **+6.2** |
+
+- Cover 0.671 → 0.442; deep-convection frequency 0.27 → 0.12, skipped 0.60 → 0.72, CAPE
+  1242 → 2362 J kg⁻¹. Stratiform cover at σ 0.87 (the boundary-layer top) 0.29 → 0.20.
+- **With the anvil geometry the stratiform cloud carries 58 % of the tropical net CRE
+  change.**
+- Figure: at 400 ppm a sharp equatorial SW minimum (−103) and ITCZ LW peak (44); at 800 ppm
+  the minimum is −67 at 3°S and the LW peak 26. The convective part's equatorial SW falls
+  −35 → −15; in 10–30° the loss is mostly stratiform. One year only, some hemispheric noise.
+
+**Item 2a — slab references** (frozen knobs, `cre_split` on, 2 years with a monthly
+climatology: 400 ppm years 46–47 from `gate/slab_t21_400`, 800 ppm years 56–57 from
+`gate/slab2_t21_800`, the 800 ppm state used for the feedbacks):
+
+| 20°S–20°N | 400 ppm (297.9 K) | 800 ppm (310.1 K) | change |
+|---|---|---|---|
+| all cloud | −90.6 / +25.9 / −64.6 | −61.3 / +18.2 / −43.1 | +29.3 / −7.7 / **+21.5** |
+| stratiform only | −61.5 / +18.5 / −43.0 | −47.3 / +15.4 / −31.9 | +14.2 / −3.1 / **+11.1** |
+| convective part | −29.1 / +7.4 / −21.7 | −14.0 / +2.8 / −11.2 | +15.1 / −4.6 / **+10.5** |
+
+- **Correction to step 1.3 (2026-11-22):** there the convective part carried 85 % (+11.3
+  of +13.3), but the 800 ppm state was the year-45 restart of the first, unequilibrated
+  800 ppm run (308.6 K). Against the equilibrated 800 ppm state the split is about half and
+  half (convective 0.49). **Decision rule (ii) of step 1 (more than half) would have failed**
+  with this state: the diagnosis that justified the anvil redesign depended on the 800 ppm
+  state chosen, and was weaker than reported.
+
+**Item 2b — fixed-SST factorial** (T21, 1 + 2 years from rest, same orbit and physics as the
+slab, prescribed monthly SST and ice from item 2a; ice floe 3.23 / 2.20 m N / S from the slab
+mean thickness; `fx_s<SST>_c<CO2>_t21`; figure `review_factorial.png`; net CRE 20°S–20°N):
+
+| | slab 400 | S400 C400 | slab 800 | S800 C800 | S800 C400 | S400 C800 |
+|---|---|---|---|---|---|---|
+| SW / LW / net, all | −90.6 / +25.9 / −64.6 | −89.6 / +25.8 / −63.8 | −61.3 / +18.2 / −43.1 | −63.8 / +18.6 / −45.3 | −69.3 / +20.0 / −49.2 | −84.5 / +23.6 / −60.8 |
+| net, stratiform only | −43.0 | −42.0 | −31.9 | −35.1 | −38.8 | −39.9 |
+| net, convective part | −21.7 | −21.8 | −11.2 | −10.2 | −10.4 | −20.9 |
+| cover | 0.669 | 0.666 | 0.471 | 0.485 | 0.517 | 0.643 |
+| deep / skipped frequency | 0.31 / 0.65 | 0.31 / 0.63 | 0.17 / 0.67 | 0.15 / 0.72 | 0.16 / 0.73 | 0.30 / 0.62 |
+| CAPE [J kg⁻¹] | 881 | 830 | 1761 | 1892 | 2077 | 700 |
+| c_c mean / conv. path [kg m⁻²] | 0.079 / 0.34 | 0.080 / 0.35 | 0.060 / 0.39 | 0.054 / 0.35 | 0.056 / 0.35 | 0.077 / 0.35 |
+| stratiform cover at σ 0.87 | 0.318 | 0.312 | 0.223 | 0.227 | 0.258 | 0.281 |
+
+Changes of net CRE from S400 C400 (W m⁻²; total = stratiform + convective):
+
+| | total | stratiform | convective |
+|---|---|---|---|
+| S800 C800 (both) | **+18.5** | +6.9 | +11.6 |
+| S800 C400 (SST warming + pattern) | **+14.6** | +3.2 | +11.4 |
+| S400 C800 (CO₂ alone, cold SST) | **+3.0** | +2.1 | +0.9 |
+| S800 C800 − S800 C400 (CO₂ alone, warm SST) | **+3.9** | +3.7 | +0.2 |
+| slab pair, for comparison | +21.5 | +11.1 | +10.5 |
+
+- *Method check:* S400 C400 matches the slab within 0.8 W m⁻² (net) and 0.003 (cover).
+- *S800 C800 reproduces 86 % of the slab loss* (+18.5 of +21.5). The 3 W m⁻² gap is all
+  in the stratiform part (+6.9 against +11.1): coupling/variability, small.
+- *SST change:* 79 % of the loss, almost all in the convective cloud (deep convection
+  becomes intermittent: frequency 0.31 → 0.16, CAPE doubles), as in question 13.
+- *CO₂ alone:* 16–21 % of the loss, almost all in the stratiform cloud: at fixed SST the
+  boundary-layer-top cover falls 0.312 → 0.281 (cold) and 0.258 → 0.227 (warm). A fast
+  adjustment of the low cloud to the CO₂ forcing; it is not a semi-gray CO₂ fault as such
+  (question 11 concerned the forcing size, +8 %/+29 %, not its vertical structure), but the
+  excess stratospheric/upper cooling of Q11 is not excluded as a contributor. Not tested.
+- *Not separated:* "SST warming" and "SST pattern" (the S800 SST differs from S400 both in
+  mean and in pattern). The uniform +10 K APE pair of step 4.1 gave no cloud loss, but it
+  also differs in orbit (equinox), instellation and SST profile, so this does not isolate the
+  pattern. A run S400 + uniform 12.2 K (the slab's tropical-mean change) at 400 ppm would
+  (about 1.3 h at T21). Not run (outside the plan).
+- Figure: the fixed-SST curves overlay their slab counterparts at all latitudes except the
+  poles (prescribed ice has a fixed thickness and no snow); the equatorial convective SW part
+  goes −53 → −24 W m⁻² with the warm SST at either CO₂; the CO₂-only run weakens the ITCZ SW
+  minimum from −112 to −107 and the 10–30° bands by a few W m⁻².
+
+**Item 3 — Earth tropical excess by level** (Earth AMIP T42 gate, frozen knobs, year 7
+from the year-6 restart, two runs with identical states: convective split, and
+`cre_split_low_sigma = 0.7`; `earth_split{conv,low}_t42`; figure `review_earth_split.png`):
+
+| W m⁻², SW / LW / net | 20°S–20°N | global |
+|---|---|---|
+| all cloud (CERES EBAF Ed4.1: tropics −44.8 / +30.4 / −14.4, global −45.2 / +25.8 / −19.5) | −62.6 / +20.3 / **−42.3** | −44.0 / +20.1 / −23.9 |
+| convective part | −23.3 / +5.1 / −18.1 | −12.7 / +2.8 / −9.9 |
+| stratiform at σ ≥ 0.7 (boundary layer) | −30.1 / +2.4 / **−27.7** | −17.0 / +1.6 / −15.5 |
+| all cloud without it | −32.5 / +17.9 / −14.6 | −27.0 / +18.5 / −8.5 |
+
+- **The tropical boundary-layer stratiform cloud's net effect (−27.7 W m⁻²) equals the
+  tropical excess against CERES (−42.3 against −14.4, i.e. 27.9).** It is SW-only (LW +2.4).
+- Where: it peaks at −35 W m⁻² SW at 5–20° in both hemispheres (the trade belts, in the
+  subsidence regions), while the convective part peaks at the ITCZ.
+- Profile (20°S–20°N mean, total / stratiform): σ 0.867 0.24 / 0.17, σ 0.930 0.12 / 0.05,
+  other levels ≤ 0.10. A single layer at the boundary-layer top.
+- Not saying the tropics should have no low cloud: CERES tropical cover is 0.65 against the
+  model's 0.56, so the model's tropical cloud is too much low, reflective cloud and too
+  little high cloud (LW CRE +20 against +30).
+
+**Item 4 — slab pair with ocean heat transport (Q₀ = 50 W m⁻², Merlis et al. 2013 form)**:
+`oht_t21_{400,800}`, 30 years from the year-45/55 restarts, 8 threads each, started 11:46 UTC
+(about 9 h). Results in the next entry.
+
+**Reading against the review's table.**
+- "Loss follows CO₂ alone": no, 16–21 %.
+- "Prescribed slab SST does not reproduce it": no, 86 % reproduced.
+- "Loss follows the SST" (warming and pattern together): yes, 79 %, mainly through the
+  intermittent deep convection (convective cloud). In the slab, and with the anvil geometry,
+  the stratiform boundary-layer cloud carries half or more, part of it a direct CO₂ adjustment.
+- "Excess is boundary-layer cloud": yes, fully, on Earth.
+- So both suspects are real: the SST response goes through the convective cloud, and the
+  boundary-layer stratiform layer carries the whole present-day Earth excess and half of the
+  slab feedback.
+
+**Proposal (not implemented): Slingo (1987) low cloud**, from the paper the owner supplied
+(§3, eqs. 6–9; constants to be transcribed carefully, the PDF text layer is garbled in eq. 9):
+- RH-based low cloud C_L = [max(0, (RH_e − 0.8)/0.2)]², set to zero under subsidence (ω ≥ 0)
+  with a linear ramp to ω = −0.1 Pa s⁻¹ (eqs. 6–7). Slingo: in the subtropics "it suppresses
+  the excessive cloudiness which would otherwise occur". That is the 5–20° excess here.
+- Inversion cloud C_L = −6.67 Δθ/Δp − 0.667 from the most stable layer below 750 mb, cut by
+  the relative humidity at the inversion base (eqs. 8–9). That is a stability-based
+  boundary-layer cloud, whose response to warming and CO₂ differs from an RH threshold.
+- Needed: ω in the column context (not passed now; the §9.3.3 driver contract would gain it),
+  SCM tests, then the factorial's S400 C400 / S800 C800 and Earth T21 screens before any T42 work.
+- Alternative: accept as a limitation (Q13 (iii)), with this round's attribution recorded.
+- Whatever follows: the T42 re-tune should add the CERES zonal bands as targets.
+
+**Not done:** the SST warming/pattern separation run; the ω-dependence check on saved states
+(how much of the 5–20° low cloud sits in subsidence); item 4 results.
+
 ## Open questions for the owner
 
 1. ~~License~~ — resolved: MIT (LICENSE added).
@@ -2784,3 +2934,30 @@ and identical):
       target. Then (iii) unless (i) points at a single, published fix: a diagnostic RH
       cloud scheme cannot be expected to produce a well-constrained cloud feedback. Not
       chosen by its effect on the warming.
+    - **Owner decision (2026-11-23, review adopted):** (i) plus a diagnostic round (fixed-SST
+      factorial on the slab SSTs, Earth low-cloud split, slab pair with ocean heat
+      transport); stop and propose.
+    - **Result (2026-11-23, entry "review round"):**
+      - anvil pair: the stratiform cloud carries 58 % of the tropical net CRE change;
+      - frozen pair against its equilibrated 800 ppm state: 51 % stratiform; step 1.3's 85 %
+        convective came from an unequilibrated 800 ppm state (rule (ii) would have failed);
+      - fixed-SST factorial reproduces 86 % of the slab loss; SST change 79 % (convective
+        cloud), CO₂ alone 16–21 % (boundary-layer stratiform cloud);
+      - Earth T42: the boundary-layer stratiform cloud (σ ≥ 0.7, mostly σ 0.87, peak at
+        5–20°) has a tropical net CRE of −27.7 W m⁻², equal to the excess against CERES (27.9).
+      - Heat-transport pair: running (next entry).
+    - **Owner, choose:**
+      - (iv) implement the Slingo (1987) low cloud (eqs. 6–9: RH cloud suppressed under
+        subsidence, inversion-strength boundary-layer cloud), which needs ω in the column
+        context; SCM tests; screen with the factorial S400 C400 / S800 C800 and Earth T21
+        against the CERES bands; T42 re-tune with the CERES bands as targets;
+      - (iii) accept as a limitation, with this attribution, and go to the T42 re-tune and gate
+        with the frozen knobs (CERES bands added as targets);
+      - optional first, either way: the SST warming/pattern separation run (S400 + uniform
+        12.2 K, 400 ppm, ≈ 1.3 h), and the subsidence share of the 5–20° low cloud on saved
+        states.
+    - **Recommendation:** (iv). It is a published treatment, it targets the cloud layer that
+      carries the whole Earth excess, and the paper names this subtropical excess as what
+      its ω dependence removes. It is a physics change justified by the Earth CERES bands,
+      not by the warming. The convective cloud's SST response stays as it is, and (iv) will not
+      remove it: the 2×CO₂ row may stay outside 1.5–6 K. Wait for item 4 before deciding.

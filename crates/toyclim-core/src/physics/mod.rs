@@ -688,6 +688,7 @@ pub const CLOUD_KEYS: &[&str] = &[
     "r_ice",
     "k_lw_liquid",
     "cre_split",
+    "cre_split_low_sigma",
     "convective",
     "core_share",
     "deep_sigma",
@@ -717,6 +718,7 @@ fn diagnostic_clouds(
         freeze_dry_min: num(p, "freeze_dry_min", d.freeze_dry_min)?,
         freeze_dry_sigma: num(p, "freeze_dry_sigma", d.freeze_dry_sigma)?,
         cre_split: boolean(p, "cre_split", false)?,
+        cre_split_low_sigma: num(p, "cre_split_low_sigma", 0.0)?,
         convective: match p.get("convective") {
             None => clouds::ConvectiveCloud::Column,
             Some(v) => match v.as_str() {
@@ -772,6 +774,12 @@ fn diagnostic_clouds(
         if v.is_nan() || v < 0.0 {
             return Err(format!("[clouds] {k} must be ≥ 0"));
         }
+    }
+    if !(0.0..=1.0).contains(&c.cre_split_low_sigma) {
+        return Err("[clouds] cre_split_low_sigma must be in [0, 1]".into());
+    }
+    if c.cre_split_low_sigma > 0.0 && !c.cre_split {
+        return Err("[clouds] cre_split_low_sigma needs cre_split = true".into());
     }
     if c.conv_max > 1.0 {
         return Err("[clouds] conv_max must be ≤ 1".into());

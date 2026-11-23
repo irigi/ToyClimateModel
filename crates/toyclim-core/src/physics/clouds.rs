@@ -65,6 +65,12 @@
 //! two more diagnostics, `cc_conv` (the convective fraction c_c of the column) and
 //! `cwp_conv` (its in-cloud water path Σ r Δp / g over the convective layers, 0 without
 //! convective cloud). Nothing else changes.
+//!
+//! With `cre_split_low_sigma` = σ_low > 0 (also diagnostic, P4 question 13, review round of
+//! 2026-11-23) the fourth block instead holds the total fraction with the *stratiform* cloud
+//! removed at σ ≥ σ_low (the convective fraction of those layers is kept, with the layer's
+//! stored in-cloud water; the layers above keep the total), so `olr_nc` and `asr_nc` become
+//! the fluxes without low stratiform cloud.
 
 use super::column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
 use super::condensation::Condensable;
@@ -91,6 +97,9 @@ pub struct DiagnosticClouds {
     pub freeze_dry_sigma: f64,
     /// Diagnostic split of the cloud radiative effect into stratiform and convective parts.
     pub cre_split: bool,
+    /// With `cre_split`: σ at and below which the extra call drops the stratiform cloud
+    /// instead of the convective cloud (0 = off, the convective split).
+    pub cre_split_low_sigma: f64,
     /// Convective cloud geometry.
     pub convective: ConvectiveCloud,
     /// "anvil": share of C_c in the full-depth core, σ of the top above which convection is
@@ -132,6 +141,7 @@ impl DiagnosticClouds {
             freeze_dry_min: 0.15,
             freeze_dry_sigma: 0.75,
             cre_split: false,
+            cre_split_low_sigma: 0.0,
             convective: ConvectiveCloud::Column,
             core_share: 0.25,
             deep_sigma: 0.4,
@@ -188,6 +198,19 @@ impl DiagnosticClouds {
             return 0.0;
         }
         (self.conv_coef * (1.0 + p * 86400.0).ln()).min(self.conv_max)
+    }
+
+    /// Fourth-block fraction of a layer at `sigma` with stratiform fraction `cs`, convective
+    /// fraction `cv` and total `c`: the stratiform-only cover, or with `cre_split_low_sigma`
+    /// the cover without stratiform cloud at and below that σ.
+    fn split_fraction(&self, sigma: f64, cs: f64, cv: f64, c: f64) -> f64 {
+        if self.cre_split_low_sigma <= 0.0 {
+            cs
+        } else if sigma >= self.cre_split_low_sigma {
+            cv
+        } else {
+            c
+        }
     }
 }
 
@@ -249,7 +272,7 @@ impl ColumnScheme for DiagnosticClouds {
             }
             let w = (self.water_ratio * qs).min(self.water_max) * ctx.dp[k] / g;
             if self.cre_split {
-                m[3 * l + k] = cs;
+                m[3 * l + k] = self.split_fraction(ctx.sigma[k], cs, cv, c);
                 if cv > 0.0 {
                     conv_path += w;
                 }
@@ -346,7 +369,7 @@ impl DiagnosticClouds {
             }
             let w = (cs * ws + (c - cs) * wv) / c;
             if self.cre_split {
-                m[3 * l + k] = cs;
+                m[3 * l + k] = self.split_fraction(ctx.sigma[k], cs, cv, c);
             }
             let fi = self.cond.ice_fraction(st.t[k]);
             m[k] = c;
@@ -485,6 +508,71 @@ mod tests {
         on.apply(&ctx, &mut st, &mut sfc, &mut d, &mut Workspace::new(26));
         assert_eq!(&sfc.cloud[..26], &sfc.cloud[78..104]);
         assert_eq!(d[1], 0.0);
+    }
+
+    /// CRE split without low stratiform cloud (`cre_split_low_sigma`): the first three
+    /// blocks and the diagnostics are unchanged; the fourth block equals the total above σ_low
+    /// and the convective fraction alone at and below it (zero where there is no convection).
+    #[test]
+    fn cre_split_low_memory() {
+        let geo = Geometry::l26();
+        let planet = crate::planet::Planet::earth();
+        let ctx = geo.ctx(&planet, None, 1200.0);
+        let run = |s: &DiagnosticClouds, conv: bool| {
+            let mut st = ColumnState::new(26, 1);
+            st.begin(1200.0);
+            for k in 0..26 {
+                st.t[k] = 295.0 - 70.0 * (1.0 - ctx.sigma[k]);
+                st.q[k] = 0.97 * s.cond.qsat(ctx.planet, st.t[k], ctx.p[k]);
+            }
+            if conv {
+                st.conv_precip = 20.0 / 86400.0;
+                st.conv_top = 8;
+            }
+            let mut sfc = SurfaceExchange::default();
+            let mut diag = [0.0; 3];
+            s.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(26));
+            assert!(st.dt.iter().chain(&st.dq).all(|&x| x == 0.0));
+            (sfc.cloud, diag)
+        };
+        for convective in [ConvectiveCloud::Column, ConvectiveCloud::Anvil] {
+            let conv = DiagnosticClouds {
+                cre_split: true,
+                convective,
+                ..scheme()
+            };
+            let low = DiagnosticClouds {
+                cre_split_low_sigma: 0.7,
+                ..conv.clone()
+            };
+            for with_conv in [false, true] {
+                let (a, da) = run(&conv, with_conv);
+                let (b, db) = run(&low, with_conv);
+                assert_eq!(&a[..78], &b[..78]);
+                assert_eq!(da, db);
+                let mut dropped = false;
+                for k in 0..26 {
+                    let (c, cs, x) = (b[k], a[78 + k], b[78 + k]);
+                    if ctx.sigma[k] < 0.7 {
+                        assert_eq!(x, c, "{k}");
+                    } else {
+                        // the convective cover of the layer: c = 1 − (1 − cs)(1 − cv)
+                        let cv = if cs < 1.0 {
+                            1.0 - (1.0 - c) / (1.0 - cs)
+                        } else {
+                            x
+                        };
+                        assert!((x - cv).abs() < 1e-12, "{k}: {x} {cv}");
+                        assert!(x <= c + 1e-15);
+                        if !with_conv {
+                            assert_eq!(x, 0.0);
+                        }
+                        dropped |= cs > 0.0;
+                    }
+                }
+                assert!(dropped, "the test column must have low stratiform cloud");
+            }
+        }
     }
 
     /// The scheme leaves T and q alone, stores fractions in [0, 1] and positive paths, and
