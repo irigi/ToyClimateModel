@@ -41,6 +41,10 @@ pub struct ColumnCtx<'a> {
     /// Stellar flux on a horizontal surface at the top \[W m⁻²\] and cos zenith (0 at night).
     pub insolation: f64,
     pub cos_zenith: f64,
+    /// Vertical pressure velocity ω \[Pa s⁻¹\] at the full levels, from the state the physics
+    /// sees (σ-coordinate continuity, the dynamics' ω/p times p_k). Filled only when a scheme
+    /// asks for it ([`ColumnScheme::needs_omega`]); empty otherwise (and in the SCM).
+    pub omega: &'a [f64],
 }
 
 /// The provisional column state and the tendencies accumulated so far.
@@ -270,6 +274,10 @@ pub trait ColumnScheme: Send + Sync {
     fn memory(&self, _nlev: usize) -> usize {
         0
     }
+    /// Whether this scheme reads [`ColumnCtx::omega`] (the driver then computes it).
+    fn needs_omega(&self) -> bool {
+        false
+    }
     /// Update `state` over Δt_p = `ctx.dt`, read and write the surface exchange, and write
     /// this scheme's diagnostics to `diag` (zeroed by the driver).
     fn apply(
@@ -345,6 +353,7 @@ pub mod testing {
                 cond,
                 insolation: 0.0,
                 cos_zenith: 0.0,
+                omega: &[],
             }
         }
     }

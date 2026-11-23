@@ -2570,6 +2570,7 @@ from the year-6 restart, two runs with identical states: convective split, and
        that, −4.95 m/s at 62.8°.
      - The other five rows pass.
      - Clouds do not change it; still open.
+   - **Owner decision (2026-11-23): closed as a known limitation** (question 14).
 7. **P2 bistability: one climate, with ice to ~45°** (2026-11-16; P2 acceptance 6).
    - **What fails:** the T21 aquaplanet (slab 20 m, sea ice, seasons, 1361 W/m², 12 years)
      reaches the same climate from both starts (`cases/bench/p2_bistability/`):
@@ -2634,6 +2635,8 @@ from the year-6 restart, two runs with identical states: convective split, and
      - Figure `docs/figures/P4/bistab_ice_start.png`.
      - Candidate cause: bare sea-ice albedo of about 0.5 (CAM6 band values) at low latitudes.
        No code defect found. Still open.
+   - **Owner decision (2026-11-23):** the setup is suspect; rerun from a properly cold state
+     before P6 (question 14). Not a P4 criterion.
 8. **P2 acceptance 5: G and seasonal sea ice in the test world** (2026-11-17).
    - **G = 2.18 against ≤ 2.0:** one dry ocean cell (0.8 mm/day against ~0.37 in its
      neighbours) at 18°N, off a desert coast. Every other cell is ≤ 1.76.
@@ -2717,6 +2720,7 @@ from the year-6 restart, two runs with identical states: convective split, and
       30 years: T_s 286.5 K, 20-year trend −0.004 K/yr, net TOA −0.17 W m⁻², closure
       0.10 W m⁻², G 1.21. **Proposal: the owner closes this question.** It rests on PR #8's
       clouds, so P3 alone does not show it. The formal §9.5.2 trend test is question 11.
+    - **Owner decision (2026-11-23): closed.**
 11. **P4 acceptance 4: 2×CO₂ warming 6.87 K, and the equilibrium trend test** (2026-11-18).
     - **Evidence:** the entry "P4 first full evaluation".
     - **Warming:** 6.87 K against the 1.5–6 K range. Sea ice is the largest amplifier, but the
@@ -2961,3 +2965,51 @@ from the year-6 restart, two runs with identical states: convective split, and
       its ω dependence removes. It is a physics change justified by the Earth CERES bands,
       not by the warming. The convective cloud's SST response stays as it is, and (iv) will not
       remove it: the 2×CO₂ row may stay outside 1.5–6 K. Wait for item 4 before deciding.
+    - **Owner decision (2026-11-23, closing the review session): (iv), Slingo (1987) low cloud**
+      (eqs. 6–9, option off by default, ω passed to the column physics, SCM tests; L26
+      inversion check before tuning; T21 exploratory tuning on the CERES bands and criteria
+      1–3, revisiting `rh_crit_surface`; T42 pass aiming at cover ≥ 0.55; then freeze and gate).
+      Shallow convection stays off by default. `deep_requires_pt` stays off, recorded as a
+      deviation with negligible effect. "anvil" stays off and enters the T42 re-tune only if
+      the tropical LW CRE is still short of CERES after the low-cloud change; it is not
+      adopted (its 400 ppm aquaplanet, 295.1 K, is outside 283–293 K). The separating run is
+      done first, record only. Interpretation adopted: the Earth tropical error is the
+      boundary-layer stratiform cloud (an Earth-target defect, hidden in P4's global means by
+      too little cloud elsewhere); the tropical 2×CO₂ cloud loss is an SST response; the low
+      cloud fix is justified by CERES, not by the warming.
+14. **Owner decisions of 2026-11-23 closing the review session** (recorded before starting).
+    - **Q6** (APE westerlies end at 51°): closed as a known limitation; criterion unchanged.
+      It fails the same way with gray, semi-gray, clouds and T63. The Earth jet and
+      sea-level pressure rows of P5 are the binding circulation test. No more retests in P4.
+    - **Q7** (ice-covered start melts): the test setup is suspect. Verify the initial state
+      of `cases/bench/p4_retest/bistab_ice.toml` (3 m bare ice; ocean and atmosphere appear
+      to start warm), restart from a properly cold state (mixed layer at freezing, cold
+      atmosphere, snow-covered ice) and rerun 12 years when the machine has room. Not a P4
+      criterion; does not block P4 or P5; must be settled before P6.
+    - **Q10** (aquaplanet drift): closed; the slab aquaplanet with clouds was steady for 30
+      years.
+    - **Q11** (CO₂ forcing): stays closed as an accepted limitation; the band stays off.
+    - **Q12** (equilibrium test): as restated; slab pairs run ≥ 30 years after any scheme
+      change.
+    - **Q13**: (iv), above.
+    - **Criterion 4** (2×CO₂ warming): P4 closes with this row open; the criterion is not
+      weakened and its configuration is not changed. P4 is closed when (a) criteria 1, 2, 3
+      and 5 pass at T42 after the re-tune, with the CERES zonal bands as added targets;
+      (b) the 400 ppm slab aquaplanet is within 283–293 K; (c) the warming is measured once
+      with the final settings and recorded with its attribution (convective cloud loss on
+      warm SST from the idle-column intermittency of the convection scheme; complete sea-ice
+      melt on a slab without ocean heat transport; the semi-gray CO₂ forcing, +8 % / +29 %).
+      Nothing is tuned to move the warming. P5 may then start.
+    - **Heat-transport slab pair:** record only, into the attribution. It does not change the
+      configuration of criterion 4, which is revisited with the P6 ocean together with a
+      recheck of the warming.
+    - **Convection intermittency and the Hadley collapse with shallow convection:** first
+      work item of P5 (its precipitation row already fails, 0.82 vs 0.85); must be resolved
+      before P6.
+    - **Q4** (P5/P6 thresholds): unchanged until a P5 scorecard exists with the final physics.
+    - **Q2** (station series, procedural terrain): no decision now.
+    - **Stop and report (do not work around) if:** the L26 inversion check fails; no T21
+      variant brings the tropical net CRE within 15 W m⁻² of CERES while keeping P4 criteria
+      1–2 and cover ≥ 0.5; the T42 pass cannot meet criteria 1, 2, 3 and 5 together; the 400
+      ppm slab aquaplanet leaves 283–293 K with the frozen T42 knobs; anything accepted
+      regresses in `scripts/regress`. Machine budget: ≤ 16 threads in total.

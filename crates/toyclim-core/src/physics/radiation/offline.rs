@@ -89,6 +89,7 @@ fn one(base: &SemiGray, c: &Column) -> std::result::Result<Result, String> {
         cond: None,
         insolation: c.s0,
         cos_zenith: c.mu0,
+        omega: &[],
     };
     let mut st = ColumnState::new(l, 1);
     st.t.copy_from_slice(&c.t);

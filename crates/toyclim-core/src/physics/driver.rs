@@ -144,6 +144,10 @@ struct ColumnScratch {
     dp: Vec<f64>,
     ph: Vec<f64>,
     diag: Vec<f64>,
+    /// ω and the per-level scratch of its computation (empty unless needed).
+    omega: Vec<f64>,
+    div: Vec<f64>,
+    vg: Vec<f64>,
 }
 
 /// The column physics of a model and everything it needs between calls.
@@ -171,6 +175,8 @@ pub struct PhysicsDriver {
     /// per point; see [`ColumnScheme::memory`]); part of the restart state.
     memory: Vec<Real>,
     mem_len: usize,
+    /// The σ levels, kept when a scheme needs ω ([`ColumnScheme::needs_omega`]).
+    omega_levels: Option<SigmaLevels>,
 }
 
 impl PhysicsDriver {
@@ -206,6 +212,10 @@ impl PhysicsDriver {
             insol: vec![0.0; n],
             coszen: vec![0.0; n],
             registry,
+            omega_levels: schemes
+                .iter()
+                .any(|s| s.needs_omega())
+                .then(|| levels.clone()),
             schemes,
         }
     }
@@ -278,7 +288,9 @@ impl PhysicsDriver {
         let ndiag = self.registry.len();
         let dslot = ndiag.max(1);
         let tref = cx.planet.t_ref as Real;
-        self.grids.fill_with(tr, s, false);
+        let omega_levels = self.omega_levels.as_ref();
+        // divergence only when ω is needed (vorticity comes along, unused)
+        self.grids.fill_with(tr, s, omega_levels.is_some());
         if let Some(orbit) = cx.orbit {
             let sun = orbit.sun(cx.time);
             self.insol
@@ -325,6 +337,18 @@ impl PhysicsDriver {
                     sc.ph[k] = sigma_half[k] * ps;
                 }
                 sc.ph[l] = ps;
+                if let Some(lev) = omega_levels {
+                    let ic2 = tr.inv_cos2[j] as f64;
+                    for k in 0..l {
+                        let (u, v) = (g.u[k][p] as f64, g.v[k][p] as f64);
+                        sc.vg[k] = (u * g.px[p] as f64 + v * g.py[p] as f64) * ic2;
+                        sc.div[k] = g.div[k][p] as f64;
+                    }
+                    lev.omega_over_p(&sc.div, &sc.vg, &mut sc.omega);
+                    for k in 0..l {
+                        sc.omega[k] *= sc.p[k];
+                    }
+                }
                 let sfc = &mut sc.sfc;
                 sfc.begin();
                 sfc.tiles.clear();
@@ -354,6 +378,7 @@ impl PhysicsDriver {
                     cond: cx.cond,
                     insolation: insol[p] as f64,
                     cos_zenith: coszen[p] as f64,
+                    omega: &sc.omega,
                 };
                 sc.diag.fill(0.0);
                 for (ph, r) in schemes.iter().zip(ranges) {
@@ -420,6 +445,9 @@ impl PhysicsDriver {
             dp: vec![0.0; l],
             ph: vec![0.0; l + 1],
             diag: vec![0.0; ndiag],
+            omega: vec![0.0; if omega_levels.is_some() { l } else { 0 }],
+            div: vec![0.0; if omega_levels.is_some() { l } else { 0 }],
+            vg: vec![0.0; if omega_levels.is_some() { l } else { 0 }],
         };
         jobs.for_each_init(scratch, row);
         // Scatter the column-major buffers (`[point][du | dv | dT | dq]`) to

@@ -400,6 +400,7 @@ impl Scm {
             cond: self.cond.as_ref(),
             insolation,
             cos_zenith,
+            omega: &[],
         };
         let s = &mut self.state;
         s.begin(dt);
