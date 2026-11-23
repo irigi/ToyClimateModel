@@ -38,7 +38,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm at 305 K, 800 ppm failed the humidity envelope at 311 K. Question 6 closed as a limitation; 7 to be rerun before P6 |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6 |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -2494,16 +2494,24 @@ slab SST difference), 400 ppm CO₂. 20°S–20°N, same quantities as the facto
 
 **Heat-transport slab pair** (record only, owner decision; item 4 of the review round,
 `cases/bench/p4_review/oht_t21_*.toml`, Q₀ = 50 W m⁻², from the frozen pair's restarts):
-- 400 ppm: annual global T_s 289.4 → 305.1 K over 13 years (still running; result below
-  when it finishes);
+- 400 ppm: finished (rc = 0, model years 62–75). Last 10 years (65–75, `tools/equilibrium.py`):
+  annual global T_s 306.62, 306.63, 306.55, 306.40, 306.38, 306.68, 306.79, 306.58, 306.37,
+  305.97 K; trend −0.037 K/yr (fails < 0.02), net TOA −0.34 W m⁻², closure residual −0.05,
+  TOA − residual −0.30 (passes ±0.3): **NOT EQUILIBRATED** by the trend test (it drifts down
+  in the last 4 years). Climatology means over years 65–75: global T_s 306.5 K (equator 321.6
+  K, |φ| > 80° 289.0 K), sea ice 0 everywhere, cover 0.41, SW / LW CRE −44.9 / +22.6 W m⁻²;
+  20°S–20°N T_s 318.1 K, SW / LW / net CRE −35.5 / +12.9 / −22.6 (no `cre_split` in this
+  run, so no convective/stratiform split);
 - 800 ppm: 300.7 → 311.0 K over 11 years, still rising 0.2–0.5 K/yr, then **stopped at day
   24144 (year 67)**: "specific humidity above 0.1 kg/kg for 101 consecutive steps: the
   atmosphere is outside the dilute envelope this model supports (SPEC.md §9.4.4)". No restart
   was written (restarts are written at the end only).
-- With this heat transport the 400 ppm aquaplanet is 16 K warmer than the frozen pair's and
-  far outside 283–293 K; both states lose their sea ice. A rough difference of the last annual
-  means is 311.0 − 305.1 ≈ 6 K, but neither run is equilibrated and the 800 ppm one failed, so
-  it is not a warming estimate.
+- With this heat transport the 400 ppm aquaplanet is about 17 K warmer than the frozen pair's
+  (306.5 vs 289.4 K) and far outside 283–293 K; it is ice-free. No warming estimate: the 400
+  ppm run fails the trend test and the 800 ppm run stopped at the humidity envelope before
+  equilibrating (its last annual mean, 311.0 K, was still rising). Attribution: with Q₀ = 50
+  W m⁻² the slab states leave the envelope the model supports, so this configuration cannot
+  serve criterion 4; it stays record only, as decided.
 
 **Step 2 — Slingo (1987) low cloud** (commit 415e65d), `[clouds] low_cloud = "slingo"`, off by
 default:
@@ -3070,7 +3078,7 @@ tests); observed LTS values (paper not fetched).
         cloud), CO₂ alone 16–21 % (boundary-layer stratiform cloud);
       - Earth T42: the boundary-layer stratiform cloud (σ ≥ 0.7, mostly σ 0.87, peak at
         5–20°) has a tropical net CRE of −27.7 W m⁻², equal to the excess against CERES (27.9).
-      - Heat-transport pair: running (next entry).
+      - Heat-transport pair: 400 ppm 306.5 K, not equilibrated; 800 ppm stopped at the humidity envelope (next entry).
     - **Owner, choose:**
       - (iv) implement the Slingo (1987) low cloud (eqs. 6–9: RH cloud suppressed under
         subsidence, inversion-strength boundary-layer cloud), which needs ω in the column
