@@ -35,6 +35,7 @@
 
 use super::DiagnosticClouds;
 use crate::physics::column::{ColumnCtx, ColumnState};
+use crate::surface::Tile;
 
 /// Slingo (1987) eq. (1) constants from his Table 1 (P in mm day⁻¹).
 const SLINGO_A: f64 = 0.2454;
@@ -64,6 +65,7 @@ impl DiagnosticClouds {
         ctx: &ColumnCtx,
         st: &ColumnState,
         q: &[f64],
+        tiles: &[Tile],
         m: &mut [f64],
         diag: &mut [f64],
     ) {
@@ -107,7 +109,7 @@ impl DiagnosticClouds {
         } else {
             0.0
         };
-        let inv = self.column_inversion(ctx, st, q);
+        let inv = self.column_inversion(ctx, st, q, tiles);
         let (mut path, mut conv_path) = (0.0, 0.0);
         for k in 0..l {
             if ctx.sigma[k] < self.sigma_min {

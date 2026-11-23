@@ -3254,3 +3254,24 @@ tests); observed LTS values (paper not fetched).
       recommended. (B) keep a trigger but at a value L26 reaches (e.g. −0.07 K/hPa) — a fitted
       threshold, rejected for the same reason as (v). (C) the CAM form as published — decks
       0.1–0.4; would not reach the owner's expected deck cover.
+    - **Owner decision on the form of the law (2026-11-23 evening, follows 6789a02): (A).**
+      The stratus law without the stability trigger, everything else as in the CAM source:
+      θ_s from the SST, open ocean only (no land, no sea ice), placed in the most stable layer
+      below 750 hPa, capped by the humidity there, combined with the RH cloud by maximum; the
+      Slingo subsidence gate on the RH low cloud stays. Rejected: (B) fitted threshold, as
+      (v); (C) decks at 0.1–0.4. **Stated deviation:** the −0.125 K/hPa trigger is omitted
+      because L26 does not resolve layer inversions (same argument as for eq. 8). The
+      constants were read from the CAM source and a forum quotation; neither the 1993 paper
+      nor the CAM3 technical note was read. CAM is a reference for the formula and constants
+      only: code written independently, no source copied. Defaults slope 0.057, intercept
+      −0.5573; no trigger knob. Before 3-D: extend the offline check (law alone) to the
+      Southern Ocean 45–60°S, North Pacific and North Atlantic 40–60°N, open ocean poleward
+      of 60°, and the zonal low cloud against CERES cover by band; stop only if the law gives
+      more than 0.8 year-round over a whole band. Then steps 4–8 as before; the deck stop
+      condition refers to the law alone and is satisfied. Known limitations for the P4
+      closing entry: (1) L26 does not resolve boundary-layer inversions, low cloud rests on a
+      bulk-stability regression fitted to Earth's oceans, more boundary-layer levels a
+      candidate for later (owner decides); (2) for non-Earth cases the law is an
+      extrapolation: from the first exoplanet benchmark on, each benchmark is run with
+      low_cloud on and off, both reported, nothing tuned on them; (3) the law is tied to SST
+      and open ocean, recheck when the P6 ocean replaces prescribed SST.

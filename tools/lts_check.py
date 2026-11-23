@@ -33,7 +33,19 @@ import pathlib
 
 import numpy as np
 
-from inversion_check import KAPPA, REGIONS, snapshots
+from inversion_check import KAPPA, REGIONS as DECKS, snapshots
+
+# Regions the CAM trigger used to exclude (owner, 2026-11-23, decision (A)); peak = local summer.
+REGIONS = DECKS + [
+    ("Southern Ocean 45-60S", -60, -45, 0, 360, (12, 1, 2)),
+    ("N Pacific 40-60N", 40, 60, 140, 235, (6, 7, 8)),
+    ("N Atlantic 40-60N", 40, 60, 300, 355, (6, 7, 8)),
+    ("ocean poleward 60N", 60, 90, 0, 360, (6, 7, 8)),
+    ("ocean poleward 60S", -90, -60, 0, 360, (12, 1, 2)),
+]
+BANDS = [("90–65°S", -90, -65), ("65–40°S", -65, -40), ("40–20°S", -40, -20), ("20°S–20°N", -20, 20),
+         ("20–40°N", 20, 40), ("40–65°N", 40, 65), ("65–90°N", 65, 90), ("global", -90, 90)]
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 SLOPE, OFFSET, TRIGGER, PREMIB = 0.057, 0.5573, -0.125, 75000.0
 
@@ -50,11 +62,12 @@ def analyse(run):
     dt = float(cfg["dt"])
     year = 365.25 * 86400.0
     start = float(cfg.get("climatology", {}).get("start", 0.0))
-    fs = {n: snapshots(run, n) for n in ("t", "rh", "ts", "ps")}
+    fs = {n: snapshots(run, n) for n in ("t", "rh", "ts", "ps", "cl")}
     land = np.load(next(iter(snapshots(run, "land").values()))).reshape(nlat, nlon) > 0.5
     steps = sorted(s for s in fs["t"] if all(s in fs[n] for n in fs) and s * dt >= start)
     k700 = int(np.argmin(np.abs(sig - 0.7)))
-    out = {k: [] for k in ("strat", "fire", "cam", "notrig", "lts", "month", "dthdp")}
+    out = {k: [] for k in ("strat", "fire", "cam", "notrig", "lts", "month", "dthdp", "low_old", "low_new")}
+    lowlev = sig >= 0.8
     for s in steps:
         t = np.load(fs["t"][s]).astype(float).reshape(l, nlat, nlon)
         rh = np.load(fs["rh"][s]).astype(float).reshape(l, nlat, nlon)
@@ -82,6 +95,12 @@ def analyse(run):
         rhk = np.take_along_axis(rh, kc[None], 0)[0]
         rhk1 = np.take_along_axis(rh, np.minimum(kc + 1, l - 1)[None], 0)[0]
         lim = np.minimum(strat, np.maximum(rhk, rhk1))
+        cl = np.load(fs["cl"][s]).astype(float).reshape(l, nlat, nlon)
+        new = cl.copy()
+        cur = np.take_along_axis(new, kc[None], 0)[0]
+        np.put_along_axis(new, kc[None], np.where(ocean, np.maximum(cur, lim), cur)[None], 0)
+        out["low_old"].append(cl[lowlev].max(axis=0))
+        out["low_new"].append(new[lowlev].max(axis=0))
         out["strat"].append(strat)
         out["fire"].append(fire_any.astype(float))
         out["cam"].append(np.where(fire_any, lim, 0.0))
@@ -108,9 +127,28 @@ def analyse(run):
                 g = np.isfinite(x)
                 return float((x[g] * ww[g]).sum() / ww[g].sum()) if g.any() else float("nan")
 
-            r[tag] = {k: mean(arr[k]) for k in ("strat", "fire", "cam", "notrig", "lts", "dthdp")}
+            r[tag] = {k: mean(arr[k]) for k in ("strat", "fire", "cam", "notrig", "lts", "dthdp", "low_old",
+                                                "low_new")}
         res["regions"][name] = r
-    res["maps"] = {k: np.nanmean(arr[k], axis=0) for k in ("strat", "cam", "notrig", "fire")}
+    res["maps"] = {k: np.nanmean(arr[k], axis=0) for k in ("strat", "cam", "notrig", "fire", "low_old", "low_new")}
+    # zonal means (land counts as 0 for the law) and bands, with the model and CERES cover
+    z = {k: res["maps"][k].mean(axis=1) for k in ("notrig", "low_old", "low_new")}
+    clt = np.load(run / "climatology" / "mean_clt.npy").astype(float).reshape(nlat, nlon)
+    z["clt"] = clt.mean(axis=1)
+    # total cover after the change, random overlap of the change with the rest of the column
+    lo, ln = res["maps"]["low_old"], res["maps"]["low_new"]
+    z["clt_new"] = (1.0 - (1.0 - clt) * (1.0 - ln) / np.maximum(1.0 - lo, 1e-6)).mean(axis=1)
+    trunc = cfg.get("truncation")
+    cer = ROOT / "reference" / "derived" / f"t{trunc}" / "clt_ceres.npy"
+    if cer.exists():
+        c = np.load(cer).astype(float)
+        z["ceres"] = (c.mean(axis=0) if c.ndim == 3 else c).reshape(nlat, nlon).mean(axis=1)
+    wl = np.cos(np.radians(lat))
+    res["zonal"] = {k: v.tolist() for k, v in z.items()}
+    res["bands"] = {}
+    for name, a0, a1 in BANDS:
+        m = (lat >= a0) & (lat <= a1)
+        res["bands"][name] = {k: float((v[m] * wl[m]).sum() / wl[m].sum()) for k, v in z.items()}
     res["lat"], res["lon"], res["land"] = lat, lon, land
     return res
 
@@ -132,6 +170,12 @@ def main():
                 x = rr[tag]
                 print(f"| {name} | {tag} | {x['lts']:.1f} | {x['strat']:.2f} | {x['fire']:.2f} | {x['cam']:.2f} "
                       f"| {x['notrig']:.2f} | {x['dthdp']:+.3f} |")
+    print("\n| band | law alone (ocean, land = 0) | low cloud σ≥0.8, now | low cloud after | cover now | "
+          "cover after (est.) | CERES cover |")
+    print("|---|---|---|---|---|---|---|")
+    for name, b in r["bands"].items():
+        print(f"| {name} | {b['notrig']:.2f} | {b['low_old']:.2f} | {b['low_new']:.2f} | {b['clt']:.3f} | "
+              f"{b['clt_new']:.3f} | {b.get('ceres', float('nan')):.3f} |")
     if a.json:
         js = {k: v for k, v in r.items() if k not in ("maps", "lat", "lon", "land")}
         pathlib.Path(a.json).write_text(json.dumps(js, indent=1))
@@ -148,12 +192,13 @@ def figure(r, path, title):
     lat, lon = r["lat"], r["lon"]
     order = np.argsort(np.where(lon > 180, lon - 360, lon))
     lo = np.where(lon > 180, lon - 360, lon)[order]
-    fig, axs = plt.subplots(2, 2, figsize=(13, 7))
+    fig, axs = plt.subplots(3, 2, figsize=(13, 10))
     for ax, (key, lab) in zip(axs.flat, (
             ("strat", "LTS law alone: clamp(0.057 LTS − 0.5573, 0, 1)"),
             ("fire", "share of snapshots with Δθ/Δp < −0.125 K/hPa (CAM trigger)"),
             ("cam", "stratus as CAM (trigger, RH limit)"),
-            ("notrig", "stratus without the trigger (RH limit)"))):
+            ("notrig", "stratus without the trigger (RH limit)"),
+            ("low_new", "low cloud (max over σ ≥ 0.8) after adding the law"))):
         im = ax.pcolormesh(lo, lat, r["maps"][key][:, order], vmin=0, vmax=1, cmap="Blues", shading="auto")
         ax.contour(lo, lat, r["land"][:, order].astype(float), [0.5], colors="k", linewidths=0.5)
         for name, la0, la1, lo0, lo1, months in REGIONS[:5]:
@@ -162,6 +207,16 @@ def figure(r, path, title):
         ax.set_title(lab, fontsize=9)
         ax.set_ylim(-60, 60)
         fig.colorbar(im, ax=ax, shrink=0.8)
+    ax = axs[2, 1]
+    for k, lab in (("notrig", "law alone"), ("low_old", "low cloud now"), ("low_new", "low cloud after"),
+                   ("clt", "cover now"), ("clt_new", "cover after (est.)"), ("ceres", "CERES cover")):
+        if k in r["zonal"]:
+            ax.plot(lat, r["zonal"][k], label=lab, ls="--" if k == "ceres" else "-")
+    ax.set_xlim(-90, 90)
+    ax.set_ylim(0, 1)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=7)
+    ax.set_title("zonal means", fontsize=9)
     fig.suptitle(f"{title}: time means over the climatology window", fontsize=10)
     fig.tight_layout()
     fig.savefig(path, dpi=110)

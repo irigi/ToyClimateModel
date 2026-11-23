@@ -24,7 +24,8 @@
 //! - No clouds above σ_min.
 //!
 //! Convective cloud geometry, `convective` = "column" (default, the P4 scheme) or "anvil":
-//! see [`anvil`]. Low cloud, `low_cloud` = "rh" (default, the P4 scheme) or "slingo": see [`low`].
+//! see [`anvil`]. Low cloud, `low_cloud` = "rh" (default, the P4 scheme), "slingo" or "slingo_lts": see
+//! [`low`].
 //!
 //! Diagnostic: `clwvi`, the grid-mean condensed water path \[kg m⁻²\] (the total cover
 //! `clt` comes from the radiation, which uses these clouds in the next step).
@@ -100,6 +101,10 @@ pub struct DiagnosticClouds {
     pub inv_pressure: f64,
     pub inv_slope: f64,
     pub inv_offset: f64,
+    /// "slingo_lts": slope \[K⁻¹\] and intercept of the stratus law (Klein & Hartmann 1993
+    /// as coded in CAM).
+    pub lts_slope: f64,
+    pub lts_intercept: f64,
 }
 
 /// Low-cloud treatment of [`DiagnosticClouds`].
@@ -109,6 +114,9 @@ pub enum LowCloud {
     Rh,
     /// Slingo (1987): RH cloud suppressed under subsidence, plus inversion cloud.
     Slingo,
+    /// Slingo's suppressed RH cloud plus the lower-tropospheric-stability stratus law
+    /// (Klein & Hartmann 1993) in place of his inversion cloud.
+    SlingoLts,
 }
 
 /// RH law of the Slingo low cloud C_L'.
@@ -160,6 +168,8 @@ impl DiagnosticClouds {
             inv_pressure: 75000.0,
             inv_slope: 6.67,
             inv_offset: 0.667,
+            lts_slope: 0.057,
+            lts_intercept: -0.5573,
         }
     }
 
@@ -216,15 +226,17 @@ impl ColumnScheme for DiagnosticClouds {
         "diagnostic_clouds"
     }
     fn diagnostics(&self) -> &'static [&'static str] {
-        match (self.cre_split, self.low_cloud == LowCloud::Slingo) {
-            (false, false) => &["clwvi"],
-            (true, false) => &["clwvi", "cc_conv", "cwp_conv"],
-            (false, true) => &["clwvi", "cl_inv", "inv_dthdp"],
-            (true, true) => &["clwvi", "cc_conv", "cwp_conv", "cl_inv", "inv_dthdp"],
+        match (self.cre_split, self.low_cloud) {
+            (false, LowCloud::Rh) => &["clwvi"],
+            (true, LowCloud::Rh) => &["clwvi", "cc_conv", "cwp_conv"],
+            (false, LowCloud::Slingo) => &["clwvi", "cl_inv", "inv_dthdp"],
+            (true, LowCloud::Slingo) => &["clwvi", "cc_conv", "cwp_conv", "cl_inv", "inv_dthdp"],
+            (false, LowCloud::SlingoLts) => &["clwvi", "cl_lts", "lts"],
+            (true, LowCloud::SlingoLts) => &["clwvi", "cc_conv", "cwp_conv", "cl_lts", "lts"],
         }
     }
     fn needs_omega(&self) -> bool {
-        self.low_cloud == LowCloud::Slingo
+        self.low_cloud != LowCloud::Rh
     }
     fn memory(&self, nlev: usize) -> usize {
         if self.cre_split {
@@ -249,12 +261,12 @@ impl ColumnScheme for DiagnosticClouds {
             return;
         };
         if self.convective == ConvectiveCloud::Anvil {
-            self.apply_anvil(ctx, st, q, m, diag);
+            self.apply_anvil(ctx, st, q, &sfc.tiles, m, diag);
             return;
         }
         let (planet, g) = (ctx.planet, ctx.planet.gravity);
         let cc = self.convective(st.conv_precip);
-        let inv = self.column_inversion(ctx, st, q);
+        let inv = self.column_inversion(ctx, st, q, &sfc.tiles);
         let (mut path, mut conv_path) = (0.0, 0.0);
         for k in 0..l {
             if ctx.sigma[k] < self.sigma_min {
@@ -296,3 +308,5 @@ impl ColumnScheme for DiagnosticClouds {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_lts;

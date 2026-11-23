@@ -37,18 +37,22 @@ pub const CLOUD_KEYS: &[&str] = &[
     "inv_pressure",
     "inv_slope",
     "inv_offset",
+    "lts_slope",
+    "lts_intercept",
 ];
 
-/// Knobs that only `low_cloud = "slingo"` reads.
-const SLINGO_LOW_KEYS: &[&str] = &[
+/// Knobs that `low_cloud = "slingo"` and `"slingo_lts"` read.
+const GATED_LOW_KEYS: &[&str] = &[
     "low_sigma",
     "low_rh",
     "low_rh_crit",
     "low_omega",
     "inv_pressure",
-    "inv_slope",
-    "inv_offset",
 ];
+/// Knobs that only `low_cloud = "slingo"` reads.
+const SLINGO_LOW_KEYS: &[&str] = &["inv_slope", "inv_offset"];
+/// Knobs that only `low_cloud = "slingo_lts"` reads.
+const LTS_LOW_KEYS: &[&str] = &["lts_slope", "lts_intercept"];
 
 /// A string option of `[clouds]` from `choices` (name, value); the first is the default.
 fn choice<T: Copy>(p: &toml::Table, key: &str, choices: &[(&str, T)]) -> Result<T, String> {
@@ -107,7 +111,11 @@ pub(crate) fn diagnostic_clouds(
         low_cloud: choice(
             p,
             "low_cloud",
-            &[("rh", LowCloud::Rh), ("slingo", LowCloud::Slingo)],
+            &[
+                ("rh", LowCloud::Rh),
+                ("slingo", LowCloud::Slingo),
+                ("slingo_lts", LowCloud::SlingoLts),
+            ],
         )?,
         low_sigma: num(p, "low_sigma", d.low_sigma)?,
         low_rh: choice(
@@ -120,12 +128,35 @@ pub(crate) fn diagnostic_clouds(
         inv_pressure: num(p, "inv_pressure", d.inv_pressure)?,
         inv_slope: num(p, "inv_slope", d.inv_slope)?,
         inv_offset: num(p, "inv_offset", d.inv_offset)?,
+        lts_slope: num(p, "lts_slope", d.lts_slope)?,
+        lts_intercept: num(p, "lts_intercept", d.lts_intercept)?,
         ..d
     };
-    if c.low_cloud != LowCloud::Slingo {
-        if let Some(k) = SLINGO_LOW_KEYS.iter().find(|k| p.contains_key(**k)) {
-            return Err(format!("[clouds] {k} needs low_cloud = \"slingo\""));
+    for (keys, ok, need) in [
+        (
+            GATED_LOW_KEYS,
+            c.low_cloud != LowCloud::Rh,
+            "low_cloud = \"slingo\" or \"slingo_lts\"",
+        ),
+        (
+            SLINGO_LOW_KEYS,
+            c.low_cloud == LowCloud::Slingo,
+            "low_cloud = \"slingo\"",
+        ),
+        (
+            LTS_LOW_KEYS,
+            c.low_cloud == LowCloud::SlingoLts,
+            "low_cloud = \"slingo_lts\"",
+        ),
+    ] {
+        if !ok {
+            if let Some(k) = keys.iter().find(|k| p.contains_key(**k)) {
+                return Err(format!("[clouds] {k} needs {need}"));
+            }
         }
+    }
+    if c.lts_slope.is_nan() || c.lts_slope < 0.0 || c.lts_intercept.is_nan() {
+        return Err("[clouds] lts_slope must be ≥ 0 and lts_intercept a number".into());
     }
     if !(0.0..=1.0).contains(&c.low_sigma) || !(0.0..1.0).contains(&c.low_rh_crit) {
         return Err("[clouds] low_sigma must be in [0, 1] and low_rh_crit in [0, 1)".into());
