@@ -3169,3 +3169,88 @@ tests); observed LTS values (paper not fetched).
       1–2 and cover ≥ 0.5; the T42 pass cannot meet criteria 1, 2, 3 and 5 together; the 400
       ppm slab aquaplanet leaves 283–293 K with the frozen T42 knobs; anything accepted
       regresses in `scripts/regress`. Machine budget: ≤ 16 threads in total.
+    - **Owner decision on the low cloud (2026-11-23 evening, follows 446131e):**
+      - Heat-transport pair closed, record only (400 ppm 306.5 K, ice-free, not equilibrated;
+        800 ppm failed): no warming estimate, no further heat-transport runs in P4; criterion
+        4 keeps its configuration and stays open as decided.
+      - Separating run recorded (85 % of the cloud loss follows the slab SST pattern, uniform
+        warming +2.2 W m⁻²); it goes to the P5 convection item and the P6 ocean; nothing in
+        P4 acts on it.
+      - Stopping at the inversion check was correct; eq. (8) is not used.
+      - **Option (vi) chosen:** keep the eq. (7) subsidence gate on the RH low cloud; replace
+        eq. (8) by the lower-tropospheric-stability stratus law of Klein & Hartmann (1993, J.
+        Climate 6, 1587–1606) as a new option value (`low_cloud = "slingo_lts"`), off by
+        default, byte-identical when off; the eq. (8) variant stays in the code, off, with a
+        doc note that L26 does not resolve it. Rejected: (v); (vii) noted as a candidate for a
+        later milestone; (viii) is run as one diagnostic variant.
+      - Source: the CAM3 description (Collins et al. 2004, NCAR/TN-464+STR), Rasch &
+        Kristjánsson (1998) if needed, and one more try at the 1993 paper. The owner's
+        remembered form, min(1, max(0, 0.057·LTS − 0.5573)), is not to be used unverified.
+        Transcribe constants, surface θ, ocean-only restriction, vertical placement, humidity
+        factor; state which document they come from. If neither source can be fetched, stop.
+      - Implementation: maximum with the RH cloud in the same layer; in-cloud water as other
+        stratiform cloud; freeze-dry and sigma_min unchanged; SCM tests; knobs in
+        docs/tuning.md (published values as defaults, moved only inside a stated range and
+        only against CERES). Offline check on the T42 Earth output first; **stop if the decks
+        come out under 0.3**.
+      - Recorded fact, not a criterion: this law makes low cloud rise with stability, which
+        generally rises under warming; its effect on the 2×CO₂ warming is measured once at
+        the gate and plays no role in tuning.
+      - Then steps 4–8 of the earlier plan: step 4 T21 variants (a) frozen, (b) gate only
+        (diagnostic), (c) gate + LTS law with published constants, (d) as (c) with
+        `rh_crit_surface` lowered from 0.95 in steps; step 5 the two matching factorial cases
+        (diagnostic); step 6 one T42 pass, cover aiming ≥ 0.55, then freeze; step 7 gate;
+        step 8 closing entry, then stop. Q7 rerun when the machine has room. Stop conditions as
+        above (with the offline deck check replacing the inversion check).
+      - **Readings adopted (mine, flagged to the owner):** in (b)–(d) the gated RH low cloud
+        uses the existing Sundqvist RH_c profile (`low_rh = "sundqvist"`), so that
+        `rh_crit_surface` in (d) acts on the low cloud (with `low_rh = "slingo"` the σ ≥ 0.8
+        cloud uses `low_rh_crit` instead); (b) is the new option with the LTS cloud switched
+        off by a flag; "the two matching factorial cases" are S400/C400 and S800/C800.
+    - **Result of the offline check (2026-11-23 evening): stop condition reached, owner
+      choice needed.** Sources: the CAM3 technical note could not be fetched (cesm.ucar.edu
+      redirects to www2, HTTP 401 / TLS error; opensky.ucar.edu serves a bot check); the AMS
+      PDF of Klein & Hartmann (1993) returned 403 again. **Fetched and read:** the CAM
+      implementation, ESCOMP/CAM tag `cam_cesm2_2_rel`, `src/physics/cam/cloud_fraction.F90`
+      (`cldfrc`) and `bld/namelist_files/namelist_defaults_cam.xml` (no licence file found
+      in the repository; no code copied, constants transcribed). It states
+      strat = min(1, max(0, ocnfrac·((θ(k700) − θ_s)·0.057 − 0.5573))) — the owner's
+      remembered constants are confirmed — with θ_s = (SST − Γφ_s/g)(p₀/p_s)^κ, only where
+      ocnfrac > 0.01 (ocean without sea ice), k700 the level nearest 700 hPa by reference
+      pressure; **and a trigger**: the cloud exists only where the most stable adjacent pair
+      with the lower level at p ≥ `premib` (750 hPa for CAM4 physics, 700 for CAM5/6) has
+      Δθ/Δp < −0.125 K/hPa ("nothing triggers unless a stability greater than this minimum
+      threshold is found"; surface pair tried if no level pair qualifies); it is placed in
+      the lower layer of that pair, limited by max(RH_k, RH_{k+1}), and combined with the RH
+      cloud by maximum. The 1993 paper itself was not read.
+    - Offline on the T42 Earth output (`tools/lts_check.py`, `out/p4/slingo/earth_inv_t42`,
+      74 snapshots; figure `docs/figures/P4/lts_check_inv_t42.png`, T21 in `…_base_t21.png`):
+
+      | region (T42) | LTS [K] all / peak | law alone all / peak | trigger fires all / peak | CAM form (trigger + RH) all / peak | without trigger (+ RH) all / peak |
+      |---|---|---|---|---|---|
+      | Peru | 18.6 / 21.7 | 0.50 / 0.68 | 0.29 / 0.54 | 0.17 / 0.37 | 0.50 / 0.67 |
+      | Namibia | 18.3 / 19.6 | 0.49 / 0.56 | 0.38 / 0.60 | 0.22 / 0.36 | 0.47 / 0.53 |
+      | California | 17.7 / 20.8 | 0.45 / 0.63 | 0.23 / 0.32 | 0.12 / 0.22 | 0.45 / 0.62 |
+      | Canary | 16.1 / 19.7 | 0.36 / 0.57 | 0.17 / 0.32 | 0.09 / 0.20 | 0.36 / 0.56 |
+      | Australia | 13.3 / 15.9 | 0.22 / 0.35 | 0.14 / 0.12 | 0.03 / 0.05 | 0.22 / 0.35 |
+      | trades 5–20N / 5–20S | 12.1 / 12.6 | 0.14 / 0.16 | 0.15 / 0.11 | 0.03 / 0.03 | 0.14 / 0.16 |
+      | warm pool | 10.9 | 0.07 | 0.04 | 0.01 | 0.07 |
+
+      T21 is weaker (law alone at peak 0.52–0.58 in the four main decks; CAM form 0.04–0.23).
+      Figures (opened): the law alone has clear maxima along the west coasts of the Americas
+      and Africa, sharper at T42, and a weaker band at 40–60°N over the oceans; the trigger
+      fires mostly over the Southern Ocean (shares 0.6–0.9 at 45–60°S) and in thin coastal
+      strips, rarely inside the deck boxes; so the CAM form puts its stratus there and leaves
+      the decks at 0.1–0.4. The RH limit barely binds (without trigger ≈ law alone).
+    - **Reading:** the law itself gives the expected deck cover (0.5–0.68 at peak, owner's
+      expectation about 0.6; trades 0.14–0.16, slightly above the expected 0.05–0.13), but the
+      published implementation gates it with a Δθ/Δp threshold of the same kind as Slingo's
+      eq. (8), which L26 does not reach in the decks (mean most stable layer −0.11 to −0.126
+      at peak). As transcribed, the decks come out under 0.3 (all seasons 0.09–0.22; peak
+      0.20–0.37): **stop condition, nothing implemented in the model.**
+    - **Owner, choose:** (A) the law without CAM's trigger (cloud placed in the most stable
+      layer below 750 hPa as transcribed, RH limit, ocean only) — a stated deviation from the
+      CAM implementation, justified by the same resolution argument that set eq. (8) aside;
+      recommended. (B) keep a trigger but at a value L26 reaches (e.g. −0.07 K/hPa) — a fitted
+      threshold, rejected for the same reason as (v). (C) the CAM form as published — decks
+      0.1–0.4; would not reach the owner's expected deck cover.
