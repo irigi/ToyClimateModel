@@ -69,7 +69,8 @@ godot/                     Godot project (viewer)
 cases/                     TOML configs for test cases and experiments
 tools/                     Python analysis and plotting (requirements.txt: numpy, matplotlib)
 docs/
-  progress.md              session log (see §9)
+  progress.md              session log: status, summaries, latest entries (see §10)
+  progress/                archive of older entries per milestone, closed questions
   figures/M<n>/            small PNGs produced by acceptance runs (committed)
 reference/                 reference outputs supplied by the owner (git-ignored if large)
 out/                       run output (git-ignored)
@@ -1692,8 +1693,10 @@ work, write the evidence in "Open questions for the owner", and continue elsewhe
 
 ## 10. Session protocol (for Claude sessions)
 
-1. Read `SPEC.md` in full, then `docs/progress.md` (status table and the last three
-   entries at least), `docs/design-decisions.md` and `docs/tuning.md`. Continue at the
+1. Read `SPEC.md` in full, then `docs/progress.md` in full (status, milestone summaries,
+   the current milestone's state, the latest entries, open questions),
+   `docs/design-decisions.md` and `docs/tuning.md`. Open the archive `docs/progress/` only
+   where a summary points to it. Continue at the
    lowest milestone whose acceptance criteria are not all met: first Part I (§8), then
    P0–P9 in order (§9.6). Do not start P10 or P11 without the owner's go-ahead.
 2. One branch per work segment, `p<n>-<short-name>` (Part I work: `m<n>-…`), from the
@@ -1724,6 +1727,10 @@ work, write the evidence in "Open questions for the owner", and continue elsewhe
 10. **`docs/progress.md` entry per session:** date, milestone, what was done, measured
     numbers (with T, levels, Δt, run length), scorecard file names, figures with one
     sentence each, tuning changes, open questions, next step. Update the status table.
+    New entries go into `docs/progress.md`; when a milestone closes, its older entries move
+    unchanged to `docs/progress/<milestone>.md`, and `docs/progress.md` keeps a summary of at
+    most 15 lines (numbers copied from the archive) with a link to it. Closed owner questions
+    move to `docs/progress/closed-questions.md`, leaving a one-line index entry.
 11. When a milestone is accepted, run `scripts/regress` (P-7) and record its result.
 12. Review triggers: §9.9.
 
