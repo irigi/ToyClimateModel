@@ -28,7 +28,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6 |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13) |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -467,6 +467,55 @@ tests); observed LTS values (paper not fetched).
 
 
 
+## 2026-11-23 (evening) – 2026-11-24 (night) — Question 13 (vi)/(A): stability stratus, T21 variants; **stopped at step 4** (branch `p4-clouds`)
+
+Owner decisions recorded under question 14 (history file): option (vi), then form (A) (CAM's
+trigger omitted). Housekeeping: this file compressed (d0c744b).
+
+- **Sources.** CAM3 note and Klein & Hartmann (1993) not fetched (UCAR 401/TLS, AMS 403). Read:
+  the CAM source (`cloud_fraction.F90`, tag cam_cesm2_2_rel) and its namelist defaults; constants
+  0.057 and −0.5573 confirmed; CAM gates the stratus with Δθ/Δp < −0.125 K/hPa (premib 750 hPa).
+- **Offline** (`tools/lts_check.py`, T42 Earth output, 74 snapshots; figures
+  `docs/figures/P4/lts_check_{inv_t42,base_t21}.png`): law alone 0.50 / 0.68 (Peru, all / peak),
+  0.49 / 0.56 (Namibia), 0.45 / 0.63 (California), 0.36 / 0.57 (Canary), 0.22 / 0.35 (Australia),
+  trades 0.14–0.16, warm pool 0.07; with CAM's trigger 0.09–0.22 all seasons (stop, owner chose
+  (A)). Regions the trigger excluded: Southern Ocean 45–60°S 0.17 / 0.29, N Pacific 0.30 / 0.66,
+  N Atlantic 0.24 / 0.47, ocean poleward 60°N 0.22 / 0.64, 60°S 0.12 / 0.28; no band above 0.8
+  (largest 0.17); estimated global cover 0.494 → 0.534 (CERES 0.674).
+- **Implementation** (81373cf): `low_cloud = "slingo_lts"`, knobs `lts_slope`, `lts_intercept`
+  (`lts_slope = 0` = gate only); open-ocean tiles only, θ_s from the ocean tiles' skin
+  temperature, k700 = σ nearest 0.7, placement in the lower level of the most stable pair below
+  750 hPa, cap max(RH_k, RH_k+1), maximum with the RH cloud, freeze-dry and σ_min unchanged. SCM
+  tests (`clouds/tests_lts.rs`): rises with LTS, zero below 9.78 K, open ocean only, f_ocn
+  scaling, RH cap, maximum, gate, no tendencies, random columns in range, config keys. Off:
+  byte-identical (10-day `aquaplanet_t21` 295 files, `ape_control_t21` 300, `earth_amip_t21`
+  369, 0 differing); `cargo test`: 125 core tests pass.
+- **Step 4, T21 Earth AMIP 1 + 1 years** (year 2; `cases/bench/p4_lts/t21/`, `out/p4/lts/t21/`;
+  (a) = `out/p4/slingo/earth_base_t21`, same physics; gated RH cloud with `low_rh = "sundqvist"`):
+
+  | variant | albedo | net TOA | SW / LW CRE | cover | 20°S–20°N net CRE (CERES −14.6) | Peru / Namibia low cloud |
+  |---|---|---|---|---|---|---|
+  | (a) frozen | 0.301 | +0.21 | −52.4 / +23.6 | 0.534 | −51.6 | 0.01 / 0.03 |
+  | (b) gate only | 0.262 | +12.06 | −39.1 / +22.2 | 0.457 | **−29.0** | 0.01 / 0.01 |
+  | (c) gate + law | 0.305 | −0.81 | −53.6 / +23.7 | 0.500 | −47.5 | 0.38 / 0.32 |
+  | (d) RH_s 0.90 / 0.85 / 0.80 | 0.303 / 0.303 / 0.306 | | | 0.497 / 0.497 / 0.500 | −48.5 / −47.1 / −49.9 | |
+  | (c) + `water_max` 3e-4 | 0.301 | +1.14 | −52.3 / +24.2 | 0.501 | −45.2 | |
+  | (c) + `water_max` 2e-4 | 0.292 | +3.70 | −49.3 / +23.7 | 0.499 | −39.8 | |
+  | (c) + `lts_intercept` −0.65 | 0.289 | +4.19 | −48.3 / +23.3 | 0.485 | −39.9 | |
+  | (c) + `water_max` 2e-4 + RH_u 0.85 | 0.303 | +1.85 | −53.2 / +25.9 | 0.529 | −42.2 | |
+
+  OLR 235.2–238.9 everywhere; the shape row fails at T21 in all variants, as with the frozen
+  knobs. Figures (opened): `lts_t21_bands.png`, `lts_t21_bands2.png` — every variant keeps the
+  equatorial SW CRE at about −80 to −95 against CERES about −50 while the cover there matches
+  CERES (0.65–0.69 against 0.73): the remaining excess is too-bright cloud in the ascending
+  tropics, which the subsidence gate does not touch; subtropical cover stays 0.3–0.4 (CERES
+  0.55–0.6) and the Southern Ocean 0.55–0.6 (0.85–0.9). `lts_t21_lowcloud.png`: the gate removes
+  the frozen scheme's low cloud over the tropical oceans and the Indian Ocean (0.4–0.6 → < 0.2);
+  the law puts stratus along the west coasts (0.3–0.5) and in the North Pacific, as offline.
+- **Stop condition:** no T21 variant brings the tropical net CRE within 15 W m⁻² of CERES while
+  keeping criteria 1–2 and cover ≥ 0.5; only (b) is within (−29.0), and it fails albedo, net TOA
+  and cover. Nothing adopted; steps 5–8 not started. Options in question 13.
+
 ## Open questions for the owner
 
 Latest ruling each; history in [open-questions.md](progress/open-questions.md), closed ones in
@@ -491,6 +540,14 @@ Latest ruling each; history in [open-questions.md](progress/open-questions.md), 
     and 5; the 400 ppm slab aquaplanet leaves 283–293 K; `scripts/regress` regresses. Convection
     intermittency is the first work item of P5. Known limitations for the closing entry are in
     question 14 of the history file.
+    **Result (2026-11-24): stopped at step 4** (entry above). The low-cloud change works where
+    it acts (gate: tropical net CRE −51.6 → −29.0; law: deck stratus 0.32–0.38) but the rest of
+    the excess is bright cloud in the ascending tropics. **Owner, choose:** (1) carry the best
+    criteria-1–2 variant ((c) + `water_max` 2e-4 + `rh_crit_upper` 0.85: cover 0.529, tropical
+    −42.2) to the T42 pass and record the tropical excess as a limitation for the P5 convection
+    item (recommended); (2) allow `water_max` below its range (2e-4) or a separate cap for
+    convective cloud, then rerun step 4; (3) restate the 15 W m⁻² condition; (4) keep the frozen
+    knobs and close P4 as decided without the low-cloud change.
 
 Closed: 1 License — MIT. 3 f32 HS asymmetry — accepted as recorded (2026-11-18). 5 Courant
 trigger — replaced (2026-11-18). 6 APE westerlies — known limitation (2026-11-23). 8 P2 G, sea ice
