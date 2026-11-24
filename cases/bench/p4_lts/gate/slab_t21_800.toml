@@ -1,0 +1,99 @@
+# P4 gate (owner plan step 7, 2026-11-24), criterion 4: T21 slab aquaplanet 800 ppm with the step-4b choice r6 frozen (low_cloud = "slingo_lts", low_rh = "sundqvist", published LTS constants,
+# water_max = 1e-4, rh_crit_upper = 0.75; otherwise the 2026-11-21 frozen knobs).
+# Continued 30 years (question 12: slab pairs run >= 30 years after any scheme change) from the year-55
+# restart of the frozen-knob gate run (out/p4/gate/slab2_t21_800/restart); climatology and equilibrium test
+# (tools/equilibrium.py, 10 years, +-0.3 W m-2) over the last 10 years (76-85).
+# Run: toyclim run --config <this> --out out/p4/lts/gate/slab_t21_800 --restart out/p4/gate/slab2_t21_800/restart
+schema = 2
+description = "P4 gate (step 7) criterion 4: T21 slab aquaplanet 800 ppm, low cloud slingo_lts, r6 knobs, years 56-85"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "31046.25day"
+output_every = "365.25day"
+diagnostics_every = "1day"
+output_fields = ["ts", "tos", "sic", "sit", "snw", "precip", "tas"]
+initial_condition = { case = "jw06", perturbed = true }
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+# year: the original 365.25 days (derived: 365.256 d), kept so that results are
+# unchanged; checked against the derived value (< 1%).
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+# Earth preset: rotation rate 7.292e-5 s⁻¹ (Williamson et al. 1992).
+[planet]
+preset = "earth"
+
+# R_d and c_p: the Williamson et al. (1992) values used by the dynamical core, checked
+# against the mixture (287.04 / 1005.0 J kg⁻¹ K⁻¹).
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0008 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[radiation]
+scheme = "semigray"
+# Earth ozone column of the calibration (docs/radiation/calibration.md)
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
+[clouds]
+scheme = "diagnostic"
+low_cloud = "slingo_lts"
+low_rh = "sundqvist"
+water_max = 0.0001
+rh_crit_upper = 0.75
+
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+geography = "aquaplanet"
+
+[surface.ocean]
+model = "slab"
+albedo = 0.06
+mixed_layer_depth = 20.0
+initial = "tj16"
+
+# Zero-layer sea-ice thermodynamics with band albedos (P2).
+[surface.sea_ice]
+enabled = true
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "27393.75day"
+every = "1day"
+maps = ["ts", "tos", "sic", "sit", "tas", "precip", "clt", "clwvi", "olr", "olr_cs", "asr", "asr_cs", "rsdt"]
