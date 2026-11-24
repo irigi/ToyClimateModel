@@ -28,7 +28,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13) |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -144,7 +144,7 @@ Accepted milestones, with the rows the owner sent to a retest; numbers copied fr
   gray; RRTMG as reference (Koll & Cronin 2018 inaccessible).
 - Archive: [docs/progress/P3.md](progress/P3.md)
 
-## P4 state (as of 2026-11-23 evening)
+## P4 state (as of 2026-11-24 evening)
 
 **Frozen knobs** (2026-11-21, `docs/tuning.md`, gate binary `out/p4/toyclim_frozen`): freeze-dry on,
 RH_c 0.95 / 0.90, β 0.03; shallow convection, "anvil", `deep_requires_pt` and the CO₂ band off.
@@ -157,6 +157,11 @@ RH_c 0.95 / 0.90, β 0.03; shallow convection, "anvil", `deep_requires_pt` and t
 | 3 | Cover 0.5–0.75; ITCZ and storm-track maxima, subtropical minima | **0.497**; shape met | **not met** (cover, by 0.003) |
 | 4 | 400 ppm T_s 283–293 K; 2×CO₂ warming 1.5–6 K | 288.376 … 288.516 K (**equilibrated**); **2×CO₂ warming 11.06 K** | warming open; P4 closes with it open (owner, 2026-11-23) |
 | 5 | Energy closure ≤ 0.5 W m⁻² | 0.31 | met |
+
+**r6 gate (2026-11-24, `low_cloud = "slingo_lts"`, `water_max` 1e-4, `rh_crit_upper` 0.75; case files
+only, not adopted):** 1: 0.296; 237.1; +2.61 met. 2: −50.2; +25.8 met. 3: cover 0.567, **shape fails**
+(northern cover rises to 0.71 at 79.5°, no storm-track maximum). 4: 400 ppm **297.1 K** (ice-free,
+equilibrated), outside 283–293; 2×CO₂ +3.53 K (800 ppm still cooling). 5: 0.30 met. Stopped at step 7.
 
 **Findings that still drive decisions** (details in [P4.md](progress/P4.md) and the two entries below):
 - The Earth tropical cloud excess is boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); it is
@@ -516,6 +521,196 @@ trigger omitted). Housekeeping: this file compressed (d0c744b).
   keeping criteria 1–2 and cover ≥ 0.5; only (b) is within (−29.0), and it fails albedo, net TOA
   and cover. Nothing adopted; steps 5–8 not started. Options in question 13.
 
+## 2026-11-24 (day) — Question 13 after step 4: brightness diagnostic, T21 round, steps 5–7; question 7 rerun (branch `p4-clouds`)
+
+Owner decision after step 4 (2026-11-24, recorded under 13/14 in the history file): the stop
+was correct; the gate + stability law with the published constants are adopted for the rest of
+P4; step 4b (diagnostic, then one T21 round of ≤ 8 variants with T21 cover ≥ 0.56); the
+15 W m⁻² line is retired; then steps 5–8; Q7 rerun now.
+
+**Step 4b, diagnostic on variant (c)** (year 3 from its year-2 restart, three runs with the
+extra radiation call: without convective cloud, without stratiform cloud at σ ≥ 0.7 and at
+σ ≥ 0.4; `cases/bench/p4_lts/t21b/`, `out/p4/lts/t21b/`; `tools/review_round.py`):
+
+| W m⁻², SW / LW / net, 10°S–10°N | value |
+|---|---|
+| all cloud (CERES 10°S–10°N: −49.9 / +34.8 / −15.1) | −84.3 / +27.3 / −57.0 |
+| convective part | −20.4 / +7.6 / −12.8 |
+| stratiform at σ ≥ 0.7 | −42.9 / +4.6 / −38.3 |
+| stratiform at σ ≥ 0.4 (so 0.4–0.7 adds −2.5 SW) | −45.4 / +5.2 / −40.2 |
+
+- The tropical excess sits in one layer: the mean cloud fraction peaks at σ = 0.787 (0.223,
+  stratiform 0.155), the level just above the gate's σ ≥ 0.8 region (L26 has no level between
+  0.787 and 0.867). Its grid-mean water path there is 70.5 g m⁻² of the column's 225.5.
+- LW CRE 10°S–10°N +27.3 against CERES +34.8 (short by 7.5 W m⁻²; 20°S–20°N +24.9 against
+  +29.3): below the owner's 8 W m⁻² line, so the anvil option did not enter.
+- Water path (`tools/water_path.py`, figure `docs/figures/P4/lts_t21_waterpath.png`) against
+  ESA Cloud_cci AVHRR-PM v3 (obs4MIPs `clwvi` and `clivi`, monthly 2003–2012, fetched
+  2026-11-24 from CEDA, `https://dap.ceda.ac.uk/neodc/esacci/cloud/data/obs4MIPs/DWD/
+  ESACCI-CLOUD-AVHRR-PM-3-0/mon/`, DOI 10.5285/919157930d7447caac6d42e84e377289; technical
+  notes read: daytime passive retrieval, liquid bias −3.2 g m⁻², ice in-cloud bias −365 g m⁻²
+  against A-Train, so the ice comparison is weak; MAC-LWP and MODIS need an Earthdata account
+  and were not fetched):
+
+| g m⁻² | 10°S–10°N | 20°S–20°N | 15–35°N | 15–35°S | 45–65°S | global |
+|---|---|---|---|---|---|---|
+| Cloud_cci liquid / ice / total | 21.1 / 68.4 / 89.5 | 21.5 / 53.9 / 75.4 | 26.2 / 34.7 / 60.9 | 31.3 / 36.0 / 67.2 | 85.0 / 69.3 / 154.3 | 39.2 / 52.3 / 91.5 |
+| variant (c) liquid / ice | 213.5 / 12.1 | 170.1 / 10.6 | 93.1 / 9.9 | 78.1 / 6.1 | 48.6 / 37.5 | 100.6 / 17.6 |
+| ratio of totals | 2.5 | 2.4 | 1.7 | 1.2 | 0.6 | 1.3 |
+
+  Snapshot LWP + IWP agrees with the `clwvi` map to 0.8 % (74 snapshots).
+- Optics: liquid r_e 10 µm (Slingo 1989), ice r_e 30 µm (Ebert & Curry 1992), δ-scaled
+  PIFM, **no sub-grid inhomogeneity reduction**; phase by a linear ramp 273.15 → 253.15 K.
+- **Rule case: water path clearly above 1.5× observed in the tropics** → the in-cloud water is
+  too high; lever `water_max` with its range extended to 1e-4 (docs/tuning.md), target the
+  Cloud_cci 10°S–10°N total. The cap binds only in warm cloud: the 45–65°S path is 93–94 g m⁻²
+  for every `water_max` of step 4.
+
+**Step 4b, T21 round** (`cases/bench/p4_lts/t21r/`; band error = area-weighted RMS of the SW
+and LW CRE differences over the seven `tools/cre_bands.py` bands, defined before the results;
+figure `docs/figures/P4/lts_t21_round.png`):
+
+| variant | albedo | net TOA | SW / LW CRE | cover | 20°S–20°N net CRE | band error |
+|---|---|---|---|---|---|---|
+| (c) step 4 | 0.305 | −0.81 | −53.6 / +23.7 | 0.500 | −47.5 | 12.86 |
+| r1 `water_max` 1.5e-4, `rh_crit_upper` 0.85 | 0.296 | +4.21 | −50.5 / +25.8 | 0.527 | −37.9 | 9.74 |
+| r2 1e-4, 0.85 | 0.281 | **+8.99** | −45.5 / +25.5 | 0.523 | −30.9 | 8.34 |
+| r3 1.5e-4, 0.80 | 0.300 | +4.31 | −52.0 / +27.2 | 0.543 | −38.4 | 10.65 |
+| r4 1e-4, 0.80 | 0.291 | +7.28 | −49.0 / +27.5 | 0.548 | −33.2 | 8.92 |
+| r5 1e-4, 0.80, `rh_crit_surface` 0.90 | 0.294 | +6.50 | −49.9 / +27.7 | 0.553 | −32.2 | 7.78 |
+| **r6 1e-4, 0.75** | 0.298 | +6.62 | −51.4 / +29.2 | **0.567** | −34.1 | 9.99 |
+| r7 = r4 + `low_sigma` 0.85 | bitwise identical to r4 (no L26 level between σ 0.80 and 0.85) | | | | | |
+| r8 1.5e-4, 0.75, `rh_crit_surface` 0.90 | 0.313 | +1.40 | −56.4 / +29.1 | 0.569 | −42.6 | 13.15 |
+
+- Criteria 1–2 hold in all but r2 (net TOA). The shape row fails at T21 in all (as before).
+  Cover ≥ 0.56: r6 and r8; **r6 (smaller band error) went on**. `low_omega` (Slingo's
+  published 0.1 Pa s⁻¹) was not moved; the only other gate knob, `low_sigma`, cannot weaken
+  the gate within 0.75–0.85 at L26.
+- Low cloud of r6 (`docs/figures/P4/lts_t21_r6_lowcloud.png`): the stability stratus is as in
+  (c); deck boxes Peru 0.37, Namibia 0.21, California 0.22, Canary 0.22.
+
+**Step 5, factorial (diagnostic)** — S400/C400 and S800/C800 of the review round rerun with r6
+(`cases/bench/p4_lts/step5/`, `out/p4/lts/step5/factorial.json`), 20°S–20°N, years 2–3:
+
+| | frozen S400C400 | frozen S800C800 | r6 S400C400 | r6 S800C800 |
+|---|---|---|---|---|
+| SW / LW / net CRE | −89.6 / +25.8 / −63.8 | −63.8 / +18.6 / −45.3 | −71.3 / +32.3 / −39.0 | −82.9 / +29.4 / −53.4 |
+| convective part (net) | −21.8 | −10.2 | −15.3 | −5.4 |
+| cover | 0.666 | 0.485 | 0.630 | 0.642 |
+| low stratiform max (σ) | 0.312 (0.867) | 0.227 (0.867) | 0.186 (0.787) | 0.395 (0.787) |
+
+- With r6 the tropical net CRE change between the matching cases reverses sign: −14.4 W m⁻²
+  (more cloud cooling) against +18.5 with the frozen knobs, carried by stratiform cloud at
+  σ 0.787 that doubles in the warm case. Diagnostic only; nothing was chosen by it.
+
+**Step 6, T42 pass** (r6, Earth AMIP 1 + 1 years, `cases/bench/p4_lts/step6/`, figure
+`docs/figures/P4/lts_t42_pass.png`): albedo 0.295, OLR 237.2, net TOA +2.81, SW / LW CRE
+−50.1 / +25.8, **cover 0.566** (aim ≥ 0.55 met), closure 0.30 W m⁻²; band error 8.73 (frozen
+gate 11.48); 20°S–20°N net CRE −36.0 (CERES −14.4; frozen gate −43.1). **Shape row fails:**
+the northern 40–70° maximum sits at the band edge (0.68 at 68°, 0.69 at 71°; the frozen gate
+passed it). Knobs frozen at r6 in the case files (code defaults unchanged: "rh" stays the
+default).
+
+**Step 7, gate** (knobs frozen at r6; `cases/bench/p4_lts/gate/`, `out/p4/lts/gate/`, binary
+`out/p4/toyclim_6041548`; T42 on 6 threads, slabs on 4 each, regress after the T42 run).
+
+T42 Earth AMIP, 1 + 5 years (`tools/scorecard.py --suite earth_energy --milestone P4
+--no-write`, window 1826 days; figure `docs/figures/P4/lts_t42_gate.png`):
+
+| # | Criterion | r6 gate | frozen gate (2026-11-21) | |
+|---|---|---|---|---|
+| 1 | albedo; OLR; net TOA | 0.296; 237.1; +2.61 W m⁻² | 0.280; 242.5; +2.53 | met |
+| 2 | SW / LW CRE | −50.2 / +25.8 | −44.6 / +19.9 | met |
+| 3 | cover | **0.567** | 0.497 | met |
+| 3 | zonal shape | N: storm-track max 0.69 at 68° **not a local maximum** (cover rises to 0.71 at 79.5°); S: 0.69 at 60°, local; subtropical minima 0.41 / 0.36; ITCZ 0.70 | N: 0.65 at 66°, local | **FAIL** |
+| 5 | energy closure | 0.30 W m⁻² | 0.31 | met |
+
+- Other means: T_s 289.4 K, precipitation 3.22 mm/day, P − E relative 7e-5, G 1.86, Courant
+  0.64. Band error 8.72 W m⁻² (pass 8.73, frozen gate 11.48); 20°S–20°N net CRE −36.3 against
+  CERES −14.4 (frozen gate −43.1).
+- Figure: the r6 gate (green) lies on the T42 pass (orange) everywhere; against the frozen gate
+  (blue) it removes most of the 30°S and 30°N SW overshoot and the equatorial notch, raises
+  LW CRE to near CERES in 60°S–30°N, and adds 0.05–0.10 cover at all latitudes. North of 30°N
+  cover climbs monotonically to 0.69–0.71 at 70–80°N, where CERES has a storm-track maximum
+  (0.76 near 60°N), a dip near 70°N, and its rise toward the pole. The model therefore has no
+  northern storm-track maximum. LW CRE north of 65°N is +28 against CERES +14.8; net CRE there
+  is −0.3 against −9.5. The SH storm-track cover is 0.64 against 0.87 (40–65°S band).
+- **Stop condition met: the T42 run cannot meet criteria 1, 2, 3 and 5 together** (owner
+  decision of 2026-11-24, unchanged stop conditions). Criteria 1, 2, 5 and cover are met; the
+  shape row of 3 fails as in the T42 pass. Nothing was tuned after the T42 pass; steps 6–7
+  used r6 unchanged (it qualified at T21 under the owner's rule: criteria 1–2, cover ≥ 0.56,
+  smaller band error than r8).
+- Where the shape fails: the northern polar cloud. Step 4 of the completion plan (2026-11-18)
+  names the next action for this row if the RH_c knobs fail: a published treatment of cold,
+  dry polar air, with SCM tests. That is a physics change and is for the owner to authorise
+  after this stop. r6 differs from the frozen knobs, which passed the row, in `rh_crit_upper`
+  (0.90 → 0.75), `water_max` (→ 1e-4) and the low-cloud scheme (open ocean only). The lower
+  upper RH_c is the change that adds cloud everywhere, including over the Arctic. This was not
+  separated by a run.
+
+T21 slab aquaplanet pair, r6 (`slab_t21_400` 75 years, `slab_t21_800` 85 years, from the
+frozen-gate restarts at years 45 / 55, 30 years each; climatology = last 10 years; `tools/equilibrium.py`,
+`tools/scorecard.py --suite aquaplanet`; figure `docs/figures/P4/lts_slab_gate.png`):
+
+| | frozen 400 | frozen 800 | **r6 400** | **r6 800** |
+|---|---|---|---|---|
+| T_s (K) | 288.51 | 299.57 | **297.14** | 300.67 |
+| trend (K/yr); TOA − residual | equilibrated | equilibrated | −0.016; −0.03 **equilibrated** | **−0.046** (> 0.02); −0.16: **not equilibrated** |
+| sea-ice fraction | 0.107 (edge 58°) | 0 | **0** | 0 |
+| albedo (all-sky / clear-sky) | 0.318 / 0.134 | 0.280 / 0.105 | 0.290 / 0.106 | 0.297 / 0.105 |
+| SW / LW / net CRE | −62.5 / +24.7 / −37.8 | −59.5 / +23.4 / −36.1 | −62.5 / +31.8 / −30.7 | −65.3 / +30.8 / −34.4 |
+| 20°S–20°N net CRE | −64.2 | −48.6 | −48.9 | −51.6 |
+| cover | 0.58 | 0.52 | 0.58 | 0.59 |
+| closure (W m⁻²) | | | 0.05 | 0.04 |
+
+- **Stop condition met: the 400 ppm slab aquaplanet ends at 297.1 K, outside 283–293 K**
+  (equilibrated by the 10-year test). With r6 the 400 ppm aquaplanet loses all its sea ice:
+  the frozen-gate state (288.5 K, ice edge 58°) warms by 8.6 K in 30 years. The global SW CRE
+  is unchanged (−62.5); the LW CRE is +7.1 W m⁻² larger (more and higher cloud from
+  `rh_crit_upper` 0.75), and this warms the polar caps most: net CRE poleward of 65° goes from
+  +10 / +14 (over ice) to −0.2 / −0.3 (open water).
+- **2×CO₂ warming, measured once and not tuned: 3.53 K** (300.67 − 297.14). The 800 ppm run
+  is still cooling (−0.046 K/yr over its last 10 years, last two years 300.41 / 300.35), so
+  the equilibrium value is probably lower; this was not extended. Attribution (difference of
+  the 10-year means, W m⁻²): clear-sky ASR +0.56, clear-sky −OLR +2.82, net CRE **−3.73**
+  (SW −2.8, LW −1.0; 20°S–20°N −2.7, 20–40° −7.5 to −8.7). Neither state has sea ice, so the
+  ice-albedo feedback that dominated the frozen pair (11.06 K: clear-sky ASR +9.9 with the
+  ice gone, net CRE +1.8) is absent. The cloud response is negative, as in the step-5
+  factorial (tropical net CRE −14.4 with r6). This pair is not comparable with the frozen
+  pair: the base states differ by 8.6 K and by the presence of ice.
+- Figure: r6 (green, yellow) has polar LW CRE of 40–45 W m⁻² against 20–25 (frozen 400,
+  blue) and a SW CRE of −40 at the poles, where the frozen 400 has −5 to −15 over ice. Between
+  400 and 800 ppm, r6 changes the SW CRE mainly in 20–40° (more cloud, cover 0.46 → 0.52); the
+  frozen pair instead loses tropical cloud (cover 0.73 → 0.55 at the equator). CERES (black)
+  is Earth and is shown only as scale.
+- APE westerlies row fails in both slabs (question 6, a known limitation).
+
+**`scripts/regress`** (ratchet, HEAD 8976b28, `out/p4/lts/gate/regress.log`): ignored tests
+PASS; Held–Suarez T42 M5 rows PASS (identical numbers: jets 33.72 / 32.20 m/s, asymmetry
+2.13); APE T21 gate FAIL only on the 35–60° westerlies row, −6.85 m/s, the same value as
+recorded in P4.md before this work (question 6, closed as a known limitation). The bitwise
+`scripts/regress --against 852ca60 --threads 1` was PASS earlier today. **No regression.**
+
+**Outcome: stopped at step 7 on two of the owner's stop conditions** (T42 criterion 3 shape
+row; 400 ppm slab 297.1 K). Steps 8 and the P4 close are not done; the knobs stay frozen at
+r6 in the case files only, with code defaults unchanged ("rh"; the 2026-11-21 frozen knobs).
+The closing entry's limitations are recorded for when P4 closes: (1) L26 does not resolve
+inversions; (2) for non-Earth cases the law is an extrapolation, and exoplanet benchmarks run
+with low cloud on and off; (3) recheck the law when the P6 ocean replaces prescribed SST;
+(4) the remaining tropical excess (T42 20°S–20°N net CRE −36.3 against CERES −14.4; water
+path 2.5× Cloud_cci in 10°S–10°N before the round) is for the P5 convection item.
+Options for the owner are under question 13.
+
+**Question 7 rerun** (`cases/bench/p4_retest/bistab_cold.toml`, new key
+`[surface.sea_ice] initial_snow`, default 0, test `cold_start_snow_on_ice`; frozen P4 physics,
+400 ppm, 1361 W m⁻²; 3 m ice + 100 kg m⁻² snow everywhere, mixed layer at freezing, ice
+surface and atmosphere 240 K isothermal and dry; 12 years, `out/p4/q7/cold`, figure
+`docs/figures/P4/q7_bistability.png`): stays ice-covered — annual-mean concentration 1.0 in
+every cell over years 8–12; global T_s 218.4 (year 1) → 208.1 K (year 12), still cooling
+(TOA −7.2 W m⁻² in year 12). The warm branch (frozen gate, years 41–45) has no ice
+equatorward of 50° (edge at 58°, T_s 288.5 K). **Both branches of P2 acceptance 6 hold at
+1361 W m⁻²**; the instellation sweep (record) is not run.
+
 ## Open questions for the owner
 
 Latest ruling each; history in [open-questions.md](progress/open-questions.md), closed ones in
@@ -529,6 +724,9 @@ Latest ruling each; history in [open-questions.md](progress/open-questions.md), 
    setup is suspect; rerun 12 years from a properly cold state (mixed layer at freezing, cold
    atmosphere, snow-covered ice) when the machine has room. Not a P4 criterion; does not block P4
    or P5; must be settled before P6.
+   **Rerun 2026-11-24** (entry above): the cold start stays fully ice-covered for 12 years
+   (208 K, still cooling), the warm branch has no ice equatorward of 50°: both branches hold at
+   1361 W m⁻²; the instellation sweep is not run. For the owner to close.
 13. **P4: tropical cloud response and the Earth low-cloud excess.** Latest rulings (2026-11-23):
     low cloud by option (vi)/(A), `low_cloud = "slingo_lts"` (Slingo eqs. 5–7 gate + the Klein &
     Hartmann stability stratus without CAM's trigger), then T21 variants (a)–(d), diagnostic
@@ -540,14 +738,20 @@ Latest ruling each; history in [open-questions.md](progress/open-questions.md), 
     and 5; the 400 ppm slab aquaplanet leaves 283–293 K; `scripts/regress` regresses. Convection
     intermittency is the first work item of P5. Known limitations for the closing entry are in
     question 14 of the history file.
-    **Result (2026-11-24): stopped at step 4** (entry above). The low-cloud change works where
-    it acts (gate: tropical net CRE −51.6 → −29.0; law: deck stratus 0.32–0.38) but the rest of
-    the excess is bright cloud in the ascending tropics. **Owner, choose:** (1) carry the best
-    criteria-1–2 variant ((c) + `water_max` 2e-4 + `rh_crit_upper` 0.85: cover 0.529, tropical
-    −42.2) to the T42 pass and record the tropical excess as a limitation for the P5 convection
-    item (recommended); (2) allow `water_max` below its range (2e-4) or a separate cap for
-    convective cloud, then rerun step 4; (3) restate the 15 W m⁻² condition; (4) keep the frozen
-    knobs and close P4 as decided without the low-cloud change.
+    **Result after step 4b (2026-11-24 evening): stopped at step 7** (entry above). r6 met
+    criteria 1–2 with T21 cover 0.567 and went through steps 5–7 unchanged. T42 gate: criteria
+    1, 2, 5 and cover met, band error 8.72 (frozen 11.48), tropical net CRE −36.3 (CERES −14.4);
+    **the shape row fails**: northern cover rises monotonically to the pole, with no storm-track
+    maximum. **The 400 ppm slab ends at 297.1 K** (ice-free; frozen knobs 288.5 K with ice to
+    58°), mainly from +7.1 W m⁻² of LW CRE, largest at the poles. 2×CO₂ +3.53 K, recorded only.
+    `scripts/regress` shows no regression. Both failures sit at high latitude and come with the
+    extra upper cloud of `rh_crit_upper` 0.75 (not separated by a run). **Owner, choose:**
+    (1) one separating T21 slab + Earth pair, r6 with `rh_crit_upper` back at 0.90
+    (diagnostic), then decide; (2) authorise the completion-plan step 4 physics change (a
+    published treatment of cold, dry polar air, SCM tests) and rerun steps 6–7 with r6;
+    (3) close P4 with the frozen 2026-11-21 knobs (cover 0.497) as decided before;
+    (4) take a round variant with less upper cloud (r1/r3, T21 cover 0.527/0.543) to T42,
+    which needs the ≥ 0.56 rule relaxed.
 
 Closed: 1 License — MIT. 3 f32 HS asymmetry — accepted as recorded (2026-11-18). 5 Courant
 trigger — replaced (2026-11-18). 6 APE westerlies — known limitation (2026-11-23). 8 P2 G, sea ice

@@ -417,3 +417,15 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       be fetched. Q7: run now in the background (cold start, 12 years). progress.md at 556
       lines is fine (500 was a cleanup target). Rules unchanged; nothing is chosen by its
       effect on the 2×CO₂ warming.
+
+    - **Result of step 4b and steps 5–7 (2026-11-24 evening)** (progress.md entry "Question 13
+      after step 4"): diagnostic → water path 2.5× Cloud_cci in 10°S–10°N, rule case 1
+      (`water_max` range extended to 1e-4); LW CRE short by 7.5 (< 8, no anvil). T21 round of 8:
+      r6 (`water_max` 1e-4, `rh_crit_upper` 0.75) qualified (cover 0.567, band error 9.99).
+      Step 5 factorial: tropical net CRE change −14.4 (frozen +18.5), recorded. Step 6 T42 pass:
+      cover 0.566, shape row fails. Step 7 gate: T42 criteria 1, 2, 5 and cover met, **shape row
+      fails** (no northern storm-track maximum); 400 ppm slab **297.1 K**, ice-free, outside
+      283–293 K; 2×CO₂ +3.53 K (800 ppm not equilibrated), recorded with its attribution
+      (net CRE −3.73, no sea ice in either state). `scripts/regress`: no regression (APE
+      westerlies row −6.85 as before). **Stopped at step 7 on two stop conditions;** options
+      in progress.md question 13. Q7 rerun: both branches hold at 1361 W m⁻².
