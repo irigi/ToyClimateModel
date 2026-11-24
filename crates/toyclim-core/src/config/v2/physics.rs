@@ -138,6 +138,7 @@ pub(super) fn lower_surface(s: &SurfaceV2) -> Result<Table, ConfigError> {
                 ("h0", "ice_h0"),
                 ("max_thickness", "ice_h_max"),
                 ("initial_thickness", "initial_ice"),
+                ("initial_snow", "initial_ice_snow"),
             ],
             &mut t,
         )?;

@@ -13,6 +13,11 @@ over the bands 20°S–20°N, 20–40°, 40–65° and 65–90° in each hemisph
 CERES uses its "clear-sky for total region" fluxes (Ed4.1 `*_clr_t_*`), the definition
 comparable with a model's clear-sky radiation call; CERES cover is the daytime-and-
 nighttime cloud area fraction. Prints a markdown table; `--fig` draws the zonal means.
+
+Band error (selection metric of the owner decision after step 4, 2026-11-24, fixed before the
+T21 round's results): the RMS over the seven latitude bands, weighted by band area, of the SW
+and LW CRE differences from CERES, both components pooled,
+√(Σ_b A_b [(ΔSW_b)² + (ΔLW_b)²] / (2 Σ_b A_b))  [W m⁻²].
 """
 
 import argparse
@@ -73,7 +78,8 @@ def main():
         zon[lab] = (lat, z)
         res[lab] = bands(lat, z)
     cz = zonal_ceres(trunc0, len(lat0))
-    res = {"CERES EBAF Ed4.1": bands(lat0, cz), **res}
+    ref_name = "CERES EBAF Ed4.1"
+    res = {ref_name: bands(lat0, cz), **res}
     for q, qn in QUANT:
         unit = "" if q == "clt" else " [W m⁻²]"
         print(f"\n**{qn}{unit}**\n")
@@ -82,6 +88,17 @@ def main():
         fmt = "{:.2f}" if q == "clt" else "{:+.1f}"
         for lab, b in res.items():
             print(f"| {lab} | " + " | ".join(fmt.format(b[n[0]][q]) for n in BANDS) + " |")
+    ref = res["CERES EBAF Ed4.1"]
+    area = {n: np.sin(np.radians(hi)) - np.sin(np.radians(lo)) for n, lo, hi in BANDS[:-1]}
+    print("\n**Band error** (area-weighted RMS of the SW and LW CRE differences over the seven"
+          " bands) [W m⁻²]\n")
+    for lab, b in res.items():
+        if lab == ref_name:
+            continue
+        e2 = sum(area[n] * ((b[n]["sw"] - ref[n]["sw"]) ** 2 + (b[n]["lw"] - ref[n]["lw"]) ** 2)
+                 for n in area)
+        b["band_error"] = float(np.sqrt(e2 / (2 * sum(area.values()))))
+        print(f"- {lab}: {b['band_error']:.2f}")
     if a.json:
         pathlib.Path(a.json).write_text(json.dumps(res, indent=1))
     if a.fig:
@@ -90,7 +107,7 @@ def main():
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        series = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+        series = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948", "#7a5a2e", "#00a3b4"]
         fig, axs = plt.subplots(2, 2, figsize=(10, 6.5), sharex=True, constrained_layout=True)
         for ax, (q, qn) in zip(axs.flat, QUANT):
             ax.plot(lat0, cz[q], color="#333333", lw=2.0, label="CERES EBAF Ed4.1 (2001–2020)")

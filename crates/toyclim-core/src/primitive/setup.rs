@@ -174,7 +174,11 @@ fn build_surface(
             sfc.ice_h[p] = sc.initial_ice;
             sfc.t_ml[p] = tf;
             sfc.ice_ts[p] = sfc.ice_ts[p].min(tf);
+            // cell mean; the tiles divide by the ice concentration
+            sfc.ice_snow[p] = sc.initial_ice_snow * sfc.sic(p);
         }
+    } else if sc.initial_ice_snow > 0.0 {
+        return Err("surface.sea_ice.initial_snow needs initial_thickness > 0 and sea ice".into());
     }
     Ok(sfc)
 }

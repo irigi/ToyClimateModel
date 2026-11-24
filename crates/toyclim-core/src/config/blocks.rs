@@ -348,6 +348,9 @@ pub struct SurfaceConfig {
     /// Initial sea-ice thickness over all ocean \[m\] (default 0; e.g. a snowball start).
     #[serde(default)]
     pub initial_ice: f64,
+    /// Initial snow on that ice \[kg m⁻² over the ice\] (default 0; needs `initial_ice` > 0).
+    #[serde(default)]
+    pub initial_ice_snow: f64,
     /// Amplitude Q0 \[W m⁻²\] of the prescribed ocean heat transport (q-flux)
     /// Q0 (1 − 2φ²/φ0²) exp(−φ²/φ0²)/cos φ with φ0 = 16° (Merlis et al. 2013). Typical
     /// Earth-like value 50; default 0 (off).

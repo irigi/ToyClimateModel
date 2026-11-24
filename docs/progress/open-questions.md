@@ -389,3 +389,31 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       low_cloud on and off, both reported, nothing tuned on them; (3) the law is tied to SST
       and open ocean, recheck when the P6 ocean replaces prescribed SST.
 
+    - **Owner decision after step 4 (2026-11-24, follows 852ca60)**, recorded under 13/14:
+      (1) the stop was correct; the low-cloud change is adopted for the remaining work: the
+      subsidence gate and the stability law with the published constants (slope 0.057,
+      intercept −0.5573); the intercept range set by Claude has no source, the −0.65 variant
+      is not carried forward. (2) The remaining error is brightness, not amount: clouds less
+      bright per unit cover, and more cover. (3) Carry forward only variants with T21 cover
+      ≥ 0.56 (frozen knobs gave 0.534 at T21 and 0.50 at T42). Step 4b: a diagnostic on
+      variant (c) — (a) the 10°S–10°N SW and LW CRE split by layer group and convective /
+      stratiform, LW CRE against CERES; (b) liquid and ice water path by zonal band against
+      a fetched observed climatology (tropics, subtropics, Southern Ocean); (c) the cloud
+      optics' effective radii and any sub-grid inhomogeneity reduction. Lever by rule: water
+      path above about 1.5× observed → extend the `water_max` range downward or add a separate
+      cap for convective cloud, the observed water path the stated target; within about 1.5×
+      → the plane-parallel inhomogeneity reduction (Cahalan et al. 1994), fetched, off by
+      default, byte-identical when off, SCM test; tropical LW CRE short of CERES by more than
+      8 W m⁻² → the anvil option may enter. Then one T21 round (Earth AMIP 1 + 1 years, at
+      most 8 variants, all logged) from gate + law with the lever, restoring cover with
+      `rh_crit_surface`, `rh_crit_upper` downward and a weaker gate within Slingo's values;
+      targets CERES bands, criteria 1–2, T21 cover ≥ 0.56. The 15 W m⁻² line is retired:
+      after the round, the variant meeting criteria 1–2 with cover ≥ 0.56 and the smallest
+      CERES band error goes on to steps 5–8; if none has cover ≥ 0.56, the best-cover
+      variant meeting criteria 1–2 goes to T42 and the T42 stop condition decides. Remaining
+      tropical excess goes into the closing entry as a known limitation for the P5
+      convection item. Unchanged stops: T42 cannot meet 1, 2, 3 and 5 together; 400 ppm slab
+      aquaplanet outside 283–293 K; any regression in `scripts/regress`; a source that cannot
+      be fetched. Q7: run now in the background (cold start, 12 years). progress.md at 556
+      lines is fine (500 was a cleanup target). Rules unchanged; nothing is chosen by its
+      effect on the 2×CO₂ warming.
