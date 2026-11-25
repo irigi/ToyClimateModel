@@ -445,3 +445,33 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
         and subtropical SW.
       - Proposals: EIS (Wood & Bretherton 2006) and a cloud-only −10 to −40 °C phase ramp
         (CAM3); or close with the frozen knobs; or an owner ruling on 283–293 K for this scheme.
+    - **Owner decision after the screen (2026-11-25, follows ad03af1), recorded under 13:**
+      - Interpretation: the frozen aquaplanet's 288.5 K rested on a tropical net cloud effect of
+        −64 W m⁻² against −14 on Earth; the Earth run is the anchor. Nothing is tuned to cool
+        the aquaplanet. Criterion 4's 283–293 K is unchanged and not marked met.
+      - r3 (`slingo_lts`, `water_max` 1.5e-4, `rh_crit_upper` 0.80) is the candidate. The
+        closing condition "400 ppm slab within 283–293 K" is withdrawn; row 4 stays open with
+        the owner and is revisited with P6. P4 closes when the T42 Earth AMIP 1 + 5 year gate
+        with r3 passes criteria 1, 2, 3 and 5 and row 4 has been measured once on an
+        equilibrated pair and recorded.
+      - Option 1 (EIS, Wood & Bretherton 2006) is a P5 candidate after the convection item,
+        justified by the Southern Ocean cover (0.61 against 0.87); read the paper directly
+        before then. Option 3 cannot close P4.
+      - Steps: 1 gate with r3 (T42 1 + 5 years; 400 ppm slab continued to the equilibrium
+        test, ≥ 30 years after the change; 800 ppm from the same restart; `tools/feedbacks.py`;
+        `scripts/regress`); 2 TRACMIP (Voigt et al. 2016) aquaplanet-control T_s across models;
+        3 completion-plan step 6 with r3, record only (APE T42, bistability pair, instellation
+        sweep); 4 closing evaluation if criteria 1, 2, 3 and 5 hold (r3 as default, closing
+        entry, new open question on 283–293 K). Stop and report if the T42 run fails 1, 2, 3 or
+        5 (shape row: profile and margin, no further variants), a slab fails or does not
+        equilibrate within 45 years, or regress regresses.
+      **Result (2026-11-25 afternoon): stopped at step 1 — the T42 shape row fails.**
+      - T42 1 + 5 years: criteria 1, 2, 5 and cover (0.545) met. Northern 40–70° maximum
+        0.668 at 68.4°, the band's poleward row (0.005 above 65.6°); cover rises monotonically
+        from 40°N and stays at 0.65–0.67 to 80°N. In single years the maximum is local at 65.6°
+        in 2 of 5 years. The screen's pass (1 + 1 years) rested on year 2 alone.
+      - Slab pair (both equilibrated, ice-free): 400 ppm 295.62 K, 800 ppm 298.57 K, 2×CO₂
+        +2.96 K (implied 2.84 K); cloud terms negative (SW CRE −1.11 W m⁻² K⁻¹, mostly 30–60°).
+      - `scripts/regress`: no regression. TRACMIP AquaControl 290.4–300.7 K, median 295.1 K.
+      - Step 3: cold start stays ice-covered (record); APE T42 not run; sweep stopped after
+        about one model year. Step 4 not done; code defaults unchanged.
