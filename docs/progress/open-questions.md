@@ -429,3 +429,19 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       (net CRE −3.73, no sea ice in either state). `scripts/regress`: no regression (APE
       westerlies row −6.85 as before). **Stopped at step 7 on two stop conditions;** options
       in progress.md question 13. Q7 rerun: both branches hold at 1361 W m⁻².
+    - **Owner decision after step 7 (2026-11-24, follows 923fb1c):**
+      - The stop was correct; r6 is not adopted.
+      - "slingo_lts" with the published constants, and the lower water cap, stay as the basis.
+      - The T21 cover ≥ 0.56 rule is withdrawn; the +3.53 K is recorded only; Q7 is closed.
+      - Option 4 as a screen: A, the polar profile; B, r1, r3 and r5 at T42 1 + 1 years and in
+        the 400 ppm slab for years 46–60 from the frozen gate restart; C, the gate with the best
+        passer; D, otherwise stop and propose with fetched sources.
+      **Result (2026-11-25): none passes, stopped at D.**
+      - T42: r3 passes (cover 0.548, shape met, band error 10.19); r1 and r5 fail the shape row.
+      - Slab: all three lose their ice and end at 295.6–297.4 K.
+      - Step A: the r6 polar increase is upper and middle tropospheric; 8–22 % is above the
+        tropopause.
+      - At fixed SST the new low cloud adds +14.8 W m⁻² of global net CRE, mostly as tropical
+        and subtropical SW.
+      - Proposals: EIS (Wood & Bretherton 2006) and a cloud-only −10 to −40 °C phase ramp
+        (CAM3); or close with the frozen knobs; or an owner ruling on 283–293 K for this scheme.

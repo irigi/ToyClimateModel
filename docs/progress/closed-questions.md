@@ -303,3 +303,9 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2593–25
       net TOA within ±0.3 W m⁻² of the closure residual (not "max(0.02, 2 × standard
       error)", which loosens as noise grows). Record the implied equilibrium warming next to
       the measured one. SPEC.md §9.5.2 updated; `tools/equilibrium.py` to follow.
+
+7. **P2 bistability** — closed by the owner on 2026-11-24 (decision after step 7 of question 13).
+   - The rerun from a properly cold start (2026-11-24) stays fully ice-covered for 12 years
+     (208 K); the warm branch has no ice equatorward of 50°. Both branches hold at 1361 W m⁻².
+   - The earlier melt came from a warm initial state.
+   - The instellation sweep (record) runs once, after the cloud knobs are frozen.
