@@ -675,3 +675,59 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
         - The trigger cuts winter convection to ≤ 1.3 % with no RH gain, and switches off
           tropical convection (share 0.12).
         - Options in docs/progress.md question 13.
+    - Owner decision after the convection screen (2026-11-26, follows 8b0c923):
+      - Interpretation:
+        1. The stop was correct, and so was the change to the Hadley measure. The bar stays.
+        2. The SPEEDY-style trigger is not adopted and stays off. Firing frequency is not the
+           cause of the dry boundary layer, and 0.9 does not map onto our levels. `rh_ref`
+           stays at 0.7; `deep_requires_pt` stays off. No further convection variants for
+           now.
+        3. Established: only the mixing depth moves the winter near-surface RH (run d, s6),
+           and with it global precipitation comes within 10 % of GPCP. Not explained: why
+           low cloud does not follow the moisture, and why every variant moves summer rain
+           into 10–30°N.
+        4. Vertical resolution has now limited six separate results (trade inversion, Slingo
+           eq. 8, CAM trigger, the identical gate variant, EIS placement, cloud forming above
+           the moist layer). It is tested directly below, as a diagnostic.
+      - Step 1, analysis of existing output only (s1–s6, run d, r3 T42):
+        a. Precipitation: JJA and DJF maps of each variant minus s1 and minus GPCP. For
+           10–30°N in summer: land against ocean, convective against large-scale, and whether
+           the extra rain is fed by local evaporation or by moisture convergence. Is it the
+           same regions in every variant? The year-to-year spread of the pattern correlation
+           from the multi-year runs available, so that differences of 0.04–0.08 after one
+           year can be judged.
+        b. Humidity profile: fetch NCEP (or another named reanalysis) RH on pressure levels
+           and compare s1, d and s6 at 40–60°N and 40–60°S in winter and in the trade belts:
+           RH and q at each of our levels up to 600 hPa. Where does the model leave the
+           observations: at the surface, at 925, at 850?
+        c. Boundary-layer depth: model mean and distribution by band and season against a
+           published climatology that can be read (name it; say if none was found).
+        d. The current `ri_crit` default and its source, and which published values exist
+           (sources read).
+      - Step 2, diagnostic runs, T21 Earth AMIP 1 + 1 years, at most 5, all logged. Cloud
+        knobs at r3 with the corrected freeze-dry; convection at defaults.
+        - v1 `ri_crit` at the intermediate published value between the default and 0.25
+          (skip if there is none);
+        - v2 more boundary-layer levels: about twice the levels below σ 0.8, the levels
+          above unchanged; if the level set is not configurable without code changes, do not
+          build it, report what it would take, and skip v2 and v3;
+        - v3 v2 with `ri_crit` 0.25;
+        - v4 and v5 free, reason stated before running, informed by step 1.
+        - Report the same table as the screen, plus low cover by band against GOCCP, cloud
+          fraction by level at 40–60° in winter, and the step 1b profile for each run. For
+          v2 and v3 also the time step used and the run time against s1.
+      - Then stop and report: the tables, what explains the precipitation shift, whether
+        resolution or mixing depth controls the low cloud, and for each candidate route the
+        list of accepted criteria that would have to be rerun (for more levels: all of them,
+        with an estimate of the machine time). Implement no fix and change no default.
+      - Not in this step: no T42 runs, no slab runs, no cloud tuning, no gate. Row 4 and the
+        shape row stay as recorded. At most 16 threads; rules unchanged; end with a
+        docs/progress.md entry with the measured numbers.
+      - Result (2026-11-26 late evening): step 1 done and v1–v5 run; stopped as instructed.
+        - The summer rain shift is north-west Pacific ocean rain fed by convergence, growing
+          with near-surface moistening and reversed at L32.
+        - Single-year P correlation noise is estimated at std 0.011.
+        - Near-surface RH is set by `ri_crit`, not by the levels.
+        - Low cloud follows neither.
+        - L32 tropical net CRE is −26.8 (net TOA +11).
+        - Options in docs/progress.md question 13.

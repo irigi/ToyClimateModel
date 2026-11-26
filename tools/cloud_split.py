@@ -297,13 +297,13 @@ def fig_profiles(rs, labels, path):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    sig = np.asarray(rs[0]["sigma"])
     fig, ax = plt.subplots(2, 3, figsize=(13, 8), sharey=True)
     for j, (reg, _, _) in enumerate(REGIONS):
         for i, s in enumerate(("DJF", "JJA")):
             a = ax[i, j]
             for n, (r, lab) in enumerate(zip(rs, labels)):
                 e = r["regions"][reg][s]
+                sig = np.asarray(r["sigma"])  # each run's own level set
                 a.plot(e["cl"], sig, "-", color=f"C{n}", label=f"{lab} total")
                 if "cl_split" in e:
                     a.plot(e["cl_split"], sig, ":", color=f"C{n}")
