@@ -570,3 +570,57 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       mostly poleward of 68°; the gate costs 16 W m⁻² of tropical net CRE. Options in
       docs/progress.md (BL humidity diagnosis; subgrid-variability low-cloud scheme; gate
       restriction; ruling).
+      **Owner decision after the diagnosis (2026-11-26, follows 71aa0a8), recorded before
+      starting:**
+      - Push the branch first (done).
+      - Interpretation: the stop was correct; the freeze-dry correction to the source is
+        accepted; the frozen-knob gate numbers of 2026-11-21 predate it, are marked so and not
+        rerun. The mid-latitude deficit is low cloud (GOCCP) and its cause is not in the cloud
+        scheme: the boundary layer is too dry (winter median RH 0.67–0.73 at σ 0.93–0.99;
+        lowest-level ocean RH 0.70 ± 0.08 against 0.80 ± 0.07); no cloud knob or switch
+        reaches it. Two facts point below the clouds: global precipitation 3.2 mm/day against
+        about 2.7 (verify against GPCP), and the lowest-level RH equals `rh_ref` = 0.7.
+        Hypothesis (untested): convection fires often in mid-latitude winter air over the
+        ocean and relaxes the boundary layer toward 0.7, drying it and driving extra
+        evaporation. Alternative: boundary-layer mixing too deep or strong.
+      - Decisions: options 2 and 3 refused (a scheme making cloud at lower RH would cover a
+        humidity error; the gate restriction gains ≤ 0.034). Option 4: the shape row is not
+        ruled met and P4 does not close with it open. Option 1 taken and widened. **Plan
+        change:** the convection work item that was to be the first item of P5 is done now,
+        inside P4; P5 starts only after P4 closes with the final convection and clouds;
+        recorded in the P4 state section and the status table; SPEC.md not edited, criteria
+        unchanged. r3 with the corrected freeze-dry is the working cloud configuration; no more
+        cloud tuning until the humidity question is answered.
+      - Next step, diagnosis only, then report. Step 1: fetch and name a near-surface ocean RH
+        climatology, GPCP and an ocean evaporation / latent-heat climatology; compare with r3
+        by band (tropics, subtropics, 40–60° both hemispheres, by season): near-surface RH,
+        evaporation, precipitation, convective share; say what was not fetched. Step 2:
+        moisture budget of σ ≥ 0.87 at 40–60°N and 40–60°S in winter and in the trade belts
+        from one T21 Earth AMIP year with the tendencies saved (evaporation, mixing,
+        convection, large-scale condensation, advection), plus convection frequency,
+        skipping, parcel start level and mean boundary-layer depth. Step 3: T21 Earth AMIP
+        1 + 1 year toggles, ≤ 5, logged: a reference; b `rh_ref` 0.8; c convection not
+        allowed to modify the lowest one or two levels (or the nearest switch; say which);
+        d mixing weakened or depth capped (one change, stated); e free with the reason stated
+        first. Report per run: near-surface RH by band against step 1, E and P, low cover
+        against GOCCP and CERES, criteria 1–2, tropical net CRE, Hadley strength, P5
+        precipitation pattern correlation. Step 4: reread Frierson (2007) on the reference
+        humidity and the boundary layer; find how at least one other published simplified-
+        physics model treats this (compare only); list candidate fixes with a read source and
+        their rerun cost for accepted milestones (P1–P3). Then stop: implement no fix, change
+        no default.
+      - ≤ 16 threads; rules unchanged; nothing chosen by the 2×CO₂ warming or the aquaplanet
+        temperature.
+      **Result (2026-11-26 afternoon): diagnosis done, stopped as instructed.** Observations:
+      ICOADS 2° `rhum` (1991–2020), NCEP σ 0.995 RH, NCEP LHF, `prate`, `cprat`, GPCP v2.3;
+      OAFlux not reachable; no observed convective share. Global P: GPCP 2.69, model 2.92 (T21)
+      / 3.20 (T42). Near-surface ocean RH 0.05–0.15 below ICOADS, worst in winter at 40–60°
+      (0.700 / 0.673 vs 0.802 / 0.819); winter E +33 % / +62 % vs NCEP; convective share at
+      40–60° 0.57–0.68 vs NCEP 0.16–0.29. Budget σ ≥ 0.87, 40–60° winter: E +3.6 / +3.0,
+      mixing −3.7 / −3.9, convection +0.3 / +0.9 (moistens), active 53–61 %, tops 650–680 hPa,
+      PBL 1.9–2.1 km. Toggles (32–57°N cover − CERES): a −0.159; b `rh_ref` 0.8 −0.091 (fails
+      criterion 2, SW −60.9; Hadley S −33 %); c `keep_lowest` 2 −0.156; d `ri_crit` 0.25
+      −0.191; e `deep_requires_pt` −0.149. Hypothesis half right: RH held at `rh_ref` through
+      frequent convection above the boundary layer and the mixing, not by direct drying.
+      Options in docs/progress.md (raise `rh_ref`; SPEEDY-type boundary-layer trigger and
+      closure; P_T criterion; other).

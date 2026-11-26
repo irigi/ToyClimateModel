@@ -129,6 +129,12 @@ pub struct SimplifiedBettsMiller {
     pub shallow: Shallow,
     /// Require P_T > 0 for deep convection (key `deep_requires_pt`, default false).
     pub deep_requires_pt: bool,
+    /// Diagnostic switch (key `keep_lowest`, default 0; P4 question 13, 2026-11-26): deep
+    /// convection leaves the lowest `keep_lowest` levels unchanged. The parcel still starts
+    /// at the lowest level; P_q, P_T, the energy closure and the relaxation use only the
+    /// levels from the top down to the last one above them, so the scheme still conserves
+    /// moist enthalpy. Not a published variant; only with `shallow = "none"`.
+    pub keep_lowest: usize,
     /// RK4 sub-steps per layer for the parcel ascent. With the exact LCL search, one
     /// sub-step is accurate to ~0.001 K for L26-type layers (see the test).
     pub substeps: usize,
@@ -316,9 +322,15 @@ impl ColumnScheme for SimplifiedBettsMiller {
         }
         let (lv, cp, g) = (self.cond.latent_heat, planet.cp, planet.gravity);
         let qref = |tr: f64, pk: f64| self.rh_ref * self.cond.qsat(planet, tr, pk);
+        // bottom (exclusive) of the levels convection modifies
+        let kb = l - self.keep_lowest.min(l);
+        if top >= kb {
+            diag[3] += 1.0;
+            return;
+        }
         let mut pq = 0.0; // ∫ (q − q_ref) dp (positive = drying)
         let mut pt = 0.0; // ∫ c_p/L (T_ref − T) dp
-        for k in top..l {
+        for k in top..kb {
             pq += (st.q[k] - qref(tp[k], p[k])) * dp[k];
             pt += cp / lv * (tp[k] - st.t[k]) * dp[k];
         }
@@ -343,11 +355,11 @@ impl ColumnScheme for SimplifiedBettsMiller {
         diag[2] += 1.0;
         // energy closure: shift T_ref by a uniform ΔT so that heating balances drying,
         // Σ c_p (T_ref − T) dp = Σ L (q − q_ref) dp (q_ref held at the first-guess value)
-        let mass: f64 = dp[top..l].iter().sum();
+        let mass: f64 = dp[top..kb].iter().sum();
         let dtref = (lv / cp) * (pq - pt) / mass;
         let (mut precip, mut rain, mut snow) = (0.0, 0.0, 0.0);
         let lf = self.cond.latent_heat_fusion;
-        for k in top..l {
+        for k in top..kb {
             let dtk = (tp[k] + dtref - st.t[k]) / self.tau;
             let dqk = -(st.q[k] - qref(tp[k], p[k])) / self.tau;
             // condensate (net drying) of the layer freezes with f_ice of the layer
@@ -389,6 +401,7 @@ mod tests {
             rh_ref: 0.7,
             shallow: Shallow::None,
             deep_requires_pt: false,
+            keep_lowest: 0,
             substeps: n,
         };
         let mut b = vec![0.0; 26];
@@ -460,6 +473,7 @@ mod tests {
                 rh_ref: 0.7,
                 shallow,
                 deep_requires_pt: false,
+                keep_lowest: 0,
                 substeps: 1,
             };
             let mut st = ColumnState::new(l, 1);
@@ -535,6 +549,7 @@ mod tests {
                 rh_ref: 0.7,
                 shallow: Shallow::None,
                 deep_requires_pt: req,
+                keep_lowest: 0,
                 substeps: 1,
             };
             let mut st = ColumnState::new(l, 1);
@@ -571,5 +586,75 @@ mod tests {
         assert_eq!(d[0], 0.0);
         assert_eq!(st.t, t0);
         assert_eq!(st.q, q0);
+    }
+    /// `keep_lowest`: deep convection leaves the lowest levels unchanged and still
+    /// conserves moist enthalpy, and the column water lost equals the precipitation.
+    #[test]
+    fn keep_lowest_leaves_bottom_levels_and_conserves() {
+        let geo = Geometry::l26();
+        let planet = Planet::earth();
+        let cond = Condensable::water();
+        let ctx = geo.ctx(&planet, Some(&cond), 1800.0);
+        let l = geo.p.len();
+        let run = |n: usize| {
+            let sbm = SimplifiedBettsMiller {
+                cond: cond.clone(),
+                tau: 7200.0,
+                rh_ref: 0.7,
+                shallow: Shallow::None,
+                deep_requires_pt: false,
+                keep_lowest: n,
+                substeps: 1,
+            };
+            let mut st = ColumnState::new(l, 1);
+            st.begin(1800.0);
+            let q0 = 0.9 * cond.qsat(&planet, 300.0, geo.p[l - 1]);
+            let mut tp = vec![0.0; l];
+            sbm.parcel(&planet, &geo.p, 300.0, q0, &mut tp);
+            for k in 0..l {
+                st.t[k] = if k == l - 1 {
+                    300.0
+                } else {
+                    (tp[k] - 1.0).max(200.0)
+                };
+                st.q[k] = 0.9 * cond.qsat(&planet, st.t[k], geo.p[k]);
+            }
+            let (t0, qv) = (st.t.clone(), st.q.clone());
+            let mut sfc = SurfaceExchange::default();
+            let mut diag = [0.0; 5];
+            sbm.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(l));
+            (st, t0, qv, sfc, diag)
+        };
+        let (st0, _, q00, _, d0) = run(0);
+        assert_eq!(d0[2], 1.0);
+        assert!(
+            st0.q[l - 1] < q00[l - 1],
+            "lowest level not dried without the key"
+        );
+        for n in [1, 2] {
+            let (st, t0, q0, sfc, d) = run(n);
+            assert_eq!(d[2], 1.0, "{d:?}");
+            for k in l - n..l {
+                assert_eq!(st.t[k], t0[k]);
+                assert_eq!(st.q[k], q0[k]);
+            }
+            let g = planet.gravity;
+            let dw: f64 = (0..l).map(|k| (st.q[k] - q0[k]) * geo.dp[k] / g).sum();
+            let dh: f64 = (0..l)
+                .map(|k| {
+                    planet.cp * (st.t[k] - t0[k]) * geo.dp[k] / g
+                        + cond.latent_heat * (st.q[k] - q0[k]) * geo.dp[k] / g
+                })
+                .sum();
+            let pr = (sfc.rain + sfc.snow) * 1800.0;
+            assert!(pr > 0.0);
+            assert!((dw + pr).abs() < 1e-9 * pr, "water {dw} vs precip {pr}");
+            // ice formed above the freezing level releases fusion heat: allow it
+            let lf = cond.latent_heat_fusion * sfc.snow * 1800.0;
+            assert!(
+                (dh - lf).abs() < 1e-6 * (cond.latent_heat * pr),
+                "enthalpy {dh}"
+            );
+        }
     }
 }

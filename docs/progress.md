@@ -28,7 +28,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold; Q7 closed by the owner (2026-11-24). Screen after step 7 (2026-11-25): r1, r3, r5 all fail (r3 passes T42 but its 400 ppm slab melts to 295.6 K; at fixed SST the new low cloud adds +14.8 W m⁻² net CRE, mostly tropical SW); **stopped at step D** (question 13). Owner (2026-11-25): r3 candidate, the 283–293 K closing condition withdrawn (row 4 open, revisit with P6); r3 gate: T42 1, 2, 5 and cover 0.545 met, **shape row fails** (northern maximum on the 68.4° edge row by 0.005); slab 400 ppm 295.62 K, 2×CO₂ +2.96 K (both equilibrated); regress no regression; **stopped at step 1** (question 13). Owner (2026-11-25 evening): EIS law (Wood & Bretherton 2006) in P4, step A first; 2026-11-26: (a) the cover deficit is mid-latitude (−0.14 to −0.17 at 32–57°N, −0.24 to −0.30 over the Southern Ocean), the northern cap is below CERES too; **(b) fails**: EIS raises 68–80°N (+0.013) more than 45–65°N (+0.006); **stopped at step A** (question 13). Owner (2026-11-26): diagnosis. GOCCP: the deficit is low cloud; freeze-dry corrected to CAM (RH cloud only, p ≥ 750 hPa); T21 toggles (freeze-dry, gate, RH_c) bring 32–57°N at best to −0.123 against CERES (target within 0.08): **stopped at step 3** (question 13) |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold; Q7 closed by the owner (2026-11-24). Screen after step 7 (2026-11-25): r1, r3, r5 all fail (r3 passes T42 but its 400 ppm slab melts to 295.6 K; at fixed SST the new low cloud adds +14.8 W m⁻² net CRE, mostly tropical SW); **stopped at step D** (question 13). Owner (2026-11-25): r3 candidate, the 283–293 K closing condition withdrawn (row 4 open, revisit with P6); r3 gate: T42 1, 2, 5 and cover 0.545 met, **shape row fails** (northern maximum on the 68.4° edge row by 0.005); slab 400 ppm 295.62 K, 2×CO₂ +2.96 K (both equilibrated); regress no regression; **stopped at step 1** (question 13). Owner (2026-11-25 evening): EIS law (Wood & Bretherton 2006) in P4, step A first; 2026-11-26: (a) the cover deficit is mid-latitude (−0.14 to −0.17 at 32–57°N, −0.24 to −0.30 over the Southern Ocean), the northern cap is below CERES too; **(b) fails**: EIS raises 68–80°N (+0.013) more than 45–65°N (+0.006); **stopped at step A** (question 13). Owner (2026-11-26): diagnosis. GOCCP: the deficit is low cloud; freeze-dry corrected to CAM (RH cloud only, p ≥ 750 hPa); T21 toggles (freeze-dry, gate, RH_c) bring 32–57°N at best to −0.123 against CERES (target within 0.08): **stopped at step 3** (question 13) Owner (2026-11-26 afternoon): **plan change, the P5 convection item is done inside P4; P5 starts after P4 closes with the final convection and clouds**. Boundary-layer humidity diagnosis: near-surface ocean RH 0.05–0.15 below ICOADS (winter 40–60° 0.67–0.70 against 0.80–0.82), winter evaporation +33/+62 %, global P 2.92 (T21) / 3.20 (T42) against GPCP 2.69; RH pinned at `rh_ref` through frequent mid-latitude convection and the mixing; only `rh_ref` 0.8 moves RH and cloud (32–57°N −0.091, but criterion 2 fails); **stopped for the owner** (question 13) |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -144,9 +144,16 @@ Accepted milestones, with the rows the owner sent to a retest; numbers copied fr
   gray; RRTMG as reference (Koll & Cronin 2018 inaccessible).
 - Archive: [docs/progress/P3.md](progress/P3.md)
 
-## P4 state (as of 2026-11-25 afternoon)
+## P4 state (as of 2026-11-26 afternoon)
 
-**Frozen knobs** (2026-11-21, `docs/tuning.md`, gate binary `out/p4/toyclim_frozen`): freeze-dry on,
+**Plan change (owner, 2026-11-26 afternoon; SPEC.md not edited, criteria unchanged):** the convection
+work item that was to be the first item of P5 is done now, inside P4, because the clouds cannot be
+frozen while the humidity field they depend on is wrong. P5 starts only after P4 closes with the
+final convection and clouds. Working cloud configuration until then: r3 with the corrected
+freeze-dry; no more cloud tuning until the humidity question is answered.
+
+**Frozen knobs** (2026-11-21, `docs/tuning.md`, gate binary `out/p4/toyclim_frozen`; **the gate numbers below
+predate the 2026-11-26 freeze-dry correction and are not rerun**, owner 2026-11-26): freeze-dry on,
 RH_c 0.95 / 0.90, β 0.03 (freeze-dry corrected to CAM on 2026-11-26: RH cloud only, p ≥ 750 hPa; changes only high ground with these knobs, gate not rerun); shallow convection, "anvil", `deep_requires_pt` and the CO₂ band off.
 "slingo_lts" low cloud (decision (vi)/(A), 2026-11-23): implemented, off; in step 4 (question 13).
 
@@ -1484,6 +1491,247 @@ Changes kept:
 Options are below question 13.
 
 
+## 2026-11-26 (afternoon) — Question 13, owner decision after the diagnosis: boundary-layer humidity; **diagnosis done, stopped for the owner as instructed** (branch `p4-clouds`)
+
+Owner decision (follows 71aa0a8; recorded under question 13 and in the history file): push the
+branch first (done). The freeze-dry correction is accepted; the frozen-knob gate numbers of
+2026-11-21 predate it and are not rerun. The low-cloud deficit comes from a too-dry boundary
+layer, not from the cloud scheme. Options 2 and 3 were refused, and option 4 was not ruled.
+Option 1 is taken and widened. **Plan change:** the convection item that was to be first in P5
+is done now, inside P4, and P5 starts after P4 closes with the final convection and clouds
+(SPEC.md not edited, criteria unchanged). r3 with the corrected freeze-dry is the working cloud
+configuration, with no more cloud tuning until the humidity question is answered. Steps 1–4
+are diagnosis only; then stop and report. Nothing fixed, no default changed.
+
+**Tools and switches (all diagnostic, off by default; byte-neutral):**
+- `physics/budget.rs`, `[convection] budget_sigma`: moisture-budget probes after the boundary
+  layer, the convection and the large-scale condensation. They record the accumulated q
+  tendency of the levels σ ≥ 0.87 and of the lowest level, plus W, the lowest-level RH and the
+  convection top. SCM test: the probe changes nothing and reports the layer integral. 1-day
+  Earth run with and without the probes: 20 field and 224 restart files identical.
+- `[convection] keep_lowest = N`: deep convection leaves the lowest N levels unchanged, with
+  the closure over the remaining levels. It is not a published variant; no existing switch
+  does this. SCM test: the bottom levels are untouched, enthalpy is conserved and the water
+  lost equals the precipitation.
+- `tools/bl_humidity.py`: observations by band, the budget and the toggle table.
+- Binary `out/p4/toyclim_q13bl` (71aa0a8 plus the above). Runs are in `out/p4/q13bl/`, with
+  reports `step123.txt` and `step123.json`.
+
+### Step 1 — observations (fetched 2026-11-26 into `reference/raw/`, monthly climatologies)
+
+Fetched:
+- **ICOADS** 2° enhanced `rhum.mean.nc` (NOAA PSL; Freeman et al. 2017), averaged over
+  1991–2020. It holds ship and buoy reports at about 10–20 m height, ocean only.
+- **NCEP/NCAR** RH at σ 0.995 (`rhum.sig995.mon.ltm.1991-2020.nc`). This level is close to
+  our lowest, σ 0.9925.
+- **NCEP/NCAR** latent heat flux (`lhtfl`), giving E = LHF / 2.5e6.
+- **NCEP/NCAR** `prate` and `cprat`, for the convective share.
+- **GPCP v2.3** (already on disk).
+
+Not fetched:
+- **OAFlux:** the WHOI ftp did not answer, so evaporation is reanalysis model output.
+- **An observed convective share:** the NCEP share comes from its own convection scheme.
+
+Ocean cells only (OISST mask). The model RH is the lowest level at the start of each physics
+step. Model values are year 2 of run a (r3, corrected freeze-dry).
+
+**Global precipitation:** GPCP **2.69** mm/day (NCEP 2.82). The model gives **2.92** at T21
+(run a; +8.5 %) and **3.20** at T42 (r3 gate; +19 %). The owner's 2.7 is confirmed.
+
+| Band (ocean) | RH ICOADS / NCEP σ0.995 / model, annual | RH in winter (40–60°: DJF N, JJA S) | E NCEP / model, winter [mm/day] | P GPCP / model, annual | Convective share NCEP / model, annual |
+|---|---|---|---|---|---|
+| 10°S–10°N | 0.807 / 0.811 / **0.721** | — | 3.79 / 3.86 (annual) | 4.42 / 4.89 | 0.99 / 0.82 |
+| 10–30°N | 0.786 / 0.791 / **0.704** | — | 4.70 / 5.05 (annual) | 2.51 / 3.38 | 0.97 / 0.72 |
+| 10–30°S | 0.773 / 0.804 / **0.726** | — | 4.67 / 4.39 (annual) | 2.20 / 2.07 | 0.94 / 0.65 |
+| 40–60°N | 0.821 / 0.850 / **0.747** | 0.802 / 0.843 / **0.700** | 2.73 / **3.64** | 3.38 / 3.02 | 0.29 / **0.57** (DJF 0.29 / 0.68) |
+| 40–60°S | 0.836 / 0.864 / **0.706** | 0.819 / 0.864 / **0.673** | 1.85 / **2.99** | 2.99 / 2.92 | 0.22 / **0.60** (JJA 0.26 / 0.66) |
+
+- **RH:** near-surface ocean RH is 0.05–0.13 below ICOADS everywhere. The gap is largest in
+  the winter mid-latitudes (−0.10 and −0.15), where the summer values match (40–60°N JJA
+  0.847 against 0.855).
+- **Evaporation:** winter evaporation at 40–60° is 33 % (N) and 62 % (S) above NCEP. Elsewhere
+  it is within about 10 %.
+- **Precipitation:** too much in the deep tropics and the northern subtropics (2.51 against
+  3.38); about right at 40–60° annually.
+- **Convective share:** convection makes 57–68 % of the mid-latitude precipitation, against
+  NCEP's 16–29 %.
+
+Figure `docs/figures/P4/q13_bl_bands.png` (opened) has three panels, observations in black and
+runs a–e dashed:
+- **RH panel:** every run lies 0.03–0.15 below ICOADS. The gap widens toward both winter
+  mid-latitude bands. Only b and d lift the curve, by about 0.04.
+- **Evaporation and precipitation panels:** all runs nearly coincide. They are above the
+  observations in the northern subtropics and over the Southern Ocean (evaporation), and above
+  them in the deep tropics (precipitation).
+
+### Step 2 — moisture budget of the levels σ ≥ 0.87 (run a, year 2, ocean)
+
+The layer is σ 0.903–1, three levels (σ 0.9295, 0.9705, 0.9925). Terms are in mm/day into the
+layer. Mixing is the boundary-layer tendency minus E. Dynamics (advection, hyperdiffusion,
+fixer) is the residual against the storage change. The climatology samples every 6 h.
+
+| Term | 40–60°N DJF | 40–60°S JJA | trades 10–25°N | trades 10–25°S |
+|---|---|---|---|---|
+| surface evaporation | +3.64 | +2.99 | +5.05 | +4.39 |
+| boundary-layer mixing (export upward) | **−3.73** | **−3.87** | −3.30 | −2.60 |
+| convection | **+0.34** | **+0.92** | −0.75 | −0.67 |
+| of it, lowest level only | +0.22 | +0.35 | +0.17 | +0.07 |
+| large-scale condensation | −0.01 | −0.01 | −0.05 | −0.09 |
+| dynamics (residual) | −0.24 | −0.04 | −0.94 | −1.04 |
+| storage | −0.01 | −0.01 | 0 | 0 |
+| deep convection active (share of samples) | **0.61** | **0.53** | 0.22 | 0.16 |
+| skipped (CAPE > 0, P_q ≤ 0) | 0.10 | 0.09 | 0.65 | 0.67 |
+| mean convection top [hPa] | 676 | 651 | 559 | 703 |
+| mean boundary-layer depth [m] | 1857 | 2081 | 1279 | 1159 |
+| lowest-level RH | 0.700 | 0.673 | 0.704 | 0.726 |
+| precipitation / convective share | 4.67 / 0.68 | 3.89 / 0.66 | 3.38 / 0.72 | 2.07 / 0.65 |
+
+- **Parcels** always start at the lowest level (σ 0.9925), by construction of the scheme
+  (Frierson 2007 §2d).
+- **Mid-latitude winter:**
+  - Deep convection is active in 53–61 % of the samples, with shallow tops near 650–680 hPa.
+  - Its net tendency in the low layer is **moistening**. It does not dry the layer. It
+    removes the water above σ 0.87 (convective precipitation about 3.2 mm/day at 40–60°N
+    DJF), and the boundary-layer mixing feeds that from below (export 3.7–3.9 mm/day).
+- **Trades:** convection dries the layer (−0.7), and the dynamics export about 1 mm/day.
+- **Pinning:** the lowest-level RH in winter at 40–60° (5-day snapshots, ocean) is tightly
+  held near `rh_ref`:
+  - median 0.69 (N) and 0.67 (S), interquartile 0.66–0.73 and 0.64–0.70, 59–63 % of points
+    in 0.65–0.75;
+  - with `rh_ref` 0.8 (run b), the median is 0.76 (N) and 0.73 (S).
+
+### Step 3 — toggle runs (T21 Earth AMIP 1 + 1 years, year 2; diagnostics only; 5 runs)
+
+Runs:
+- **a:** reference (r3, corrected freeze-dry).
+- **b:** `rh_ref` 0.8.
+- **c:** `keep_lowest = 2`. A new diagnostic switch, since no existing one does this:
+  convection does not modify σ 0.9925 or 0.9705.
+- **d:** `ri_crit` 0.25, one change. This is the edge of the logged range 0.25–1. It gives a
+  shallower boundary layer with weaker mixing.
+- **e (free; reason stated before running):** `deep_requires_pt = true`, the paper's deep
+  criterion (Frierson 2007 §2a–b; existing switch). Reason: step 2 showed deep convection in
+  53–61 % of winter samples at 40–60°, and a convective share of 0.66–0.68 against NCEP's
+  0.16–0.29. The code fires for P_q > 0 regardless of P_T.
+
+Main table:
+
+| Run | Albedo | OLR | Net TOA | SW / LW CRE | Cover | Crit. 1–2 | 20°S–20°N net CRE | Hadley N / S [10¹⁰ kg/s] | P map corr (P5) | P global | RH low, ocean | Low cover 32–57°N / 45–60°S (GOCCP 0.34 / 0.60) | Cover − CERES 32–57°N / 45–60°S |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| a | 0.303 | 233.8 | +3.24 | −53.1 / +27.2 | 0.550 | met | −39.8 | 5.47 / 10.88 | 0.704 | 2.92 | 0.723 | 0.255 / 0.407 | −0.159 / −0.271 |
+| b `rh_ref` 0.8 | 0.325 | 232.2 | −2.57 | **−60.9** / +28.8 | 0.593 | **2 fails** (SW by 0.9) | −48.6 | 4.78 / 7.34 | 0.669 | 2.85 | 0.757 | 0.331 / 0.506 | **−0.091** / −0.198 |
+| c keep lowest 2 | 0.305 | 233.7 | +2.66 | −53.9 / +27.5 | 0.557 | met | −40.2 | 5.28 / 11.23 | 0.703 | 2.97 | 0.730 | 0.266 / 0.431 | −0.156 / −0.263 |
+| d `ri_crit` 0.25 | 0.292 | 235.8 | +5.18 | −49.1 / +26.1 | 0.528 | met | −36.8 | 5.28 / 12.07 | 0.623 | 2.76 | **0.781** | 0.225 / 0.359 | −0.191 / −0.306 |
+| e P_T > 0 | 0.308 | 233.0 | +2.46 | −54.9 / +28.3 | 0.561 | met | −40.6 | 5.45 / 10.85 | 0.706 | 2.93 | 0.725 | 0.275 / 0.472 | −0.149 / −0.247 |
+
+Near-surface RH by band against ICOADS, with winter for 40–60°:
+
+| Band | ICOADS | a | b | c | d | e |
+|---|---|---|---|---|---|---|
+| 10°S–10°N | 0.807 | 0.721 | 0.760 | 0.726 | 0.760 | 0.714 |
+| 10–30°N | 0.786 | 0.704 | 0.743 | 0.708 | 0.757 | 0.708 |
+| 40–60°N DJF | 0.802 | 0.700 | 0.739 | 0.682 | 0.758 | 0.696 |
+| 40–60°S JJA | 0.819 | 0.673 | 0.696 | 0.659 | 0.761 | 0.678 |
+
+Evaporation and precipitation, winter at 40–60°N / 40–60°S, in mm/day:
+
+| Run | Evaporation (NCEP 2.73 / 1.85) | Precipitation (GPCP 4.09 / 3.10) |
+|---|---|---|
+| a | 3.64 / 2.99 | 4.67 / 3.89 |
+| b | 3.01 / 2.95 | 4.38 / 3.94 |
+| c | 3.64 / 2.97 | 4.70 / 3.96 |
+| d | 3.70 / 2.44 | 4.41 / 3.53 |
+| e | 3.63 / 2.94 | 4.60 / 3.90 |
+
+Per-run findings:
+- **b** is the only run that raises both the RH and the mid-latitude low cloud. At 32–57°N,
+  low cover rises +0.076 and cover − CERES reaches −0.091, against the 0.08 target. It also:
+  - lowers the 40–60°N winter evaporation by 17 %;
+  - drops the convective share there from 0.68 to 0.49;
+  - fails criterion 2 at T21, makes the tropical net CRE 8.8 W m⁻² more negative, weakens the
+    Hadley cells (N −13 %, S −33 %) and lowers the P5 pattern correlation by 0.035;
+  - leaves the RH still 0.04–0.12 below ICOADS.
+- **c:** keeping convection off the two lowest levels changes nothing (32–57°N +0.003), and
+  the winter RH is even lower (−0.02).
+- **d:** raises the lowest-level RH most (+0.06; 40–60°S JJA 0.761) but lowers the low cloud
+  (−0.03 at 32–57°N, −0.05 at 45–60°S) and the precipitation pattern (0.62). Moisture stays in
+  the lowest levels, where no RH cloud forms (the lowest level has none by design) and below
+  the σ 0.8–0.9 levels where the low cloud sits.
+- **e:** cuts the winter convection frequency from 0.61 to 0.51, with small gains (+0.010 at
+  32–57°N, +0.024 at 45–60°S). Its RH is unchanged.
+
+### Which hypothesis holds
+
+- **Owner's hypothesis**, that convection fires often and relaxes the boundary layer toward 0.7,
+  drying it: **half right.**
+  - Right: convection is active in 53–61 % of mid-latitude winter samples. Its precipitation
+    share is two to three times NCEP's. The near-surface RH is held at `rh_ref` (median 0.69
+    at 0.7, 0.76 at 0.8), and `rh_ref` is the one lever that moves both RH and low cloud.
+  - Wrong: the drying does not come from convection acting on the boundary layer directly. In
+    winter its tendency there is moistening, and run c, with no convection in the lowest two
+    levels, is unchanged.
+  - The path is indirect. Convection holds the levels above about σ 0.87 at `rh_ref` and rains
+    out what arrives there. The K-profile mixing (boundary layer 1.9–2.1 km deep in winter)
+    exports 3.7–3.9 mm/day into those levels. The surface replaces it with too much
+    evaporation (+33 % / +62 %).
+- **The alternative** (mixing too deep or too strong) controls how the moisture is shared
+  between the lowest levels and the cloud levels, not how much there is. A shallower boundary
+  layer (d) moistens the lowest level but dries the cloud levels and lowers cover.
+- **Conclusion:** the controlling quantity is the convective reference humidity, together with
+  how often deep convection fires in the mid-latitude winter.
+
+### Step 4 — sources (compare only; no source copied)
+
+Read:
+- **Frierson (2007)**, JAS 64, 1959–1976. Local copy fetched on 2026-11-21, reread.
+  - §2d: q_ref = RH_SBM × q_sat(T_ref). Adjustment runs "from the surface to the level of
+    zero buoyancy of a parcel lifted from the lowest model level". So the boundary layer is
+    always inside the adjusted layer.
+  - §3a: the model is an aquaplanet, slab, gray radiation, with no clouds and a K-profile
+    boundary layer up to the critical-Ri depth (Frierson et al. 2006). The control is
+    τ = 2 h, RH_SBM = 0.7, with "shallower" shallow convection.
+  - §4b, Table 4: RH_SBM 0.5–0.8 changes evaporation only modestly ("only 20 %" at the
+    equator from 0.8 to 0.5). The Hadley maximum stays within 8 %. The ITCZ humidity sits
+    slightly above RH_SBM (eq. 21, q = q_ref + τ P).
+  - §2a–b: deep convection needs P_T > 0 and P_q > 0.
+  - Nothing in the paper concerns mid-latitudes or tuning against observed humidity. Its 0.7
+    was chosen for a cloud-free aquaplanet.
+- **SPEEDY v41 description** (Molteni & Kucharski, ICTP, appendix A–B; PDF fetched and read).
+  - Convection is triggered only where conditional instability exists *and* the humidity in
+    the boundary layer and the level above exceeds RH_cnv q_sat (eq. 8; RH_cnv 0.9 in the
+    boundary layer, 0.7 in the intermediate layers).
+  - The closure relaxes the boundary-layer humidity toward that threshold, not toward 0.7
+    (eqs. 12–13, τ_cnv 6 h).
+  - A separate shallow-convection and diffusion step moves moisture between the two lowest
+    layers (§B.8).
+- **Isca** (Vallis et al. 2018, GMD 11, 843; read). It names the Betts–Miller scheme of
+  Frierson 2007 and a "simple Monin–Obukhov boundary layer, as in … Frierson et al. (2006)",
+  with no RH_SBM value or Earth evaluation of humidity. It gives nothing to compare.
+- **Not read:** Janjić (1994), the BMJ treatment of the subcloud layer. The AMS site refused the
+  automated fetch (HTTP 403).
+
+Candidate fixes:
+
+| # | Fix | Source read | Evidence here | Cost in reruns of accepted milestones |
+|---|---|---|---|---|
+| 1 | Raise `rh_ref` (logged knob "P5"; 0.8 is inside the paper's 0.5–0.8) | Frierson 2007 §4b, Table 4 | b: the only lever that moves RH and mid-latitude cloud. 32–57°N −0.091. Fails criterion 2 at T21 (needs cloud knobs re-set afterwards); Hadley S −33 % (paper: ±8 % on an aquaplanet); P corr −0.035 | Default change in the SBM: P1 criterion 5 (APE, T42 1 + 3 years); P2 criteria 2, 3, 5, 6 (T21 land world 3 years, T42 test world slab to equilibrium, bistability pair); P3 criterion 4 and the T21 Earth record; regress references for the moist cases (testworld, gray aquaplanet); then the P4 gate (T42 1 + 5, slab pair ≥ 30 years) |
+| 2 | SPEEDY-type boundary-layer trigger and closure: deep convection only where boundary-layer RH exceeds a threshold, relaxing the boundary layer toward it | SPEEDY v41 description, eqs. 8, 12–13 | Not tested. Expected to cut the 53–61 % winter frequency and lift the boundary layer toward 0.9; would change the tropics too | New scheme variant: P1 criterion 1 SCM conservation tests and criteria 2–3, then everything in row 1 |
+| 3 | `deep_requires_pt = true` (the paper's criterion; existing switch) | Frierson 2007 §2a–b | e: small (+0.010 / +0.024); criteria 1–2 met; RH unchanged. Not enough alone; could go with 1 | As row 1 (default change) |
+| 4 | Shallower boundary layer (`ri_crit` 0.25) | Frierson et al. 2006 (logged range) | d: wrong direction for cloud and precipitation pattern | Not proposed |
+| — | `keep_lowest` | none (diagnostic) | c: no effect | Not proposed; switch kept for diagnosis |
+
+Checks:
+- `scripts/check` passes: fmt, clippy, 130 tests plus 7 ignored.
+- `scripts/regress --against 71aa0a8 --jobs 2`: **PASS**, all six cases
+  byte-identical at 1 and 8 threads (`out/p4/q13bl/regress_against_71aa0a8.log`).
+- 10-day Earth AMIP byte check with the cloud scheme (r3), old binary (`toyclim_q13fd`)
+  against new, without the probes: **400 of 400 `.npy` files identical**
+  (`out/p4/q13bl/bytecheck/`).
+- Within the 16-thread limit: 3 lanes × 5 threads, then 2 lanes × 8 threads.
+
+**Stopped here as instructed.** No fix implemented and no default changed. Options are under
+question 13.
+
 ## Open questions for the owner
 
 Latest ruling each; history in [open-questions.md](progress/open-questions.md), closed ones in
@@ -1643,6 +1891,45 @@ Latest ruling each; history in [open-questions.md](progress/open-questions.md), 
     at 32–57°N.
     (4) Rule on the shape row as measured (r3, with the corrected freeze-dry recorded), or close
     P4 another way.
+    **Owner decision after the diagnosis (2026-11-26, follows 71aa0a8; full text in the history
+    file):** the stop was correct; the freeze-dry correction is accepted (frozen-knob gate numbers
+    of 2026-11-21 predate it, marked, not rerun). The low-cloud deficit is a too-dry boundary
+    layer, not the cloud scheme. Options 2 and 3 refused; option 4 not ruled (P4 does not close
+    with the shape row open). Option 1 taken and widened; **plan change**: the P5 convection item
+    is done inside P4, P5 starts after P4 closes (SPEC.md not edited). r3 with the corrected
+    freeze-dry is the working configuration; no cloud tuning until the humidity question is
+    answered. Steps: 1 observations (near-surface ocean RH, GPCP, evaporation, convective share)
+    by band and season; 2 budget of σ ≥ 0.87 at 40–60° winter and the trades; 3 ≤ 5 T21 toggles
+    (reference; `rh_ref` 0.8; convection off the lowest levels; weaker/shallower mixing; free);
+    4 sources and candidate fixes with costs. Then stop; no fix, no default changed.
+    **Result (2026-11-26 afternoon, entry above): diagnosis done, stopped as instructed.**
+    - Observations (ICOADS, NCEP σ 0.995, NCEP LHF and cprat, GPCP; OAFlux not reachable):
+      near-surface ocean RH is 0.05–0.15 below ICOADS in every band, worst in the winter
+      mid-latitudes (0.700 / 0.673 against 0.802 / 0.819); winter evaporation +33 % (N) and
+      +62 % (S) over NCEP; global P 2.92 (T21) and 3.20 (T42) against GPCP 2.69; convective
+      share at 40–60° 0.57–0.68 against NCEP 0.16–0.29.
+    - Budget (σ ≥ 0.87, 40–60° winter): E +3.6 / +3.0, mixing export −3.7 / −3.9, convection
+      **+0.3 / +0.9 (moistens)**; deep convection active in 53–61 % of samples, tops 650–680
+      hPa; boundary layer 1.9–2.1 km; parcels start at the lowest level. Trades: convection
+      −0.7, dynamics −1.0.
+    - Toggles (32–57°N cover − CERES; ocean lowest-level RH): a −0.159, 0.723; b `rh_ref` 0.8
+      **−0.091**, 0.757, but SW CRE −60.9 (criterion 2 fails), Hadley S −33 %, P corr −0.035;
+      c convection off the lowest two levels −0.156 (no effect); d `ri_crit` 0.25 −0.191, 0.781
+      (moister lowest level, less cloud); e `deep_requires_pt` −0.149 (small).
+    - Hypothesis: half right. The RH is held at `rh_ref`, and convection is far too frequent in
+      the mid-latitude winter, but it acts through the levels above the boundary layer, which
+      convection holds at `rh_ref` and the mixing drains into; not by drying the boundary layer
+      directly (c). Mixing depth sets where the moisture sits, not how much there is.
+    **Owner, choose** (each needs reruns of P1 criterion 5, P2 criteria 2, 3, 5, 6, P3
+    criterion 4, new regress references, then the P4 gate; details in the entry):
+    (1) Raise `rh_ref` (Frierson 2007 §4b tested 0.5–0.8; logged knob), alone or with (3),
+    then reset the cloud knobs inside their ranges for criteria 1–2. Evidence: b.
+    (2) A boundary-layer trigger and closure for deep convection as in SPEEDY (Molteni &
+    Kucharski, v41 description, eqs. 8, 12–13: convect only where boundary-layer RH exceeds
+    RH_cnv = 0.9, relax it toward that threshold). New scheme variant, SCM tests first;
+    untested here.
+    (3) `deep_requires_pt = true` (the paper's deep criterion), small on its own (e).
+    (4) Another route of the owner's choosing.
 
 Closed: 1 License — MIT. 3 f32 HS asymmetry — accepted as recorded (2026-11-18). 5 Courant
 trigger — replaced (2026-11-18). 6 APE westerlies — known limitation (2026-11-23). 7 P2 bistability — both branches hold at 1361 W m⁻² from a proper cold start (2026-11-24); sweep (record) once the knobs are frozen. 8 P2 G, sea ice

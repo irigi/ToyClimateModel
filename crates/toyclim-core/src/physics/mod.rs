@@ -10,6 +10,7 @@
 //!   balance, dry adjustment, moist convection, large-scale condensation, sponge.
 
 pub mod boundary_layer;
+pub mod budget;
 pub mod clouds;
 pub mod column;
 pub mod condensation;
@@ -221,12 +222,22 @@ fn sbm(
             }
         },
     };
+    let keep = num(t, "keep_lowest", 0.0)?;
+    if keep < 0.0 || keep.fract() != 0.0 {
+        return Err(format!(
+            "[convection] keep_lowest = {keep}: expected 0, 1, 2, ..."
+        ));
+    }
+    if keep > 0.0 && shallow != Shallow::None {
+        return Err("[convection] keep_lowest needs shallow = \"none\"".into());
+    }
     Ok(SimplifiedBettsMiller {
         cond: cond.clone(),
         tau: 1.0 / rate(t, tau_key, 1.0 / 7200.0)?,
         rh_ref: num(t, rh_key, 0.7)?,
         shallow,
         deep_requires_pt: boolean(t, "deep_requires_pt", false)?,
+        keep_lowest: keep as usize,
         substeps: 1,
     })
 }
@@ -621,6 +632,28 @@ pub fn build_world(
         .convection
         .clone()
         .unwrap_or_else(|| SchemeConfig::new("dry", toml::Table::new()));
+    // diagnostic moisture-budget probes (budget.rs), only with `budget_sigma`
+    let mut conv_params = conv.params.clone();
+    let probe_sigma = match conv_params.remove("budget_sigma") {
+        None => None,
+        Some(v) => Some(
+            v.as_float()
+                .ok_or("[convection] budget_sigma must be a number")?,
+        ),
+    };
+    let conv = SchemeConfig::new(&conv.scheme, conv_params);
+    let probe = |stage| -> Result<Box<dyn ColumnScheme>, String> {
+        Ok(Box::new(budget::MoistureProbe {
+            cond: moisture
+                .ok_or("[convection] budget_sigma needs a [moisture] block")?
+                .clone(),
+            sigma_min: probe_sigma.unwrap_or(0.0),
+            stage,
+        }))
+    };
+    if probe_sigma.is_some() {
+        schemes.push(probe(budget::ProbeStage::BoundaryLayer)?);
+    }
     match conv.scheme.as_str() {
         "none" => check_keys("[convection]", &conv.params, &[])?,
         "dry" => {
@@ -631,7 +664,13 @@ pub fn build_world(
             check_keys(
                 "[convection]",
                 &conv.params,
-                &["tau", "rh_ref", "shallow", "deep_requires_pt"],
+                &[
+                    "tau",
+                    "rh_ref",
+                    "shallow",
+                    "deep_requires_pt",
+                    "keep_lowest",
+                ],
             )?;
             let cond = moisture.ok_or("convection \"sbm\" needs a [moisture] block")?;
             schemes.push(Box::new(DryAdjustment::default()));
@@ -650,8 +689,14 @@ pub fn build_world(
             return Err("condensation.reevaporation is not implemented yet (P2)".into());
         }
     }
+    if probe_sigma.is_some() {
+        schemes.push(probe(budget::ProbeStage::Convection)?);
+    }
     if let Some(cond) = moisture {
         schemes.push(Box::new(LargeScaleCondensation { cond: cond.clone() }));
+        if probe_sigma.is_some() {
+            schemes.push(probe(budget::ProbeStage::Condensation)?);
+        }
         schemes.push(Box::new(PrecipitationFall { cond: cond.clone() }));
     }
     // 6. cloud diagnosis (for the next radiation call)
