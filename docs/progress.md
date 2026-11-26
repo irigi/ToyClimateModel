@@ -28,7 +28,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold; Q7 closed by the owner (2026-11-24). Screen after step 7 (2026-11-25): r1, r3, r5 all fail (r3 passes T42 but its 400 ppm slab melts to 295.6 K; at fixed SST the new low cloud adds +14.8 W m⁻² net CRE, mostly tropical SW); **stopped at step D** (question 13). Owner (2026-11-25): r3 candidate, the 283–293 K closing condition withdrawn (row 4 open, revisit with P6); r3 gate: T42 1, 2, 5 and cover 0.545 met, **shape row fails** (northern maximum on the 68.4° edge row by 0.005); slab 400 ppm 295.62 K, 2×CO₂ +2.96 K (both equilibrated); regress no regression; **stopped at step 1** (question 13) |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold; Q7 closed by the owner (2026-11-24). Screen after step 7 (2026-11-25): r1, r3, r5 all fail (r3 passes T42 but its 400 ppm slab melts to 295.6 K; at fixed SST the new low cloud adds +14.8 W m⁻² net CRE, mostly tropical SW); **stopped at step D** (question 13). Owner (2026-11-25): r3 candidate, the 283–293 K closing condition withdrawn (row 4 open, revisit with P6); r3 gate: T42 1, 2, 5 and cover 0.545 met, **shape row fails** (northern maximum on the 68.4° edge row by 0.005); slab 400 ppm 295.62 K, 2×CO₂ +2.96 K (both equilibrated); regress no regression; **stopped at step 1** (question 13). Owner (2026-11-25 evening): EIS law (Wood & Bretherton 2006) in P4, step A first; 2026-11-26: (a) the cover deficit is mid-latitude (−0.14 to −0.17 at 32–57°N, −0.24 to −0.30 over the Southern Ocean), the northern cap is below CERES too; **(b) fails**: EIS raises 68–80°N (+0.013) more than 45–65°N (+0.006); **stopped at step A** (question 13) |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -1105,6 +1105,144 @@ variants were tried. r3 is not made the code default, `docs/tuning.md` is not ch
 changed in code), `scripts/check` was not rerun (no code change), and the P4 closing entry is
 not written. Options are under question 13.
 
+## 2026-11-26 (night) — Question 13, owner decision after the r3 gate: EIS law, step A; **stopped at step A, (b) fails** (branch `p4-clouds`)
+
+Owner decision of 2026-11-25 evening (follows a526a57), recorded under question 13 here and in
+the history file before starting: option 3, the Wood & Bretherton (2006) inversion-strength law,
+brought into P4; step A first, on existing output only. Machine idle at the start (03:30, load
+0.4); no runs were started.
+
+**Paper.** Wood, R. and C. S. Bretherton (2006), J. Climate 19, 6425–6432, DOI
+10.1175/JCLI3988.1. Read in full from the author's final copy
+(atmos.uw.edu/~robwood/papers/eis/eis_final.pdf, fetched 2026-11-26; the AOML mirror and AMS
+returned 403). Transcribed:
+- eq. (4) EIS = LTS − Γ_m^850 (z700 − LCL), Γ_m^850 = Γ_m([T0 + T700]/2, 850 hPa) (eq. 3 with
+  two adiabats; "our results are insensitive" to the simplification);
+- eq. (5) Γ_m(T, p) = (g/c_p)[1 − (1 + L_v q_s/(R_a T)) / (1 + L_v² q_s/(c_p R_v T²))];
+- eq. (6) z700 = (R_a T0/g) ln(p0/700 hPa);
+- LCL from T0, p0 and a **constant RH0 = 0.8** (COADS 60°S–60°N mean 0.8, s.d. 0.07); the paper
+  gives no LCL formula ("standard procedures exist");
+- §3: **CF = 0.14 ± 0.06 + (0.060 ± 0.010 K⁻¹) EIS** (95 %), r = 0.92, seasonal means of low
+  stratiform amount (St, Sc, fractocumulus, fractostratus, fog; no cumulus) for the Klein &
+  Hartmann regions with LTS > 10 K. **The agent's summary (0.14 + 0.060 EIS) is verified.**
+- T0 in the paper is the surface air temperature; LTS = θ700 − θ0.
+- §4: under moist-adiabatic warming EIS′ ≈ 0.75 T′700 − T′0 ≈ 0 near 285 K.
+
+**Tool** `tools/eis_check.py` (new). It applies the law as the model would, mirroring
+"slingo_lts": LTS exactly as the scheme; T0 = SST − 6.5 K km⁻¹·orog (the scheme has no surface
+air temperature, about 1 K warmer than W&B's T0); k700 for 700 hPa; 0.85 p_s for 850 hPa; the
+model's saturation curve; LCL by dry-adiabatic lift of RH0 0.8 air to saturation. Both laws are
+applied without the RH cap and freeze-dry, because the r3 run saved no humidity.
+- Check against W&B Table 1 (EIS rebuilt from the tabulated LTS and T0, p0 1010 hPa): the code
+  gives 0.6–1.7 K less than the table (Peru 6.3 against 6.9, Canary 0.8 against 2.5, North
+  Pacific 5.0 against 6.7). With p0 = 1000 hPa the gap is 0.3–1.6 K. The table averages
+  seasonal values, which may account for part of the gap; not resolved, recorded.
+- RH0 sensitivity on the frozen T42 run with saved `rh` (`out/p4/slingo/earth_inv_t42`, ocean
+  60°S–60°N, 103 333 columns): the model's lowest-level RH is 0.70 ± 0.08. EIS with that RH is
+  higher by 1.17 K on average (5–95 %: −0.45 to +2.51 K).
+
+Run: r3 T42 Earth AMIP gate (`out/p4/lts/gate_r3/earth_amip_t42`, years 2–6, 184 10-daily
+snapshots; climatology for (a)). Output `out/p4/eis/stepA/eis_check_r3_t42.{txt,json}`.
+
+### (a) Total cover against CERES EBAF Ed4.1 (`cldarea_total_daynight`, 2001–2020)
+
+Fetched 2026-11-22 (Zenodo extract, `reference/derived/SOURCES.md`). Cloud_cci cover was not
+fetched; only its water paths are on disk.
+
+| lat (°N) | 32.1 | 37.7 | 40.5 | 46.0 | 51.6 | 57.2 | 60.0 | 62.8 | 65.6 | 68.4 | 71.2 | 73.9 | 76.7 | 79.5 | 85.1 | 87.9 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| r3 | 0.420 | 0.451 | 0.474 | 0.533 | 0.579 | 0.618 | 0.628 | 0.645 | 0.663 | 0.668 | 0.665 | 0.659 | 0.668 | 0.665 | 0.636 | 0.657 |
+| CERES | 0.562 | 0.619 | 0.639 | 0.689 | 0.729 | **0.759** | 0.745 | 0.719 | 0.699 | 0.711 | 0.738 | 0.744 | 0.723 | 0.697 | 0.762 | 0.788 |
+| r3 − CERES | −0.142 | −0.168 | −0.165 | −0.156 | −0.150 | −0.140 | −0.117 | −0.073 | −0.036 | −0.043 | −0.072 | −0.085 | −0.054 | −0.032 | −0.126 | −0.131 |
+
+| lat (°S) | 32.1 | 37.7 | 40.5 | 46.0 | 51.6 | 57.2 | 60.0 | 62.8 | 65.6 | 68.4 | 71.2 | 73.9 | 76.7 | 79.5 | 85.1 | 87.9 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| r3 | 0.369 | 0.455 | 0.510 | 0.600 | 0.647 | 0.663 | 0.670 | 0.670 | 0.646 | 0.622 | 0.604 | 0.569 | 0.543 | 0.562 | 0.533 | 0.600 |
+| CERES | 0.645 | 0.750 | 0.789 | 0.845 | 0.884 | 0.923 | 0.930 | 0.927 | 0.894 | 0.816 | 0.732 | 0.642 | 0.546 | 0.478 | 0.515 | 0.541 |
+| r3 − CERES | −0.276 | −0.295 | −0.279 | −0.245 | −0.237 | −0.260 | −0.260 | −0.257 | −0.248 | −0.194 | −0.128 | −0.073 | −0.003 | +0.084 | +0.018 | +0.059 |
+
+- **The model is short everywhere from 30° to 77° in both hemispheres.**
+  - North: by 0.14–0.17 from 32° to 57°N, falling to 0.04 at 65–68°N.
+  - South: by 0.24–0.30 from 32° to 66°S.
+- **The northern cap is below the observations:** −0.03 to −0.09 at 65–80°N and −0.13 poleward of
+  82°N. So the deficit is the mid-latitudes' (0.15) and not the cap's. That matches the owner's
+  reading, and **(a) passes** (the stop condition does not apply).
+- CERES has its northern maximum (0.759) at 57.2°N, a dip at 65.6°N (0.699) and a second rise
+  over the Arctic. The model has no northern maximum because its mid-latitudes are too clear,
+  not because its cap is too cloudy.
+- Figure `docs/figures/P4/q13_eis_stepA_cover.png`:
+  - CERES (black) lies above r3 (blue) everywhere north of 30°N and between 30° and 76°S. The
+    largest gap is over the Southern Ocean: 0.93 against 0.67 at 60°S.
+  - The offline EIS estimate (orange dashes) leaves the r3 curve by at most 0.03 (Southern
+    Ocean) and about 0.015 at 68–75°N.
+
+### (b) EIS law against the LTS law, offline
+
+Mean over open ocean (land fraction < 0.5) in each region, values weighted by f_ocn. "Low" is
+the column's largest cloud fraction at σ ≥ 0.8, as is now and as estimated with EIS in place of
+LTS.
+
+| region | season | LTS (K) | EIS (K) | LTS law | EIS law | low now → EIS |
+|---|---|---|---|---|---|---|
+| Peru | annual / SON | 19.0 / 21.6 | 4.6 / 7.5 | 0.52 / 0.67 | 0.41 / 0.59 | 0.45 → 0.37 / 0.61 → 0.54 |
+| Namibia | annual / JJASON | 18.4 / 19.7 | 3.9 / 5.6 | 0.49 / 0.57 | 0.38 / 0.48 | 0.42 → 0.35 / 0.51 → 0.44 |
+| California | annual / JJA | 18.4 / 22.0 | 4.4 / 7.4 | 0.49 / 0.70 | 0.40 / 0.58 | 0.36 → 0.30 / 0.64 → 0.54 |
+| Canary | annual / JJA | 16.4 / 19.4 | 1.5 / 4.0 | 0.38 / 0.55 | 0.24 / 0.38 | 0.33 → 0.25 / 0.48 → 0.37 |
+| Australia | annual / DJF | 13.6 / 16.3 | 0.6 / 2.5 | 0.24 / 0.37 | 0.19 / 0.29 | 0.14 → 0.13 / 0.24 → 0.21 |
+| trades 5–20°N | annual | 12.5 | −2.9 | 0.15 | 0.03 | 0.18 → 0.16 |
+| trades 5–20°S | annual | 13.0 | −2.1 | 0.19 | 0.08 | 0.19 → 0.17 |
+| warm pool | annual | 11.3 | −4.4 | 0.08 | 0.00 | 0.18 → 0.18 |
+| N Pacific 40–60°N | annual / DJF / JJA | 13.8 / 6.6 / 22.8 | 4.2 / −1.1 / 11.0 | 0.33 / 0.10 / 0.71 | 0.41 / 0.18 / 0.74 | 0.32 → 0.34 / 0.19 → 0.20 / 0.61 → 0.63 |
+| N Atlantic 40–60°N | annual / DJF / JJA | 12.2 / 6.5 / 18.4 | 1.7 / −2.5 / 6.3 | 0.24 / 0.06 / 0.48 | 0.28 / 0.11 / 0.50 | 0.23 → 0.25 / 0.17 → 0.18 / 0.37 → 0.38 |
+| Southern Ocean 45–65°S | annual / DJF / JJA | 11.5 / 15.2 / 8.5 | 3.5 / 6.4 / 1.2 | 0.18 / 0.31 / 0.09 | **0.35 / 0.51 / 0.23** | 0.21 → 0.26 / 0.28 → 0.36 / 0.18 → 0.21 |
+| open ocean > 65°N | annual / DJF / JJA | 13.0 / 4.9 / 24.2 | 6.2 / −0.6 / **15.6** | 0.12 / 0.01 / 0.32 | 0.18 / 0.05 / **0.42** | 0.17 → 0.21 / 0.09 → 0.10 / 0.31 → 0.37 |
+| open ocean > 65°S | annual / DJF / JJA | 9.5 / 15.2 / 6.1 | 3.7 / 8.5 / 0.9 | 0.07 / 0.18 / 0.01 | 0.16 / 0.37 / 0.05 | 0.16 → 0.20 / 0.20 → 0.30 / 0.13 → 0.14 |
+
+All four seasons for every region are in the `.txt` file. W&B's own North Pacific and North
+Atlantic boxes: annual EIS 4.7 and 2.8 K (their Table 1: 6.7 and 7.2 K), EIS law 0.47 and 0.34.
+
+Zonal means (land counts as 0 for the laws; cover = total cover estimated from the snapshots,
+random overlap of the change):
+
+| band | LTS law | EIS law | low now → EIS | cover now → EIS (central / lower estimate) | CERES |
+|---|---|---|---|---|---|
+| **68–80°N** | 0.093 | 0.146 (+0.053) | 0.166 → 0.197 (+0.031) | 0.662 → 0.675 / 0.675 (**+0.013**) | 0.724 |
+| **45–65°N** | 0.121 | 0.160 (+0.039) | 0.186 → 0.200 (+0.014) | 0.587 → 0.593 / 0.593 (**+0.006**) | 0.725 |
+| 45–65°S | 0.176 | 0.342 (+0.166) | 0.212 → 0.258 | 0.645 → 0.664 / 0.661 | 0.893 |
+| 20°S–20°N | 0.129 | 0.039 | 0.171 → 0.158 | 0.606 → 0.597 | 0.652 |
+| global | 0.137 | 0.120 | 0.157 → 0.158 | 0.547 → 0.545 | 0.674 |
+
+- **(b) fails: EIS does not raise 45–65°N relative to the cap.** It raises 68–80°N by twice as
+  much (+0.013 against +0.006 in cover; +0.053 against +0.039 in the law alone). The 40–70°
+  maximum would stay on the 68.4° edge row (0.679 at 68.4° and 71.2° against 0.668 at 65.6°).
+- The result does not depend on the uncertain parts:
+  - The lower estimate (layers set by the RH cloud left unchanged) gives the same band numbers.
+  - EIS shifted by +1.2 K everywhere (the model's own surface RH, or the Table 1 gap) gives
+    +0.010 against +0.018.
+- **Why.** EIS = LTS − Γ_m(z700 − LCL), and Γ_m is small at cold temperatures. EIS therefore
+  rises most where the surface is coldest, which is the summer Arctic Ocean (JJA EIS 15.6 K,
+  law 0.42). In 45–65°N the oceans are warmer and in winter unstable (DJF EIS −1 to −2.5 K).
+- **What EIS does as W&B describe it** (record):
+  - it removes the trade and warm-pool stratus (law 0.15–0.19 → 0.03–0.08, warm pool 0.08 → 0);
+  - it lowers the decks by 0.06–0.14;
+  - it doubles the Southern Ocean law (0.18 → 0.35).
+  The Southern Ocean low cloud rises by only 0.05 and total cover by 0.02 there, against a
+  deficit of 0.25.
+- **Size of the lever.** Even where the law rises, the zonal cover moves by 0.006–0.02. The
+  model's mid-latitude deficit (0.14–0.17 N, 0.24–0.30 S) is total cover, and one low layer per
+  column cannot carry it.
+- Figure `docs/figures/P4/q13_eis_stepA_laws.png`:
+  - Maps: EIS is largest (> 10 K) over the summer-ice-free Arctic, Hudson Bay and the Barents
+    Sea, and along the eastern-boundary coasts. It is negative over the whole tropical ocean.
+  - The EIS-law map shows a 0.3–0.5 band at 50–65°S and the decks, and nothing in the tropics.
+  - The zonal panel: the EIS law peaks at 0.37 at 57°S. In the north it has two humps (0.20 at
+    45°N, 0.19 at 74°N), and the estimated low cloud with EIS peaks at 74°N (0.22).
+
+**Stop condition met: step A (b) does not raise 45–65°N relative to the cap.** Steps B–E were
+not started. There is no code change in `crates/` and no knob change. `docs/tuning.md` is
+unchanged, so `scripts/check` and `scripts/regress` were not rerun. The decision is recorded
+under question 13, and options are below it.
+
 ## Open questions for the owner
 
 Latest ruling each; history in [open-questions.md](progress/open-questions.md), closed ones in
@@ -1192,6 +1330,42 @@ Latest ruling each; history in [open-questions.md](progress/open-questions.md), 
     4, a published treatment of cold, dry polar air, with SCM tests), then rerun the gate with
     r3.
     (3) Another route of the owner's choosing.
+    **Owner decision after the r3 gate (2026-11-25 evening, follows a526a57; full text in the
+    history file):** the stop was correct, the shape row is not ruled met; row 4 with r3 is
+    recorded (295.62 K, +2.96 K) and TRACMIP's 290.4–300.7 K goes into the 283–293 K question.
+    Owner's reading: the mid-latitudes (0.47 at 40.5°N) and the Southern Ocean (0.62 against
+    0.87) are too clear, not the northern cap. **Option 3, the EIS law (Wood & Bretherton
+    2006), now in P4**; polar air is the fallback, not authorised. Steps: A offline check
+    (cover vs observations 30–90°; EIS vs LTS law on r3 output), B `low_cloud = "slingo_eis"`
+    with SCM tests, C T21 round ≤ 6 variants (`water_max`, `rh_crit_upper` only), D T42 1 + 3
+    years with a stricter shape screen, E full gate and closing. Stops as listed there.
+    Record for P5: tropical net CRE −41.4 (CERES −14.4); tropical liquid 4.1×, ice 0.17×
+    Cloud_cci.
+    **Result (2026-11-26, entry above): stopped at step A, (b) fails.**
+    - Wood & Bretherton (2006) read in full; CF = 0.14 + 0.060 EIS verified (± 0.06,
+      ± 0.010 K⁻¹, r = 0.92); RH0 = 0.8 is the paper's own assumption.
+    - (a) passes. Against CERES, r3 is short from 30° to 77° in both hemispheres: by 0.14–0.17
+      at 32–57°N and 0.24–0.30 over the Southern Ocean. The northern cap is below CERES too
+      (−0.03 to −0.09 at 65–80°N). CERES peaks at 57°N (0.759) and dips at 65.6°N.
+    - (b) fails. In the zonal mean, EIS raises 68–80°N by +0.013 and 45–65°N by +0.006 (law
+      alone +0.053 and +0.039). This holds for the lower estimate and with EIS shifted by
+      +1.2 K. Cause: Γ_m is small over cold surfaces, so the summer Arctic Ocean gets the
+      largest EIS (15.6 K). The Southern Ocean law doubles (0.18 → 0.35), but its total cover
+      rises only 0.02 against a deficit of 0.25.
+    - Also seen: one low layer per column moves zonal cover by ≤ 0.02 anywhere, while the
+      mid-latitude deficits are 0.15–0.30 of total cover.
+    **Owner, choose:**
+    (1) The polar-air fallback (completion-plan step 4). It would put the northern maximum
+    inside the band, but (a) shows that the cap is already below CERES, so this moves away from
+    the observations. A source would be fetched and read before anything is built.
+    (2) Take EIS forward anyway, for the Southern Ocean and the trades/warm pool, with the shape
+    row still expected to fail. This needs your waiver of the step A rule.
+    (3) A diagnostic step on the mid-latitude deficit itself, from existing or 1-year T21
+    output: which levels and which cloud types are missing at 40–60° against CERES, and whether
+    freeze-dry (q < 3 g/kg at σ ≥ 0.75, which is common in mid-latitude winter) removes
+    boundary-layer cloud there. This is a hypothesis, not tested, because r3 saved no
+    humidity.
+    (4) Rule on the shape row as measured, or close P4 another way.
 
 Closed: 1 License — MIT. 3 f32 HS asymmetry — accepted as recorded (2026-11-18). 5 Courant
 trigger — replaced (2026-11-18). 6 APE westerlies — known limitation (2026-11-23). 7 P2 bistability — both branches hold at 1361 W m⁻² from a proper cold start (2026-11-24); sweep (record) once the knobs are frozen. 8 P2 G, sea ice

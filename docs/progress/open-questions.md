@@ -475,3 +475,53 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       - `scripts/regress`: no regression. TRACMIP AquaControl 290.4–300.7 K, median 295.1 K.
       - Step 3: cold start stays ice-covered (record); APE T42 not run; sweep stopped after
         about one model year. Step 4 not done; code defaults unchanged.
+    - **Owner decision after the r3 gate (2026-11-25 evening, follows a526a57), recorded under
+      13 on 2026-11-26:**
+      - Interpretation: the stop was correct; the shape row fails as measured and is not ruled
+        met (northern maximum on the edge row, local in 2 of 5 years). Row 4 with r3 is
+        recorded, not marked met: 400 ppm 295.62 K (ice-free, equilibrated), 2×CO₂ +2.96 K;
+        TRACMIP's 290.4–300.7 K (median 295.1 K) goes into the open question on 283–293 K with
+        the setup differences; nothing is chosen by these numbers.
+      - Owner's reading of the shape failure: the northern polar cap (0.65–0.67) is not the
+        outlier; the mid-latitudes are too clear (0.47 at 40.5°N), as is the Southern Ocean
+        (0.62 against 0.87). A polar-air treatment would lower the cap and leave both deficits.
+      - **Decision: option 3, the EIS law (Wood & Bretherton 2006), brought into P4** (deferred
+        to P5 on 2026-11-25). Completion-plan step 4 (polar air) not authorised now; fallback.
+      - Step A (existing output only): (a) zonal-mean cover of the r3 T42 run against an
+        observed climatology, 30–90° both hemispheres: where short, and whether the northern
+        cap is above, at or below the observations; (b) EIS law offline next to the LTS law on
+        the r3 T42 output, seasonal and annual, for the five decks, trades, warm pool, N
+        Pacific and N Atlantic 40–60°N, Southern Ocean 45–65°S, open ocean poleward of 65°,
+        then the implied zonal-mean cover change at 45–65°N against 68–80°N. Stop if (a) shows
+        the cap, not the mid-latitudes, is the error, or if (b) does not raise 45–65°N
+        relative to the cap.
+      - Step B: new option value (e.g. `low_cloud = "slingo_eis"`), off by default,
+        byte-identical when off; EIS definition, fit and constants transcribed from the paper
+        (verify 0.14 + 0.060 EIS); otherwise as "slingo_lts"; SCM tests as for LTS; knobs with
+        source and range in docs/tuning.md, published constants as defaults.
+      - Step C: T21 Earth AMIP 1 + 1 years, ≤ 6 variants, from r3 with EIS; rebalance only
+        with `water_max` and `rh_crit_upper` within range; targets criteria 1–2, cover, CERES
+        bands; shape row not judged at T21.
+      - Step D: T42 Earth AMIP 1 + 3 years for the best one or two; screen: both storm-track
+        maxima interior local maxima on the 3-year mean and in ≥ 2 of 3 single years;
+        criteria 1, 2, cover and closure hold.
+      - Step E: if a variant passes, the full gate once (T42 1 + 5; slab 400/800 ppm from a
+        common restart to the equilibrium test, ≥ 30 years; feedbacks; `scripts/regress`),
+        then APE Control T42, bistability pair, instellation sweep (record), closing
+        evaluation and entry as specified on 2026-11-25; row 4 re-measured once.
+      - Stop and report if: step A fails as described; no T21 variant meets criteria 1–2 with
+        cover ≥ 0.51; no T42 variant passes the screen, or the 5-year gate fails 1, 2, 3 or 5
+        (then zonal profile, margin and a read polar-air source as the next option; no further
+        variants); a slab fails or does not equilibrate in 45 years; regress regresses.
+      - Record for P5 (no action): tropical net CRE −41.4 against −14.4 with r3; tropical cloud
+        phase liquid 4.1× and ice 0.17× Cloud_cci with the right total (goes with the
+        convection item, phase of convective condensate).
+      **Result (2026-11-26): stopped at step A, (b) fails.** W&B (2006) read in full (author's
+      copy); CF = 0.14 + 0.060 EIS verified; RH0 0.8 is the paper's assumption. (a): r3 short
+      against CERES EBAF Ed4.1 from 30° to 77° in both hemispheres (−0.14 to −0.17 at 32–57°N,
+      −0.24 to −0.30 over the Southern Ocean); northern cap also below CERES (−0.03 to −0.09);
+      (a) passes. (b): EIS raises the 68–80°N cover by +0.013 and 45–65°N by +0.006 (law
+      +0.053 / +0.039), robust to the estimate and to +1.2 K in EIS; cause: small Γ_m over the
+      cold summer Arctic Ocean (EIS 15.6 K). Southern Ocean law 0.18 → 0.35 but cover +0.02
+      against a 0.25 deficit. Options in docs/progress.md (polar air; EIS with a waiver;
+      diagnose the mid-latitude deficit, incl. freeze-dry; ruling).
