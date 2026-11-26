@@ -14,10 +14,17 @@
 //! - Optional "freeze-dry" reduction of the stratiform fraction in cold, dry low levels
 //!   (Vavrus & Waliser 2008, J. Climate 21, 5673–5687; the paper could not be fetched, the
 //!   form and constants are transcribed from the NCAR CAM source, `cloud_fraction.F90`,
-//!   subroutine `cldfrc`, branch `cam_cesm2_2_rel`): for σ ≥ σ_fd,
-//!   c_s ← c_s · max(f_min, min(1, q / q_fd)), with q_fd = 3e-3 kg kg⁻¹ and f_min = 0.15.
-//!   CAM applies it to its low-cloud RH cloud below the pressure bound `premib`, whose value
-//!   is not in that file; σ_fd = 0.75 (750 hPa) is unverified. On by default (P4 frozen knobs); `freeze_dry_q = 0` switches it off.
+//!   subroutine `cldfrc`, branch `cam_cesm2_2_rel`): for p ≥ p_fd,
+//!   c_RH ← c_RH · max(f_min, min(1, q / q_fd)), with q_fd = 3e-3 kg kg⁻¹ and f_min = 0.15.
+//!   CAM applies it in its low-cloud block (`pmid ≥ premib`, a pressure bound; `premib` =
+//!   750 hPa for CAM4 physics in `namelist_defaults_cam.xml`, 700 hPa for CAM5/6), at every
+//!   level of that block including the lowest, over every surface type, and **only to the
+//!   RH cloud** (`rhcloud`), before the marine stratus is combined with it by maximum.
+//!   Corrected to that on 2026-11-26 (P4 question 13, owner decision after step A, step 2):
+//!   before, the factor multiplied the layer's cloud after the stratus (or Slingo inversion
+//!   cloud) was combined, and the bound was σ ≥ 0.75 instead of p ≥ 750 hPa. Knob
+//!   `freeze_dry_pressure` = p_fd (75 000 Pa). On by default (P4 frozen knobs);
+//!   `freeze_dry_q = 0` switches it off.
 //! - Combined at each level as independent covers: c = 1 − (1 − c_s)(1 − c_c).
 //! - In-cloud water mixing ratio r = min(β q_sat(T, p), r_max), split into ice and liquid
 //!   with f_ice(T) of the condensable; path r Δp / g.
@@ -68,11 +75,11 @@ pub struct DiagnosticClouds {
     pub water_max: f64,
     /// No clouds at σ below this.
     pub sigma_min: f64,
-    /// Freeze-dry humidity scale q_fd \[kg kg⁻¹\] (0 = off), minimum factor and the σ at and
-    /// below which it applies (low clouds).
+    /// Freeze-dry humidity scale q_fd \[kg kg⁻¹\] (0 = off), minimum factor and the pressure
+    /// \[Pa\] at and below which (p ≥ p_fd) it applies to the RH cloud (CAM `premib`).
     pub freeze_dry_q: f64,
     pub freeze_dry_min: f64,
-    pub freeze_dry_sigma: f64,
+    pub freeze_dry_pressure: f64,
     /// Diagnostic split of the cloud radiative effect into stratiform and convective parts.
     pub cre_split: bool,
     /// With `cre_split`: σ at and below which the extra call drops the stratiform cloud
@@ -96,6 +103,9 @@ pub struct DiagnosticClouds {
     pub low_rh: LowRh,
     pub low_rh_crit: f64,
     pub low_omega: f64,
+    /// Diagnostic switch (P4 question 13, owner decision after step A, 2026-11-26): false
+    /// drops the eq. (7) subsidence gate (factor 1 at every ω); default true.
+    pub low_gate: bool,
     /// "slingo": inversion search below this pressure \[Pa\]; eq. (8) slope \[hPa K⁻¹\] and
     /// offset.
     pub inv_pressure: f64,
@@ -151,7 +161,7 @@ impl DiagnosticClouds {
             sigma_min: 0.1,
             freeze_dry_q: 3e-3,
             freeze_dry_min: 0.15,
-            freeze_dry_sigma: 0.75,
+            freeze_dry_pressure: 75000.0,
             cre_split: false,
             cre_split_low_sigma: 0.0,
             convective: ConvectiveCloud::Column,
@@ -165,6 +175,7 @@ impl DiagnosticClouds {
             low_rh: LowRh::Slingo,
             low_rh_crit: 0.8,
             low_omega: 0.1,
+            low_gate: true,
             inv_pressure: 75000.0,
             inv_slope: 6.67,
             inv_offset: 0.667,
@@ -190,9 +201,10 @@ impl DiagnosticClouds {
         }
     }
 
-    /// Freeze-dry factor for specific humidity `q` at σ (1 when off or above σ_fd).
-    pub fn freeze_dry(&self, q: f64, sigma: f64) -> f64 {
-        if self.freeze_dry_q <= 0.0 || sigma < self.freeze_dry_sigma {
+    /// Freeze-dry factor for specific humidity `q` at pressure `p` \[Pa\] (1 when off or
+    /// above p_fd).
+    pub fn freeze_dry(&self, q: f64, p: f64) -> f64 {
+        if self.freeze_dry_q <= 0.0 || p < self.freeze_dry_pressure {
             1.0
         } else {
             (q / self.freeze_dry_q).clamp(self.freeze_dry_min, 1.0)
@@ -278,8 +290,7 @@ impl ColumnScheme for DiagnosticClouds {
             } else {
                 0.0
             };
-            let cs =
-                self.layer_cloud(ctx, qs, q[k], k, cv, inv) * self.freeze_dry(q[k], ctx.sigma[k]);
+            let cs = self.layer_cloud(ctx, qs, q[k], k, cv, inv);
             let c = 1.0 - (1.0 - cs) * (1.0 - cv);
             if c <= 0.0 {
                 continue;

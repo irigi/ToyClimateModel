@@ -21,17 +21,17 @@ fn fraction_limits_and_profile() {
     let ten = 10.0 / 86400.0;
     assert!((s.convective(ten) - 0.125 * 11f64.ln()).abs() < 1e-12);
     assert_eq!(s.convective(1.0), 0.8);
-    // freeze-dry: factor q / 3 g/kg between 0.15 and 1, low levels only; off with q_fd = 0
+    // freeze-dry: factor q / 3 g/kg between 0.15 and 1, at p ≥ 750 hPa only; off with q_fd = 0
     let off = DiagnosticClouds {
         freeze_dry_q: 0.0,
         ..scheme()
     };
-    assert_eq!(off.freeze_dry(1e-4, 0.95), 1.0);
+    assert_eq!(off.freeze_dry(1e-4, 95000.0), 1.0);
     let f = scheme();
-    assert!((f.freeze_dry(1.5e-3, 0.9) - 0.5).abs() < 1e-12);
-    assert_eq!(f.freeze_dry(1e-4, 0.9), 0.15);
-    assert_eq!(f.freeze_dry(5e-3, 0.9), 1.0);
-    assert_eq!(f.freeze_dry(1e-4, 0.5), 1.0);
+    assert!((f.freeze_dry(1.5e-3, 90000.0) - 0.5).abs() < 1e-12);
+    assert_eq!(f.freeze_dry(1e-4, 90000.0), 0.15);
+    assert_eq!(f.freeze_dry(5e-3, 90000.0), 1.0);
+    assert_eq!(f.freeze_dry(1e-4, 50000.0), 1.0);
 }
 
 /// Freeze-dry in a cold, dry saturated column: low cloud reduced, still no tendencies,
@@ -540,4 +540,35 @@ fn anvil_geometry_column() {
         ..scheme()
     };
     assert_eq!(run(&col, top).0, run(&scheme(), top).0);
+}
+
+/// Freeze-dry against its source (CAM `cldfrc`, corrected 2026-11-26): it scales the RH cloud
+/// before the stratus is combined by maximum, so a stratus above the reduced RH cloud is kept
+/// whole; the bound is a pressure, so a column with p_s = 700 hPa (all levels above 750 hPa)
+/// is not reduced at all.
+#[test]
+fn freeze_dry_rh_cloud_only_and_by_pressure() {
+    let s = scheme();
+    let geo = Geometry::l26();
+    let planet = crate::planet::Planet::earth();
+    let mut ctx = geo.ctx(&planet, None, 1200.0);
+    let (q, qs) = (1e-3, 1e-3 / 0.99);
+    let k = 22;
+    let rh_cloud = DiagnosticClouds::stratiform(0.99, s.rh_crit(ctx.sigma[k]));
+    let fd = s.freeze_dry(q, ctx.p[k]);
+    assert!(fd < 0.5 && ctx.p[k] > 75000.0);
+    assert!((s.layer_cloud(&ctx, qs, q, k, 0.0, None) - rh_cloud * fd).abs() < 1e-12);
+    // a stratus larger than the reduced RH cloud is not reduced (gated low cloud mode)
+    let lts = DiagnosticClouds {
+        low_cloud: LowCloud::SlingoLts,
+        low_rh: LowRh::Sundqvist,
+        ..scheme()
+    };
+    let c = lts.layer_cloud(&ctx, qs, q, k, 0.0, Some((k, 0.6, 20.0)));
+    assert_eq!(c, 0.6);
+    // high ground: p = σ · 700 hPa < 750 hPa at every level, no reduction
+    let p: Vec<f64> = ctx.sigma.iter().map(|s| s * 70000.0).collect();
+    ctx.p = &p;
+    assert_eq!(s.freeze_dry(q, ctx.p[25]), 1.0);
+    assert!((s.layer_cloud(&ctx, qs, q, k, 0.0, None) - rh_cloud).abs() < 1e-12);
 }

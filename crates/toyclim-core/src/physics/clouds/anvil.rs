@@ -118,8 +118,7 @@ impl DiagnosticClouds {
             let qs = self.cond.qsat(planet, st.t[k], ctx.p[k]);
             let ws = raw(k);
             let mut cv = conv_frac(k);
-            let cs =
-                self.layer_cloud(ctx, qs, q[k], k, cv, inv) * self.freeze_dry(q[k], ctx.sigma[k]);
+            let cs = self.layer_cloud(ctx, qs, q[k], k, cv, inv);
             let mut wv = scale * ws;
             if cv > 0.0 {
                 conv_path += wv;

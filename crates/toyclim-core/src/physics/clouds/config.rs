@@ -17,7 +17,7 @@ pub const CLOUD_KEYS: &[&str] = &[
     "sigma_min",
     "freeze_dry_q",
     "freeze_dry_min",
-    "freeze_dry_sigma",
+    "freeze_dry_pressure",
     "r_liquid",
     "r_ice",
     "k_lw_liquid",
@@ -34,6 +34,7 @@ pub const CLOUD_KEYS: &[&str] = &[
     "low_rh",
     "low_rh_crit",
     "low_omega",
+    "low_gate",
     "inv_pressure",
     "inv_slope",
     "inv_offset",
@@ -47,6 +48,7 @@ const GATED_LOW_KEYS: &[&str] = &[
     "low_rh",
     "low_rh_crit",
     "low_omega",
+    "low_gate",
     "inv_pressure",
 ];
 /// Knobs that only `low_cloud = "slingo"` reads.
@@ -88,7 +90,7 @@ pub(crate) fn diagnostic_clouds(
         sigma_min: num(p, "sigma_min", d.sigma_min)?,
         freeze_dry_q: num(p, "freeze_dry_q", d.freeze_dry_q)?,
         freeze_dry_min: num(p, "freeze_dry_min", d.freeze_dry_min)?,
-        freeze_dry_sigma: num(p, "freeze_dry_sigma", d.freeze_dry_sigma)?,
+        freeze_dry_pressure: num(p, "freeze_dry_pressure", d.freeze_dry_pressure)?,
         cre_split: boolean(p, "cre_split", false)?,
         cre_split_low_sigma: num(p, "cre_split_low_sigma", 0.0)?,
         convective: match p.get("convective") {
@@ -125,6 +127,7 @@ pub(crate) fn diagnostic_clouds(
         )?,
         low_rh_crit: num(p, "low_rh_crit", d.low_rh_crit)?,
         low_omega: num(p, "low_omega", d.low_omega)?,
+        low_gate: boolean(p, "low_gate", d.low_gate)?,
         inv_pressure: num(p, "inv_pressure", d.inv_pressure)?,
         inv_slope: num(p, "inv_slope", d.inv_slope)?,
         inv_offset: num(p, "inv_offset", d.inv_offset)?,

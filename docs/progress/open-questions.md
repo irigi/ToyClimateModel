@@ -525,3 +525,48 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       cold summer Arctic Ocean (EIS 15.6 K). Southern Ocean law 0.18 → 0.35 but cover +0.02
       against a 0.25 deficit. Options in docs/progress.md (polar air; EIS with a waiver;
       diagnose the mid-latitude deficit, incl. freeze-dry; ruling).
+      **Owner decision after step A (2026-11-26, follows ee43b8e), recorded before starting:**
+      - Interpretation: the stop was correct. EIS is not adopted in P4 (option 2 refused): it
+        does not fix the shape row and moves zonal cover by ≤ 0.02; it stays a P5 candidate
+        for the Southern Ocean and the trades; `tools/eis_check.py` is kept. The polar-air
+        fallback (option 1) is refused for now (the cap is below CERES; lowering it would pass
+        the row by adding an error). What matters: cover is short by 0.14–0.30 over 30–77° in
+        both hemispheres, a deficit of the humidity-based cloud, not of the stratus law.
+        Lowering `rh_crit_surface` 0.95 → 0.80 changed nothing (step 4, variants d), so
+        something else removes the low cloud. Suspects, both untested: freeze-dry
+        (mid-latitude winter air near 3 g/kg; CAM's level never verified) and the subsidence
+        gate (removes RH low cloud wherever air sinks, including cold air behind fronts).
+      - **Decision: option 3, diagnosis, with limited authority to act.**
+        Step 1: fetch a low/middle/high cover climatology (CALIPSO-GOCCP or ISCCP; name exactly
+        what was fetched or say nothing could be); compare with r3 by band over 30–77° using
+        `cl_split`; if nothing can be fetched, continue. Step 2: verify freeze-dry against
+        CAM's `cloud_fraction.F90` (threshold, floor, levels, surface types) next to our code;
+        compare only. Step 3: toggle runs, T21 Earth AMIP 1 + 1 years from r3, saving humidity
+        and cloud by level, ≤ 6 runs, diagnostics only: a r3; b freeze-dry off; c subsidence
+        gate off (stability law kept); d both off; e as (c) or (d), whichever restores more,
+        with `rh_crit_surface` 0.85; f free if steps 1–2 point elsewhere (reason stated first).
+        Report per run: zonal cover vs CERES by band; cloud fraction by level at 40–60°N,
+        40–60°S, 68–80°N, winter and summer; criteria 1–2; tropical net CRE. Step 4: act only
+        within limits — correct freeze-dry to its source if it departs (a correction, SCM test,
+        tuning-log entry); knob values inside logged ranges for the CERES cover and band
+        targets. Anything else (switching freeze-dry or the gate off, restricting either by
+        latitude or surface, new ranges, new schemes) needs the owner. With a variant inside
+        the limits that brings 32–57°N cover within 0.08 of CERES at T21 and meets criteria
+        1–2: T42 1 + 3 year screen (step D, same rule), then if it passes the full gate and
+        closing (step E).
+      - Stop and report if: no toggle restores mid-latitude cover (report level profiles and
+        the RH distribution at 40–60° against RH_c); the lever that works is outside the step 4
+        limits; the T42 screen or gate fails as before; a slab run fails; regress fails.
+      - ≤ 16 threads. Nothing chosen by the 2×CO₂ warming or the aquaplanet temperature.
+      **Result (2026-11-26 day): stopped at step 3, no toggle restores mid-latitude cover.**
+      Step 1: CALIPSO-GOCCP v3.1.2 (`MapLowMidHigh330m_200606-201803_avg`, fetched): the
+      deficit is low cloud (raw model low below GOCCP in every band, 32–57°N 0.25 vs 0.34,
+      45–60°S 0.43 vs 0.60); middle and high cloud at or above GOCCP poleward of 45°. Step 2:
+      freeze-dry departed from CAM `cldfrc` (also reduced the stratus; σ 0.75 instead of
+      p ≥ `premib` 750 hPa); corrected, SCM tests, tuning log. Step 3 (T21, 32–57°N cover −
+      CERES): a −0.170, b −0.166, c −0.147, d −0.136, e −0.123 (fails criterion 1), f
+      (corrected freeze-dry + `rh_crit_surface` 0.75) −0.152. Winter boundary layer at 40–60°
+      sub-saturated (median RH 0.67–0.73 at σ ≥ 0.93, 1–11 % above RH_c); freeze-dry acts
+      mostly poleward of 68°; the gate costs 16 W m⁻² of tropical net CRE. Options in
+      docs/progress.md (BL humidity diagnosis; subgrid-variability low-cloud scheme; gate
+      restriction; ruling).

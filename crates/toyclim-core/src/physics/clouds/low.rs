@@ -37,8 +37,8 @@
 //! inversion; C_inv = clamp(−`inv_slope` Δθ/Δp − `inv_offset`, 0, 1) (6.67 hPa K⁻¹, 0.667),
 //! times the eq. (9) factor with RH_base the relative humidity of level k+1 (the base);
 //! it sits in layer k+1 and combines with the RH cloud of that layer as the maximum. The
-//! freeze-dry factor multiplies the result as before; σ_min is unchanged. Mid and high
-//! levels keep the Sundqvist cloud. With `cre_split`, the stratiform-only block holds the
+//! freeze-dry factor multiplies the RH cloud only (see [`super`]); σ_min is unchanged.
+//! Mid and high levels keep the Sundqvist cloud. With `cre_split`, the stratiform-only block holds the
 //! new low cloud. Two more diagnostics: `cl_inv`, the inversion cloud C_inv of the column
 //! (0 without an inversion), and `inv_dthdp`, the Δθ/Δp of its most stable layer
 //! \[K hPa⁻¹\] (0 if no pair qualifies, e.g. p_s below 750 hPa).
@@ -76,12 +76,16 @@
 //!   never needed and is not coded. CAM caps with the RH already reduced for its convective
 //!   cloud; here the plain RH q/q_sat.
 //!
+//! Diagnostic switch `low_gate` (default true; P4 question 13, owner decision after step A,
+//! 2026-11-26): `false` drops the eq. (7) factor (both "slingo" and "slingo_lts"), so the RH
+//! low cloud forms under subsidence too; everything else is unchanged.
+//!
 //! Here: f_ocn = the area fraction of the `Ocean` tiles of the cell and SST their
 //! area-weighted skin temperature (no tiles: no stratus); k700 = the level with σ nearest 0.7.
 //! Knobs `lts_slope` (0.057 K⁻¹) and `lts_intercept` (−0.5573); `lts_slope = 0` leaves the
 //! gated RH cloud alone (the "gate only" diagnostic variant). Freeze-dry multiplies the
-//! layer's result as before; σ_min is unchanged. Diagnostics `cl_lts` (the stratus placed,
-//! after the RH cap) and `lts` (θ(k700) − θ_s \[K\], 0 without open ocean) in the slots of
+//! RH cloud only, not the stratus (as CAM; corrected 2026-11-26); σ_min is unchanged.
+//! Diagnostics `cl_lts` (the stratus placed, after the RH cap) and `lts` (θ(k700) − θ_s \[K\], 0 without open ocean) in the slots of
 //! `cl_inv` and `inv_dthdp`.
 
 use super::{DiagnosticClouds, LowCloud, LowRh};
@@ -101,7 +105,11 @@ impl DiagnosticClouds {
 
     /// Slingo (1987) eq. (7) factor for ω \[Pa s⁻¹\]: 0 under subsidence (ω ≥ 0), linear to 1
     /// at ω = −`low_omega`.
+    /// With `low_gate = false` (diagnostic) the factor is 1.
     pub fn omega_factor(&self, omega: f64) -> f64 {
+        if !self.low_gate {
+            return 1.0;
+        }
         (-omega / self.low_omega).clamp(0.0, 1.0)
     }
 
@@ -176,8 +184,9 @@ impl DiagnosticClouds {
         Some((k, strat.min(cap).max(0.0), lts))
     }
 
-    /// Stratiform fraction of level k before freeze-dry, with q_sat `qs`, humidity `q`, the
-    /// layer's convective fraction `cv` and the column's inversion `inv`.
+    /// Stratiform fraction of level k with q_sat `qs`, humidity `q`, the layer's convective
+    /// fraction `cv` and the column's inversion `inv`. Freeze-dry multiplies the RH cloud
+    /// only, before the inversion cloud or stratus is combined with it (as CAM `cldfrc`).
     pub(super) fn layer_cloud(
         &self,
         ctx: &ColumnCtx,
@@ -188,8 +197,9 @@ impl DiagnosticClouds {
         inv: Option<(usize, f64, f64)>,
     ) -> f64 {
         let sigma = ctx.sigma[k];
+        let fd = self.freeze_dry(q, ctx.p[k]);
         if self.low_cloud == LowCloud::Rh {
-            return Self::stratiform(q / qs, self.rh_crit(sigma));
+            return Self::stratiform(q / qs, self.rh_crit(sigma)) * fd;
         }
         let mut c = if k + 1 == ctx.sigma.len() {
             0.0 // Slingo: no RH cloud in the lowest model layer
@@ -202,7 +212,7 @@ impl DiagnosticClouds {
             base * self.omega_factor(ctx.omega.get(k).copied().unwrap_or(0.0))
         } else {
             Self::stratiform(q / qs, self.rh_crit(sigma))
-        };
+        } * fd;
         if let Some((kb, ci, _)) = inv {
             if kb == k {
                 c = c.max(ci);

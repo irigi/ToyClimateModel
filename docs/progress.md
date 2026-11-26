@@ -28,7 +28,7 @@ Format per SPEC.md §10 item 10. Newest entry at the bottom.
 | P1 Surface exchange, boundary layer, sequential physics, SCM (detail) | 2026-11-16: criteria 1–4, 6, 7 met; APE gate fails only the 35–60° westerlies row at T21, T42 and T63 (open question 6; owner: P2 proceeds, retest after P3/P4); §9.8 tracer-fixer trigger fired (2.3%/day) and was resolved by grid-point semi-Lagrangian humidity transport (T42: 0.12%/day) |
 | P2 Land, snow, sea ice, precipitation phase | 2026-11-18 (PR #6): acceptance 1–5 and 7 met (5 after the owner restated G and the sea-ice rule, question 8: G 1.71, perennial ice ≤ 271.37 K); 6 (bistability) open, retest after P4 (question 7); defect 1 diagnosed |
 | P3 Radiation (multi-band two-stream, semi-gray) | 2026-11-18 (PR #7): acceptance 1, 2, 3, 5 met (1 and 2 as restated by the owner against RRTMG, question 9); 4: numerically stable, closure and G met, but drifts to a snowball, retest in P4 with clouds (question 10). Earth T21: subtropical jets form, 14 of 19 P5 rows would pass |
-| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold; Q7 closed by the owner (2026-11-24). Screen after step 7 (2026-11-25): r1, r3, r5 all fail (r3 passes T42 but its 400 ppm slab melts to 295.6 K; at fixed SST the new low cloud adds +14.8 W m⁻² net CRE, mostly tropical SW); **stopped at step D** (question 13). Owner (2026-11-25): r3 candidate, the 283–293 K closing condition withdrawn (row 4 open, revisit with P6); r3 gate: T42 1, 2, 5 and cover 0.545 met, **shape row fails** (northern maximum on the 68.4° edge row by 0.005); slab 400 ppm 295.62 K, 2×CO₂ +2.96 K (both equilibrated); regress no regression; **stopped at step 1** (question 13). Owner (2026-11-25 evening): EIS law (Wood & Bretherton 2006) in P4, step A first; 2026-11-26: (a) the cover deficit is mid-latitude (−0.14 to −0.17 at 32–57°N, −0.24 to −0.30 over the Southern Ocean), the northern cap is below CERES too; **(b) fails**: EIS raises 68–80°N (+0.013) more than 45–65°N (+0.006); **stopped at step A** (question 13) |
+| P4 Clouds, Earth-like energy balance | 2026-11-22 (PR #8, draft): gate with frozen knobs: 1, 2 and 5 met; 3: shape met, cover 0.497; 4: 2×CO₂ +11.1 K. Question 11 settled: CO₂ band refits failed the adoption conditions, the semi-gray CO₂ forcing error (+8 %/+29 %) and excess stratospheric cooling are an accepted limitation. Question 13: shallow convection off by default (regress identical); running-mean cloud (a) failed offline; both Frierson shallow treatments reproduce the paper in its slab setup but collapse the APE Hadley cell (−70 %) with prescribed SST. Question 13 (b), 2026-11-22/23: Slingo (1987) anvil option implemented (off by default); T21 Earth tropical net CRE −41 at best against CERES −14.6; slab pair with it ΔT 9.6 K but tropical SW cloud feedback larger (+1.08 against +0.81); review round 2026-11-23: Earth tropical excess = boundary-layer stratiform cloud (−27.7 of 27.9 W m⁻²); fixed-SST factorial reproduces 86 % of the slab loss (SST 79 %, CO₂ 16–21 %); owner chose Slingo (1987) low cloud (2026-11-23): implemented, off by default; separating run: the slab SST pattern carries 85 % of the SST-driven loss; **stopped at owner step 3**: L26 does not resolve the trade inversion that Slingo's eq. (8) needs (question 13). Heat-transport pair: 400 ppm 306.5 K ice-free, not equilibrated (trend −0.037 K/yr); 800 ppm failed the humidity envelope at 311 K; no warming estimate. Question 6 closed as a limitation; 7 to be rerun before P6. 2026-11-23/24: owner chose (vi)/(A), "slingo_lts" implemented (off by default); **stopped at step 4**: best tropical net CRE with criteria 1–2 and cover ≥ 0.5 is −39.8 to −42.2 against CERES −14.6 (question 13); 2026-11-24, step 4b: r6 (`water_max` 1e-4, `rh_crit_upper` 0.75, case files only): T42 gate 1, 2, 5 and cover 0.567 met, **shape row fails** (no northern storm-track maximum); 400 ppm slab **297.1 K** (ice-free), 2×CO₂ +3.53 K (800 ppm not equilibrated); **stopped at step 7** (question 13). Q7 rerun: cold start stays ice-covered, both branches hold; Q7 closed by the owner (2026-11-24). Screen after step 7 (2026-11-25): r1, r3, r5 all fail (r3 passes T42 but its 400 ppm slab melts to 295.6 K; at fixed SST the new low cloud adds +14.8 W m⁻² net CRE, mostly tropical SW); **stopped at step D** (question 13). Owner (2026-11-25): r3 candidate, the 283–293 K closing condition withdrawn (row 4 open, revisit with P6); r3 gate: T42 1, 2, 5 and cover 0.545 met, **shape row fails** (northern maximum on the 68.4° edge row by 0.005); slab 400 ppm 295.62 K, 2×CO₂ +2.96 K (both equilibrated); regress no regression; **stopped at step 1** (question 13). Owner (2026-11-25 evening): EIS law (Wood & Bretherton 2006) in P4, step A first; 2026-11-26: (a) the cover deficit is mid-latitude (−0.14 to −0.17 at 32–57°N, −0.24 to −0.30 over the Southern Ocean), the northern cap is below CERES too; **(b) fails**: EIS raises 68–80°N (+0.013) more than 45–65°N (+0.006); **stopped at step A** (question 13). Owner (2026-11-26): diagnosis. GOCCP: the deficit is low cloud; freeze-dry corrected to CAM (RH cloud only, p ≥ 750 hPa); T21 toggles (freeze-dry, gate, RH_c) bring 32–57°N at best to −0.123 against CERES (target within 0.08): **stopped at step 3** (question 13) |
 | P5 Earth gate (prescribed ocean) | not started |
 | P6 Ocean (Ekman, reduced-gravity layer), coupled Earth | not started |
 | P7 Exoplanet gates | not started |
@@ -147,7 +147,7 @@ Accepted milestones, with the rows the owner sent to a retest; numbers copied fr
 ## P4 state (as of 2026-11-25 afternoon)
 
 **Frozen knobs** (2026-11-21, `docs/tuning.md`, gate binary `out/p4/toyclim_frozen`): freeze-dry on,
-RH_c 0.95 / 0.90, β 0.03; shallow convection, "anvil", `deep_requires_pt` and the CO₂ band off.
+RH_c 0.95 / 0.90, β 0.03 (freeze-dry corrected to CAM on 2026-11-26: RH cloud only, p ≥ 750 hPa; changes only high ground with these knobs, gate not rerun); shallow convection, "anvil", `deep_requires_pt` and the CO₂ band off.
 "slingo_lts" low cloud (decision (vi)/(A), 2026-11-23): implemented, off; in step 4 (question 13).
 
 | # | Criterion (T42 Earth AMIP 1 + 5 years; 4: T21 slab aquaplanet) | Measured, frozen knobs | State |
@@ -1243,6 +1243,247 @@ not started. There is no code change in `crates/` and no knob change. `docs/tuni
 unchanged, so `scripts/check` and `scripts/regress` were not rerun. The decision is recorded
 under question 13, and options are below it.
 
+## 2026-11-26 (day) — Question 13, owner decision after step A: diagnosis of the mid-latitude deficit; **stopped at step 3, no toggle restores mid-latitude cover** (branch `p4-clouds`)
+
+Owner decision of 2026-11-26 (follows ee43b8e), recorded under question 13 here and in the
+history file before starting: EIS not adopted in P4 (P5 candidate), polar air refused for now;
+option 3, diagnosis, with limited authority to act (steps 1–4). Machine: 16 threads, all runs at
+≤ 16 in total.
+
+### Step 1 — observed vertical split (CALIPSO-GOCCP)
+
+**Fetched:** CALIPSO-GOCCP v3.1.2 (Chepfer et al. 2010, JGR 115, D00H16), file
+`MapLowMidHigh330m_200606-201803_avg_CFMIP2_sat_3.1.2.nc` (140 monthly means, June 2006 – March
+2018, day + night, 2° grid; variables `cllcalipso`, `clmcalipso`, `clhcalipso`, `cltcalipso`)
+from climserv.ipsl.polytechnique.fr/cfmip-obs/data/GOCCP_v3/2D_Maps/grid_2x2xL40/climato/, into
+`reference/raw/goccp/` (git-ignored). Classes as in the product: low p > 680 hPa, middle
+440–680, high < 440 hPa. ISCCP was not fetched.
+
+**Tool** `tools/cloud_split.py` (new): model cover of each class by maximum-random overlap of
+its levels (p = σ p_s; the overlap of the radiation). A lidar does not see low cloud under
+opaque upper cloud, so the model's low and middle cover are given raw (all cloud in the class)
+and "exclusive" (cloud in the class with none above). The observed value should lie between the
+two; no lidar simulator is used. Regions over all longitudes (land included).
+
+r3 T42 gate run (years 2–6, 184 snapshots; that run saved `cl`, not `cl_split`; the T21 runs
+below have both). Annual means:
+
+| band | low raw / excl. | GOCCP low | mid raw / excl. | GOCCP mid | high | GOCCP high | total (snapshots) | GOCCP / CERES total |
+|---|---|---|---|---|---|---|---|---|
+| 30–45°N | 0.219 / 0.115 | 0.306 | 0.117 / 0.033 | 0.182 | 0.311 | 0.345 | 0.459 | 0.628 / 0.613 |
+| 45–60°N | 0.304 / 0.099 | 0.393 | 0.291 / 0.071 | 0.270 | 0.410 | 0.344 | 0.580 | 0.724 / 0.726 |
+| 60–77°N | 0.324 / 0.072 | 0.436 | 0.409 / 0.084 | 0.291 | 0.503 | 0.259 | 0.659 | 0.712 / 0.720 |
+| 32–57°N | 0.250 / 0.112 | 0.344 | 0.175 / 0.047 | 0.223 | 0.341 | 0.349 | 0.500 | 0.674 / 0.653 |
+| 30–45°S | 0.267 / 0.148 | 0.478 | 0.107 / 0.031 | 0.151 | 0.281 | 0.313 | 0.460 | 0.730 / 0.737 |
+| 45–60°S | 0.433 / 0.127 | 0.599 | 0.352 / 0.086 | 0.275 | 0.429 | 0.324 | 0.642 | 0.869 / 0.889 |
+| 60–77°S | 0.256 / 0.037 | 0.512 | 0.437 / 0.083 | 0.321 | 0.498 | 0.279 | 0.619 | 0.777 / 0.790 |
+
+- **The missing cloud is low cloud.** Even the raw low cover, which is an upper bound for what
+  a lidar would see, is below GOCCP in every band: by 0.09 at 32–57°N and 45–60°N, by 0.11 at
+  60–77°N, by 0.17–0.26 in the south.
+- Middle and high cloud are at or above GOCCP poleward of 45° (60–77°N high 0.50 against 0.26;
+  45–60°S middle 0.35 against 0.28). So the total-cover deficit is low cloud, partly hidden in
+  the total by too much upper cloud.
+- In winter the low deficit is larger: 32–57°N DJF 0.236 against 0.369; in JJA 0.309 against
+  0.330.
+- The total from the snapshots (0.459 at 30–45°N) matches the online `clt` (0.456).
+- Figure `docs/figures/P4/q13_diag_step1_classes.png`:
+  - Low panel: the GOCCP curve (black) lies above the model's raw low curve in all seven
+    bands; the gap is largest at 30–45°S and 60–77°S.
+  - Middle and high panels: the model's curves rise poleward of 45° above GOCCP, most at
+    60–77°N in high cloud (0.50 against 0.26).
+  - The exclusive low cover (dashed) is only 0.04–0.15: most model low cloud lies under upper
+    cloud.
+
+### Step 2 — freeze-dry against CAM `cloud_fraction.F90`
+
+Source: ESCOMP/CAM `cam_cesm2_2_rel`, `src/physics/cam/cloud_fraction.F90`, subroutine
+`cldfrc` (copy fetched 2026-11-22, read again here; compared only, nothing copied).
+
+| item | CAM `cldfrc` | ours before | match |
+|---|---|---|---|
+| threshold | q / 0.0030 | `freeze_dry_q` 3e-3 kg/kg | yes |
+| floor | max(0.15, min(1, q/0.003)) | `freeze_dry_min` 0.15, same form | yes |
+| levels | low-cloud block, `pmid ≥ premib` (750 hPa for CAM4 physics, `namelist_defaults_cam.xml`), the lowest level included | σ ≥ 0.75 (`freeze_dry_sigma`) | **no** (pressure, not σ; differs over high ground) |
+| surface types | every column (the land/snow test only changes `rhlim`) | every column | yes |
+| what it multiplies | `rhcloud` only; afterwards `cloud = max(rhcloud, cldst)` + convective cloud | the layer's stratiform cloud *after* the stratus / inversion cloud was combined by maximum | **no** (our factor also reduced the LTS stratus) |
+| switch | namelist `cldfrc_freeze_dry` | `freeze_dry_q = 0` | — |
+
+**Correction made (step 4, first limit):** freeze-dry now multiplies the RH cloud only, before
+the stratus or Slingo inversion cloud is combined with it, and applies at p ≥
+`freeze_dry_pressure` = 75 000 Pa (key renamed from `freeze_dry_sigma`). With `low_cloud =
+"rh"` (the P4 frozen default) only high-ground levels change. SCM tests:
+`freeze_dry_rh_cloud_only_and_by_pressure` (new: stratus above the reduced RH cloud is kept
+whole; a column with p_s = 700 hPa is not reduced), `lts_stratus_cap_gate_and_combination`
+(updated: the capped stratus is no longer reduced), `freeze_dry_column` (unchanged, passes).
+Tuning-log entry 2026-11-26. Doc comments in `clouds/mod.rs` and `clouds/low.rs` updated.
+
+Also new, for step 3 only: `[clouds] low_gate` (default true; false drops the Slingo eq. (7)
+factor; diagnostic switch, byte-identical when not set; SCM test
+`low_gate_off_keeps_rh_cloud_under_subsidence`).
+
+### Step 3 — toggle runs (T21 Earth AMIP 1 + 1 years from r3, year 2; diagnostics only)
+
+Cases `cases/bench/p4_q13diag/`, runs `out/p4/q13diag/` (4 × 4 threads, then 2 × 8). All r3
+(`slingo_lts`, `low_rh = "sundqvist"`, `water_max` 1.5e-4, `rh_crit_upper` 0.80), with
+`cre_split` for `cl_split` and 5-daily snapshots of `cl`, `cl_split`, `q`, `rh`, `t`, `omega`.
+a–d with the binary before the step 2 correction (`out/p4/toyclim_q13diag`; a and b identical
+to r3's code), e and f after it (`out/p4/toyclim_q13fd`; e has freeze-dry off, so the correction
+does not act there).
+
+- a: r3. b: freeze-dry off. c: gate off (stability law kept). d: both off.
+- e: d (it restored more than c) with `rh_crit_surface` 0.85.
+- f (free; reason stated before running): steps 1 and 3 place the deficit in low-level RH
+  below RH_c (median RH 0.67–0.80 at σ ≥ 0.87 against RH_c 0.92–0.95, table below), so the only
+  lever inside the step 4 limits is RH_c near the surface, with the corrected freeze-dry: r3 +
+  correction + `rh_crit_surface` 0.75 (the bottom of its logged range 0.75–0.95).
+
+| run | albedo | OLR | net TOA | SW / LW CRE | cover | 20°S–20N net CRE | 30–45°N | 45–60°N | 60–77°N | **32–57°N** | 30–45°S | 45–60°S | 60–77°S |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| a r3 | 0.300 | 233.9 | +4.31 | −52.0 / +27.2 | 0.543 | −38.4 | −0.155 | −0.166 | −0.073 | **−0.170** | −0.296 | −0.285 | −0.192 |
+| b fd off | 0.307 | 233.9 | +2.14 | −54.3 / +27.8 | 0.555 | −40.0 | −0.160 | −0.149 | −0.038 | **−0.166** | −0.264 | −0.257 | −0.160 |
+| c gate off | 0.331 | 232.5 | −4.96 | −62.8 / +28.8 | 0.604 | −54.1 | −0.124 | −0.136 | −0.013 | **−0.147** | −0.227 | −0.241 | −0.152 |
+| d both off | 0.333 | 232.5 | −5.53 | −63.4 / +28.9 | 0.611 | −54.8 | −0.128 | −0.108 | +0.020 | **−0.136** | −0.233 | −0.230 | −0.119 |
+| e d + RH_s 0.85 | 0.342 | 232.1 | −8.30 | −66.5 / +29.2 | 0.624 | −59.7 | −0.112 | −0.099 | +0.029 | **−0.123** | −0.237 | −0.223 | −0.120 |
+| f fd corr. + RH_s 0.75 | 0.308 | 233.6 | +1.79 | −54.9 / +27.7 | 0.558 | −42.7 | −0.139 | −0.144 | −0.045 | **−0.152** | −0.286 | −0.272 | −0.165 |
+| CERES (cover) | 0.291 | | | −45.2 / +25.8 | 0.67 | −14.6 | 0.597 | 0.724 | 0.721 | 0.664 | 0.709 | 0.886 | 0.801 |
+
+Band columns: online total cover minus CERES EBAF Ed4.1 (T21 grid; CERES values in the last
+row). Criteria 1–2 (albedo 0.27–0.33, OLR 228–250, net ±8; SW −30 to −60, LW +15 to +35): a, b
+and f meet both; c and d fail albedo (0.331, 0.333) and SW CRE (−62.8, −63.4); e fails albedo,
+net TOA (−8.30) and SW CRE.
+
+**No run brings 32–57°N within 0.08 of CERES.** The best is e at −0.123 (outside the limits and
+failing criteria 1–2); the only run inside the limits, f, is at −0.152 (+0.018 on r3). Every
+toggle raises 60–77°N more than 32–57°N (d: +0.093 against +0.034), so the northern maximum
+would move further poleward, not into the mid-latitudes.
+
+Low cover against GOCCP (raw / exclusive; GOCCP 30–45°N 0.306, 45–60°N 0.393, 60–77°N 0.436,
+30–45°S 0.478, 45–60°S 0.599, 60–77°S 0.512):
+
+| run | 30–45°N | 45–60°N | 60–77°N | 32–57°N | 30–45°S | 45–60°S | 60–77°S |
+|---|---|---|---|---|---|---|---|
+| a | 0.179 / 0.081 | 0.290 / 0.081 | 0.312 / 0.056 | 0.234 / 0.084 | 0.185 / 0.092 | 0.394 / 0.090 | 0.232 / 0.028 |
+| b | 0.183 / 0.089 | 0.334 / 0.097 | 0.406 / 0.069 | 0.251 / 0.098 | 0.203 / 0.103 | 0.431 / 0.100 | 0.352 / 0.053 |
+| c | 0.227 / 0.114 | 0.346 / 0.111 | 0.424 / 0.091 | 0.277 / 0.112 | 0.239 / 0.130 | 0.467 / 0.122 | 0.337 / 0.061 |
+| d | 0.220 / 0.110 | 0.386 / 0.135 | 0.521 / 0.124 | 0.289 / 0.121 | 0.241 / 0.133 | 0.490 / 0.128 | 0.461 / 0.087 |
+| e | 0.241 / 0.124 | 0.415 / 0.144 | 0.537 / 0.134 | 0.316 / 0.133 | 0.256 / 0.148 | 0.500 / 0.141 | 0.458 / 0.099 |
+| f | 0.188 / 0.083 | 0.322 / 0.095 | 0.373 / 0.070 | 0.250 / 0.093 | 0.196 / 0.100 | 0.409 / 0.099 | 0.332 / 0.043 |
+
+Middle and high cover hardly move between runs (mid 32–57°N 0.209–0.220, high 0.336–0.353;
+60–77°N high 0.50–0.54 in all, GOCCP 0.26).
+
+**Cloud fraction by level** (all longitudes; total / stratiform-only from `cl_split`), a → b, c,
+d, e, f, at the four lowest cloudy levels:
+
+| region, season | σ | a | b | c | d | e | f |
+|---|---|---|---|---|---|---|---|
+| 40–60°N DJF (winter) | 0.787 | 0.21 / 0.18 | 0.29 / 0.25 | 0.22 / 0.19 | 0.29 / 0.26 | 0.33 / 0.30 | 0.27 / 0.24 |
+| | 0.867 | 0.10 / 0.06 | 0.10 / 0.06 | 0.19 / 0.16 | 0.22 / 0.18 | 0.27 / 0.23 | 0.11 / 0.07 |
+| | 0.930 | 0.05 / 0.02 | 0.06 / 0.02 | 0.10 / 0.07 | 0.09 / 0.05 | 0.13 / 0.09 | 0.07 / 0.03 |
+| | 0.971 | 0.04 / 0.00 | 0.04 / 0.00 | 0.05 / 0.01 | 0.05 / 0.01 | 0.06 / 0.02 | 0.05 / 0.01 |
+| 40–60°N JJA (summer) | 0.787 | 0.21 / 0.20 | 0.18 / 0.17 | 0.18 / 0.17 | 0.19 / 0.18 | 0.19 / 0.18 | 0.20 / 0.19 |
+| | 0.867 | 0.08 / 0.07 | 0.07 / 0.06 | 0.20 / 0.18 | 0.19 / 0.18 | 0.20 / 0.19 | 0.08 / 0.07 |
+| | 0.930 | 0.06 / 0.05 | 0.08 / 0.07 | 0.19 / 0.18 | 0.19 / 0.17 | 0.22 / 0.21 | 0.09 / 0.08 |
+| | 0.971 | 0.08 / 0.06 | 0.08 / 0.07 | 0.15 / 0.14 | 0.15 / 0.13 | 0.18 / 0.17 | 0.08 / 0.06 |
+| 40–60°S JJA (winter) | 0.787 | 0.25 / 0.20 | 0.28 / 0.23 | 0.26 / 0.21 | 0.30 / 0.25 | 0.29 / 0.25 | 0.25 / 0.20 |
+| | 0.867 | 0.12 / 0.06 | 0.12 / 0.07 | 0.19 / 0.14 | 0.19 / 0.13 | 0.20 / 0.14 | 0.12 / 0.06 |
+| | 0.930 | 0.07 / 0.01 | 0.07 / 0.01 | 0.10 / 0.04 | 0.09 / 0.04 | 0.09 / 0.04 | 0.07 / 0.02 |
+| | 0.971 | 0.06 / 0.00 | 0.06 / 0.00 | 0.06 / 0.01 | 0.07 / 0.01 | 0.06 / 0.01 | 0.06 / 0.00 |
+| 40–60°S DJF (summer) | 0.867 | 0.15 / 0.14 | 0.16 / 0.15 | 0.33 / 0.32 | 0.33 / 0.32 | 0.36 / 0.34 | 0.15 / 0.13 |
+| | 0.930 | 0.07 / 0.06 | 0.08 / 0.07 | 0.25 / 0.24 | 0.24 / 0.22 | 0.26 / 0.24 | 0.09 / 0.07 |
+| 68–80°N DJF (winter) | 0.787 | 0.19 / 0.18 | **0.52 / 0.51** | 0.21 / 0.21 | 0.51 / 0.50 | 0.48 / 0.48 | 0.32 / 0.31 |
+| | 0.867 | 0.07 / 0.05 | 0.13 / 0.12 | 0.24 / 0.23 | 0.50 / 0.48 | 0.50 / 0.49 | 0.09 / 0.08 |
+| | 0.930 | 0.04 / 0.03 | 0.08 / 0.07 | 0.17 / 0.16 | 0.36 / 0.34 | 0.38 / 0.36 | 0.06 / 0.04 |
+| 68–80°N JJA (summer) | 0.867 | 0.09 / 0.08 | 0.09 / 0.09 | 0.23 / 0.23 | 0.25 / 0.25 | 0.28 / 0.27 | 0.08 / 0.07 |
+| | 0.930 | 0.06 / 0.05 | 0.10 / 0.09 | 0.25 / 0.24 | 0.26 / 0.24 | 0.31 / 0.29 | 0.11 / 0.10 |
+
+The lowest level (σ 0.993) has 0.00–0.07 everywhere (no RH cloud there under "slingo_lts";
+what remains is convective).
+
+**RH at the low levels against RH_c**, run a (b–f within ±0.02 in the median, ±0.06 in the
+share above RH_c). RH_c of r3 (`rh_crit_surface` 0.95, `rh_crit_upper` 0.80): 0.910 at σ 0.787,
+0.923 at 0.867, 0.936 at 0.930, 0.944 at 0.971, 0.949 at 0.993.
+
+| region, season | σ | RH mean | RH q10 / q50 / q90 | share RH > RH_c | share q < 3 g/kg | share ω ≥ 0 |
+|---|---|---|---|---|---|---|
+| 40–60°N DJF | 0.787 | 0.80 | 0.48 / 0.84 / 1.01 | 0.33 | 0.86 | 0.50 |
+| | 0.867 | 0.82 | 0.67 / 0.80 / 1.00 | 0.27 | 0.72 | 0.51 |
+| | 0.930 | 0.76 | 0.64 / 0.73 / 0.95 | 0.11 | 0.62 | 0.51 |
+| | 0.971 | 0.70 | 0.59 / 0.69 / 0.85 | 0.03 | 0.55 | 0.51 |
+| | 0.993 | 0.70 | 0.59 / 0.69 / 0.84 | 0.02 | 0.50 | 0.50 |
+| 40–60°N JJA | 0.867 | 0.74 | 0.40 / 0.76 / 1.00 | 0.24 | 0.03 | 0.43 |
+| | 0.930 | 0.75 | 0.39 / 0.80 / 1.00 | 0.25 | 0.00 | 0.43 |
+| | 0.971 | 0.74 | 0.35 / 0.79 / 0.99 | 0.19 | 0.00 | 0.40 |
+| 40–60°S JJA | 0.867 | 0.80 | 0.71 / 0.77 / 0.99 | 0.16 | 0.51 | 0.47 |
+| | 0.930 | 0.73 | 0.65 / 0.71 / 0.86 | 0.05 | 0.38 | 0.46 |
+| | 0.971 | 0.68 | 0.60 / 0.67 / 0.77 | 0.01 | 0.29 | 0.45 |
+| | 0.993 | 0.68 | 0.61 / 0.67 / 0.76 | 0.01 | 0.23 | 0.43 |
+| 40–60°S DJF | 0.867 | 0.85 | 0.70 / 0.87 / 1.01 | 0.39 | 0.18 | 0.45 |
+| | 0.930 | 0.84 | 0.69 / 0.85 / 1.00 | 0.29 | 0.06 | 0.44 |
+| | 0.971 | 0.78 | 0.65 / 0.77 / 0.96 | 0.11 | 0.02 | 0.42 |
+| 68–80°N DJF | 0.867 | 0.89 | 0.69 / 0.96 / 1.01 | 0.55 | 0.98 | 0.47 |
+| | 0.930 | 0.89 | 0.70 / 0.96 / 1.01 | 0.53 | 0.95 | 0.46 |
+| | 0.971 | 0.85 | 0.66 / 0.88 / 1.00 | 0.31 | 0.93 | 0.45 |
+
+What the profiles show:
+- **The mid-latitude boundary layer is too dry for the RH cloud, whatever the switches.** In
+  winter (40–60°N DJF, 40–60°S JJA) the median RH at σ 0.93–0.99 is 0.67–0.73 and the 90th
+  percentile 0.76–0.95, so only 1–11 % of points exceed RH_c. Even with `rh_crit_surface` 0.75 (f;
+  RH_c 0.76 at σ 0.97) the winter low cloud below σ 0.9 stays at 0.05–0.07. For comparison,
+  the surface RH over the ocean that Wood & Bretherton (2006) quote from COADS is 0.80 ± 0.07
+  (60°S–60°N); the model's lowest level over the ocean there is 0.70 ± 0.08 (step A, 2026-11-26).
+- **Freeze-dry is a high-latitude lever, not a mid-latitude one.** It acts where q < 3 g/kg:
+  91–98 % of points at 68–80°N in winter, where switching it off raises σ 0.79 from 0.19 to 0.52.
+  At 40–60°N in winter the share is 50–62 % at σ ≥ 0.93, but the RH there is mostly below RH_c
+  anyway, so b adds 0.00–0.08 per level and +0.004 to 32–57°N.
+- **The gate removes about half the potential RH low cloud everywhere** (ω ≥ 0 at 40–51 % of
+  points at all latitudes). Switching it off doubles σ 0.87–0.93 cloud in mid-latitude summer
+  (0.07 → 0.20) and over the Southern Ocean in summer (0.15 → 0.33). But it costs 15–16 W m⁻² of
+  tropical net CRE (−38 → −54; CERES −14.6) and breaks criteria 1–2. It is outside the limits,
+  and in the zonal mean it still gives only +0.023 at 32–57°N.
+- **The corrected freeze-dry (f)** acts mainly at 68–80°N in winter (σ 0.79: 0.19 → 0.32),
+  where the stability stratus is no longer reduced. Its global effect at T21 with
+  `rh_crit_surface` 0.75 is +0.015 in cover and −4.3 W m⁻² in tropical net CRE (−42.7).
+
+Figures:
+- `docs/figures/P4/q13_diag_step3_classes.png`:
+  - Low panel: every run stays below GOCCP at 30–45°N and in all southern bands.
+  - d and e (red, purple) pass GOCCP at 60–77°N (0.52–0.54 against 0.44), i.e. the switches add
+    low cloud mainly at high latitude.
+  - Middle and high panels: the six runs lie on top of each other, above GOCCP poleward of 45°.
+- `docs/figures/P4/q13_diag_step3_profiles.png`:
+  - 40–60°N and 40–60°S winter: below σ 0.9 all curves stay under 0.13. At σ 0.87 the gate-off
+    runs add 0.07–0.17.
+  - Summer, both hemispheres: the gate-off runs (c, d, e) carry 0.10–0.36 at σ 0.87–0.97,
+    against 0.03–0.15 with the gate.
+  - 68–80°N winter: the freeze-dry-off runs (b, d, e) have 0.5 at σ 0.79–0.87; f lies between a
+    and b at σ 0.79.
+
+### Stop
+
+**Stop condition met: no toggle restores mid-latitude cover** (best 32–57°N −0.123 in e, against
+the target of within 0.08; inside the limits, f, −0.152). The lever that comes closest (gate off,
+plus freeze-dry off and a lower RH_c) is outside the step 4 limits, fails criteria 1–2 and moves
+the cover poleward. The T42 screen (step D) and the gate (step E) were not started.
+
+Changes kept:
+- The step 2 correction (freeze-dry on the RH cloud only, at p ≥ 750 hPa). This is a correction
+  under the step 4 limits; with the P4 frozen default it changes only high ground.
+- The diagnostic switch `low_gate` and `tools/cloud_split.py`.
+- `scripts/check` passes (fmt, clippy, 138 tests).
+- `scripts/regress --against ee43b8e` (P0 list, 1 and 8 threads): PASS, all six cases
+  byte-identical; none of them uses the diagnostic clouds. 10-day byte checks of the cloud cases
+  (`out/p4/q13diag/bytecheck/`):
+  - `aquaplanet_t21` and `ape_control_t21`: identical, before against after the correction;
+  - `earth_amip_t21` (P4 frozen defaults): 241 of 369 files differ, as expected from the
+    pressure bound over high ground. The frozen gate numbers were made with the old bound and
+    were not rerun;
+  - the `low_gate` binary against r3's binary (923fb1c), `earth_amip_t21`: identical.
+
+Options are below question 13.
+
+
 ## Open questions for the owner
 
 Latest ruling each; history in [open-questions.md](progress/open-questions.md), closed ones in
@@ -1366,6 +1607,42 @@ Latest ruling each; history in [open-questions.md](progress/open-questions.md), 
     boundary-layer cloud there. This is a hypothesis, not tested, because r3 saved no
     humidity.
     (4) Rule on the shape row as measured, or close P4 another way.
+    **Owner decision after step A (2026-11-26, follows ee43b8e; full text in the history file):**
+    the stop was correct; EIS not adopted in P4 (P5 candidate, tool kept); polar air refused for
+    now (the cap is below CERES). The shape row fails because the mid-latitudes are too clear, a
+    deficit of the RH cloud. **Option 3, diagnosis:** step 1 observed low/middle/high split
+    (CALIPSO-GOCCP or ISCCP) against r3; step 2 freeze-dry against CAM's `cloud_fraction.F90`;
+    step 3 T21 toggle runs (r3; freeze-dry off; gate off; both; best with `rh_crit_surface`
+    0.85; one free), diagnostics only; step 4 act only by correcting freeze-dry to its source or
+    by knob values inside logged ranges; with 32–57°N cover within 0.08 of CERES at T21 and
+    criteria 1–2, T42 1 + 3 screen, then gate and closing. Stops as listed there.
+    **Result (2026-11-26 day, entry above): stopped at step 3, no toggle restores mid-latitude
+    cover.**
+    - Step 1: against CALIPSO-GOCCP (fetched), the missing cloud is low cloud. The model's raw
+      low cover is below GOCCP in every band (32–57°N 0.25 against 0.34; 45–60°S 0.43 against
+      0.60), while middle and high cloud poleward of 45° are at or above it.
+    - Step 2: freeze-dry departed from CAM in two ways. It also reduced the stability stratus
+      (CAM: RH cloud only), and its bound was σ 0.75 instead of p 750 hPa. **Corrected**, with
+      SCM tests and a tuning-log entry.
+    - Step 3, T21, 32–57°N cover minus CERES: a r3 −0.170, b freeze-dry off −0.166, c gate off
+      −0.147, d both −0.136, e d + RH_s 0.85 −0.123 (fails criterion 1), f corrected freeze-dry +
+      RH_s 0.75 (inside the limits) −0.152. Every switch adds more at 60–77°N than at 32–57°N.
+    - Cause, as far as measured: the mid-latitude boundary layer is sub-saturated. In winter the
+      median RH at σ 0.93–0.99 is 0.67–0.73 and only 1–11 % of points exceed RH_c. Freeze-dry
+      acts mostly poleward of 68°. The gate halves the potential low cloud everywhere but costs
+      16 W m⁻² of tropical net CRE.
+    **Owner, choose:**
+    (1) A diagnostic step on the boundary-layer humidity itself (no tuning). The model's
+    lowest-level ocean RH, 0.70 ± 0.08, against an observed near-surface climatology (fetched;
+    W&B quote COADS 0.80 ± 0.07), plus the evaporation and the K-profile mixing at 40–60°.
+    (2) A published low-cloud scheme that forms cloud below RH_c from subgrid humidity
+    variability, for the mid-latitude boundary layer (e.g. a PDF/statistical scheme; source
+    fetched and read first). New scheme, needs your decision.
+    (3) Restrict the subsidence gate to the tropics/subtropics or to the trade regime. This is a
+    restriction by latitude or regime, which your limits exclude; c/d show it would add ≤ 0.034
+    at 32–57°N.
+    (4) Rule on the shape row as measured (r3, with the corrected freeze-dry recorded), or close
+    P4 another way.
 
 Closed: 1 License — MIT. 3 f32 HS asymmetry — accepted as recorded (2026-11-18). 5 Courant
 trigger — replaced (2026-11-18). 6 APE westerlies — known limitation (2026-11-23). 7 P2 bistability — both branches hold at 1361 W m⁻² from a proper cold start (2026-11-24); sweep (record) once the knobs are frozen. 8 P2 G, sea ice

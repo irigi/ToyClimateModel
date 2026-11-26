@@ -117,7 +117,7 @@ ozone_p = 6429.6
 [clouds]
 scheme = "diagnostic"
 freeze_dry_q = 0.003
-freeze_dry_sigma = 0.7
+freeze_dry_pressure = 70000.0  # was freeze_dry_sigma = 0.7 (key renamed 2026-11-26)
 
 # Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
 # boundary layer of Frierson et al. (2006), solved implicitly with the surface energy

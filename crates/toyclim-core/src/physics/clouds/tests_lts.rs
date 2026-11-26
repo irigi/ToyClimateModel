@@ -157,8 +157,8 @@ fn lts_stratus_cap_gate_and_combination() {
     let sst = 285.0;
     let strat = (0.057 * lts_of(&theta, sst) - 0.5573).clamp(0.0, 1.0);
     assert!(strat > 0.5, "{strat}");
-    // dry placement level, moister level below: capped by the larger of the two (freeze-dry
-    // off here: it would scale the dry layer's cloud, as for any low cloud)
+    // dry placement level, moister level below: capped by the larger of the two; freeze-dry
+    // does not touch the stratus (CAM applies it to the RH cloud only, corrected 2026-11-26)
     rh[K_BASE] = 0.2;
     rh[K_BASE + 1] = 0.35;
     let no_fd = DiagnosticClouds {
@@ -169,7 +169,7 @@ fn lts_stratus_cap_gate_and_combination() {
     assert!((m[K_BASE] - 0.35).abs() < 1e-12, "{}", m[K_BASE]);
     let (m, _) = run(&s, &theta, &rh, 0.05, vec![ocean(1.0, sst)]);
     assert!(
-        m[K_BASE] < 0.35 && m[K_BASE] > 0.15 * 0.35,
+        (m[K_BASE] - 0.35).abs() < 1e-12,
         "freeze-dry: {}",
         m[K_BASE]
     );
@@ -268,4 +268,38 @@ fn lts_config_keys() {
     assert!(parse("low_cloud = \"slingo_lts\"\ninv_slope = 6").is_err());
     assert!(parse("low_cloud = \"slingo_lts\"\nlts_slope = -1").is_err());
     assert!(parse("low_omega = 0.2").is_err());
+}
+
+/// `low_gate = false` (diagnostic, owner decision after step A, 2026-11-26): under subsidence
+/// the RH low cloud is what it is under full ascent; the stratus is unchanged; the key parses
+/// only with a gated low cloud; the default keeps the gate.
+#[test]
+fn low_gate_off_keeps_rh_cloud_under_subsidence() {
+    let (theta, _) = deck();
+    let rh = vec![0.97; 26];
+    let sst = 292.0;
+    let on = lts_scheme();
+    let off = DiagnosticClouds {
+        low_gate: false,
+        ..lts_scheme()
+    };
+    let (up, d_up) = run(&on, &theta, &rh, -0.2, vec![ocean(1.0, sst)]);
+    let (dn_off, d_off) = run(&off, &theta, &rh, 0.05, vec![ocean(1.0, sst)]);
+    let (dn_on, _) = run(&on, &theta, &rh, 0.05, vec![ocean(1.0, sst)]);
+    assert_eq!(up[..26], dn_off[..26]);
+    assert_eq!(d_up, d_off);
+    assert!(dn_on[K_BASE + 1] == 0.0 && dn_off[K_BASE + 1] > 0.0);
+    let env = crate::physics::RadiationEnv::default();
+    let cond = Condensable::water();
+    let parse = |s: &str| {
+        let t: toml::Table = toml::from_str(s).unwrap();
+        config::diagnostic_clouds(&t, Some(&cond), &env).map(|(c, _)| c)
+    };
+    assert!(parse("low_cloud = \"slingo_lts\"").unwrap().low_gate);
+    assert!(
+        !parse("low_cloud = \"slingo_lts\"\nlow_gate = false")
+            .unwrap()
+            .low_gate
+    );
+    assert!(parse("low_gate = false").is_err());
 }
