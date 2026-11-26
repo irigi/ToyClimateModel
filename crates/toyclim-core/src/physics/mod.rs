@@ -238,6 +238,15 @@ fn sbm(
         shallow,
         deep_requires_pt: boolean(t, "deep_requires_pt", false)?,
         keep_lowest: keep as usize,
+        bl_trigger_rh: {
+            let r = num(t, "bl_trigger_rh", 0.0)?;
+            if !(0.0..1.0).contains(&r) {
+                return Err(format!(
+                    "[convection] bl_trigger_rh = {r}: expected 0 (off) or 0 < x < 1"
+                ));
+            }
+            r
+        },
         substeps: 1,
     })
 }
@@ -670,6 +679,7 @@ pub fn build_world(
                     "shallow",
                     "deep_requires_pt",
                     "keep_lowest",
+                    "bl_trigger_rh",
                 ],
             )?;
             let cond = moisture.ok_or("convection \"sbm\" needs a [moisture] block")?;

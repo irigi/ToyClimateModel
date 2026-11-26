@@ -624,3 +624,54 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
       frequent convection above the boundary layer and the mixing, not by direct drying.
       Options in docs/progress.md (raise `rh_ref`; SPEEDY-type boundary-layer trigger and
       closure; P_T criterion; other).
+      **Owner decision after the humidity diagnosis (2026-11-26, follows 819e9de), recorded
+      before starting:**
+      - Interpretation: accepted as stated; the hypothesis was half right. The defect: "deep"
+        convection active in 53–61 % of mid-latitude winter samples with tops near 650–680 hPa,
+        making 57–68 % of the precipitation there (NCEP 16–29 %, itself a model product),
+        holding the air above σ 0.87 at `rh_ref` and raining out what the mixing brings up;
+        evaporation 33–62 % too high, near-surface RH 0.10–0.15 too low. Run b shows the
+        direction, not the fix (a third of the southern Hadley cell, lower precipitation
+        correlation): convection fires too often, more than what it relaxes to. Choice between
+        changing what convection relaxes to (option 1) and when it fires (option 2), decided
+        by a screen on Earth targets.
+      - Step 1: build, off by default, byte-identical when off, SCM tests first (energy and
+        water conservation, no adjustment when the trigger is not met): T, a boundary-layer
+        humidity trigger after SPEEDY's description (deep convection only where boundary-layer
+        RH exceeds a threshold; transcribe the rule and value 0.9 with the citation; state the
+        mapping onto our levels; knob range 0.80–0.90, sources SPEEDY and ICOADS; relaxation
+        profile otherwise unchanged; compare only, copy no source). If a primary source for the
+        Betts–Miller shallow/deep distinction by cloud depth or top can be read (Betts 1986,
+        Betts & Miller 1986, Janjić 1994), report it; do not build it.
+      - Step 2: Hadley strength reference (both cells, annual and by season) from NCEP v.
+      - Step 3: screen, T21 Earth AMIP 1 + 1 years, cloud knobs at r3, ≤ 6 runs, logged as
+        diagnostics: s1 reference; s2 trigger 0.90; s3 trigger 0.80; s4 `rh_ref` 0.8 with
+        `deep_requires_pt`; s5 the better trigger with `deep_requires_pt`; s6 free, reason
+        stated first. Report: near-surface ocean RH by band and season vs ICOADS; E vs NCEP;
+        global P vs GPCP; convective share and convection frequency at 40–60° winter and in the
+        tropics; Hadley vs step 2; P pattern correlation; low cover vs GOCCP, total vs CERES;
+        tropical net CRE; criteria 1–2 reported, not required.
+      - Step 4, the bar (not to be adjusted), at T21: winter ocean RH at 40–60° within 0.05 of
+        ICOADS in both hemispheres; global P within 10 % of GPCP; P pattern correlation not
+        more than 0.01 below s1; each Hadley cell closer to the reference than s1, or within
+        10 % of its s1 value; stable through both years. One passer: continue with it; several:
+        highest P correlation; none: stop and report.
+      - Step 5, only with an adopted variant, in order: a rerun P1 criterion 5, P2 criteria 2,
+        3, 5, 6, P3 criterion 4 (any failure: stop, no cloud work); b cloud rebalance at T21,
+        ≤ 6 variants, knobs in logged ranges, targets criteria 1–2, CERES bands and cover,
+        GOCCP low cover, Cloud_cci water path; c T42 1 + 3 for the best one or two with the
+        2026-11-25 screen rule for the shape row; d if it passes: defaults, new regress
+        references, full P4 gate and closing as specified on 2026-11-25.
+      - Stop and report if: no variant meets the bar; an accepted P1–P3 criterion fails; no
+        cloud rebalance meets criteria 1–2, or the T42 screen or gate fails; a slab run fails or
+        does not equilibrate in 45 years. ≤ 16 threads; Earth targets only, every change
+        logged; nothing chosen by the 2×CO₂ warming or the aquaplanet temperature; say what
+        was not fetched or read.
+      - Result (2026-11-26 evening): no variant meets the bar; stopped at step 4.
+        - Winter RH 40–60°N DJF / 40–60°S JJA and P correlation:
+          s1 0.700 / 0.673, 0.704; s2 0.709 / 0.662, 0.664; s3 0.683 / 0.671, 0.644;
+          s4 0.725 / 0.724, 0.630; s5 0.686 / 0.659, 0.622; s6 (trigger 0.90 + `ri_crit`
+          0.25) 0.782 / 0.797, 0.627.
+        - The trigger cuts winter convection to ≤ 1.3 % with no RH gain, and switches off
+          tropical convection (share 0.12).
+        - Options in docs/progress.md question 13.

@@ -49,6 +49,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import cloud_split  # noqa: E402
+import hadley_ref  # noqa: E402
 import scorecard  # noqa: E402
 
 RAW = ROOT / "reference/raw"
@@ -58,7 +59,8 @@ BANDS = [("10°S–10°N", -10, 10), ("10–30°N", 10, 30), ("10–30°S", -30,
 SEASONS = {"ann": list(range(1, 13)), "DJF": [12, 1, 2], "JJA": [6, 7, 8]}
 # budget regions: (name, lat lo, lat hi, season)
 REGIONS = [("40–60°N DJF", 40, 60, "DJF"), ("40–60°S JJA", -60, -40, "JJA"),
-           ("trades 10–25°N ann", 10, 25, "ann"), ("trades 10–25°S ann", -25, -10, "ann")]
+           ("trades 10–25°N ann", 10, 25, "ann"), ("trades 10–25°S ann", -25, -10, "ann"),
+           ("tropics 10°S–10°N ann", -10, 10, "ann")]
 
 
 def band_avg(x, lat, w, mask, lo, hi):
@@ -219,6 +221,29 @@ def model(run):
     psi = scorecard.streamfunction(v, sh, latr, ps, meta["planet"]["radius"],
                                    meta["planet"]["gravity"])
     r["hadley"] = scorecard.hadley(psi, sh, lat)
+    k7 = int(np.argmin(np.abs(sh - 0.7)))
+    r["hadley_cells"] = {"ann": hadley_ref.cells(psi[k7], lat)}
+    # seasonal cells from the 5-day v snapshots (zonal means, year 2), if saved
+    vs, pss = cloud_split.snaps(run, "v"), cloud_split.snaps(run, "ps")
+    if vs:
+        dt, year = float(meta["config"]["dt"]), 365.25 * 86400.0
+        start = float(meta["config"].get("climatology", {}).get("start", 0.0))
+        nl = len(meta["sigma"])
+        for sname in ("DJF", "JJA"):
+            ms = SEASONS[sname]
+            vz, pz = [], []
+            for st, f in vs.items():
+                if st * dt < start or st not in pss:
+                    continue
+                if int(((st * dt) % year) / (year / 12.0)) + 1 not in ms:
+                    continue
+                vz.append(np.load(f).astype(float).reshape(nl, nlat, nlon).mean(axis=2))
+                pz.append(np.load(pss[st]).astype(float).reshape(nlat, nlon).mean(axis=1))
+            if vz:
+                ps_ = scorecard.streamfunction(np.mean(vz, 0), sh, latr, np.mean(pz, 0),
+                                               meta["planet"]["radius"],
+                                               meta["planet"]["gravity"])
+                r["hadley_cells"][sname] = hadley_ref.cells(ps_[k7], lat)
     wts = scorecard.area_weights(latr, nlon)
     pa = mon["precip"].mean(0) * day
     ra = np.load(ref / "pr.npy").astype(float).reshape(-1, nlat, nlon).mean(0)
@@ -279,6 +304,67 @@ def print_report(obs, rs, labels):
     print()
 
 
+def print_screen(obs, rs, labels, href):
+    """Screen table and the step 4 bar (owner decision after the humidity diagnosis,
+    2026-11-26); the first run is s1. Bar, at T21: winter ocean RH at 40–60° (DJF N, JJA S)
+    within 0.05 of ICOADS in both hemispheres; global P within 10 % of GPCP; precipitation map
+    correlation ≥ s1 − 0.01; each annual Hadley cell (scorecard metric, max |ψ| within 35° at
+    σ 0.7, against NCEP at 700 hPa) closer to NCEP than in s1 or within 10 % of its s1 value.
+    Stability (both years run) is checked from the run log, not here."""
+    gp = obs["global_precip_gpcp"]
+    rn, rs_ = obs["rh_icoads"]["DJF"]["40–60°N"], obs["rh_icoads"]["JJA"]["40–60°S"]
+    hn, hs = href["ann"]["NH"]["psi700_1e10_kg_s"], href["ann"]["SH"]["psi700_1e10_kg_s"]
+    s1 = rs[0]
+    print(f"## Screen and step 4 bar (ICOADS winter RH 40–60°N DJF {rn:.3f}, 40–60°S JJA "
+          f"{rs_:.3f}; GPCP {gp:.2f} mm/day; NCEP Hadley annual N {hn:.2f}, S {hs:.2f} "
+          f"1e10 kg/s)\n")
+    print("| run | RH N DJF | RH S JJA | P global | P corr | Hadley N cell | Hadley S cell | "
+          "max |ψ| NH / SH | "
+          "conv active 40–60°N DJF / S JJA / tropics | conv share same | E 40–60°N DJF / S JJA |"
+          " bar: RH | P | corr | Hadley | all |")
+    print("|---" * 16 + "|")
+    out = []
+    for l, r in zip(labels, rs):
+        a, b = r["rh_low"]["DJF"]["40–60°N"], r["rh_low"]["JJA"]["40–60°S"]
+        P, c = r["global"]["precip"], r["precip_map_corr"]
+        # each cell by sign (hadley_ref.cells): the per-hemisphere max |ψ| can pick the
+        # southern cell where it reaches north of the equator (NCEP: both give 6.24 / 8.16)
+        cell = lambda x: (x["hadley_cells"]["ann"]["pos_1e10_kg_s"],  # noqa: E731
+                          x["hadley_cells"]["ann"]["neg_1e10_kg_s"])
+        n, sh = cell(r)
+        n1, s1h = cell(s1)
+        nh, shh = (r["hadley"][h]["max_psi_1e10_kg_s"] for h in ("NH", "SH"))
+        ok_rh = abs(a - rn) <= 0.05 and abs(b - rs_) <= 0.05
+        ok_p = abs(P - gp) <= 0.10 * gp
+        ok_c = c >= s1["precip_map_corr"] - 0.01
+        okh = lambda x, x1, ref: abs(x - ref) < abs(x1 - ref) or abs(x - x1) <= 0.10 * x1  # noqa
+        ok_h = okh(n, n1, hn) and okh(sh, s1h, hs)
+        B = r["budget"]
+        f = lambda k: " / ".join(f"{B[x][k]:.2f}" for x in ("40–60°N DJF", "40–60°S JJA",  # noqa
+                                                            "tropics 10°S–10°N ann"))
+        yn = lambda x: "yes" if x else "**no**"  # noqa: E731
+        allok = ok_rh and ok_p and ok_c and ok_h
+        out.append({"run": l, "rh_ok": ok_rh, "p_ok": ok_p, "corr_ok": ok_c, "hadley_ok": ok_h,
+                    "all": allok})
+        print(f"| {l} | {a:.3f} | {b:.3f} | {P:.2f} | {c:.3f} | {n:.2f} | {sh:.2f} | "
+              f"{nh:.2f} / {shh:.2f} | {f('conv_active')} | {f('conv_share')} | {B['40–60°N DJF']['evaporation']:.2f}"
+              f" / {B['40–60°S JJA']['evaporation']:.2f} | {yn(ok_rh)} | {yn(ok_p)} | "
+              f"{yn(ok_c)} | {yn(ok_h)} | {yn(allok)} |")
+    print()
+    print("Seasonal Hadley cells by sign (northern + / southern −, 1e10 kg/s, σ 0.7; NCEP "
+          + ", ".join(f"{k} {v['cells']['pos_1e10_kg_s']:.2f} / {v['cells']['neg_1e10_kg_s']:.2f}"
+                      for k, v in href.items()) + ")\n")
+    print("| run | " + " | ".join(href) + " |")
+    print("|---" * (len(href) + 1) + "|")
+    for l, r in zip(labels, rs):
+        hc = r["hadley_cells"]
+        print(f"| {l} | " + " | ".join(
+            f"{hc[k]['pos_1e10_kg_s']:.2f} / {hc[k]['neg_1e10_kg_s']:.2f}" if k in hc else "—"
+            for k in href) + " |")
+    print()
+    return out
+
+
 def fig(obs, rs, labels, path):
     import matplotlib
 
@@ -316,14 +402,20 @@ def main():
     ap.add_argument("--labels", nargs="+")
     ap.add_argument("--json")
     ap.add_argument("--fig")
+    ap.add_argument("--screen", action="store_true",
+                    help="screen table and the step 4 bar; the first run is the reference s1")
     a = ap.parse_args()
     labels = a.labels or [pathlib.Path(r).name for r in a.runs]
     obs = observations()
     rs = [model(r) for r in a.runs]
     print_report(obs, rs, labels)
+    bar = None
+    if a.screen:
+        href = hadley_ref.reference()
+        bar = print_screen(obs, rs, labels, href)
     if a.json:
-        pathlib.Path(a.json).write_text(json.dumps({"obs": obs, "runs": rs, "labels": labels},
-                                                   indent=1, default=float))
+        pathlib.Path(a.json).write_text(json.dumps({"obs": obs, "runs": rs, "labels": labels,
+                                                    "bar": bar}, indent=1, default=float))
     if a.fig:
         fig(obs, rs, labels, a.fig)
 

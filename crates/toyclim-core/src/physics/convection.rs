@@ -135,6 +135,19 @@ pub struct SimplifiedBettsMiller {
     /// levels from the top down to the last one above them, so the scheme still conserves
     /// moist enthalpy. Not a published variant; only with `shallow = "none"`.
     pub keep_lowest: usize,
+    /// Boundary-layer humidity trigger RH_cnv (key `bl_trigger_rh`, 0 = off, the default; knob
+    /// range 0.80–0.90; P4 question 13, owner decision 2026-11-26). Deep convection runs only
+    /// where the layer-mean relative humidity Σ q Δp / Σ q_s(T) Δp exceeds RH_cnv both in the
+    /// boundary layer (full levels σ ≥ 0.9) and in the layer above it (0.77 ≤ σ < 0.9);
+    /// otherwise the column is left alone and counted in `conv_skipped`. After the SPEEDY
+    /// convection trigger (Molteni & Kucharski, "Description of the ICTP AGCM (SPEEDY)
+    /// version 41", ICTP, appendix B.2, eq. 8: Q_N > RH_cnv Q_sat,N and Q_N−1 > RH_cnv
+    /// Q_sat,N−1, RH_cnv = 0.9 (its table of parameters); SPEEDY's PBL layer N spans
+    /// σ 0.9–1 and layer N−1 σ 0.77–0.9, its half levels). SPEEDY's alternative path (eq. 7,
+    /// moist static energy of layer N−1 above the saturation value aloft) and its mass-flux
+    /// closure are not used: the trigger only gates this scheme's relaxation, which is
+    /// otherwise unchanged. Shallow convection (P_q ≤ 0) is not gated.
+    pub bl_trigger_rh: f64,
     /// RK4 sub-steps per layer for the parcel ascent. With the exact LCL search, one
     /// sub-step is accurate to ~0.001 K for L26-type layers (see the test).
     pub substeps: usize,
@@ -274,6 +287,28 @@ impl SimplifiedBettsMiller {
     }
 }
 
+impl SimplifiedBettsMiller {
+    /// SPEEDY-type humidity trigger (see `bl_trigger_rh`): layer-mean RH ≥ RH_cnv in the
+    /// boundary layer (σ ≥ 0.9) and in the layer above (0.77 ≤ σ < 0.9).
+    fn bl_triggered(&self, ctx: &ColumnCtx, st: &ColumnState) -> bool {
+        let mut q = [0.0; 2];
+        let mut qs = [0.0; 2];
+        for k in 0..st.nlev {
+            let s = ctx.sigma[k];
+            let i = if s >= 0.9 {
+                0
+            } else if s >= 0.77 {
+                1
+            } else {
+                continue;
+            };
+            q[i] += st.q[k] * ctx.dp[k];
+            qs[i] += self.cond.qsat(ctx.planet, st.t[k], ctx.p[k]) * ctx.dp[k];
+        }
+        (0..2).all(|i| qs[i] > 0.0 && q[i] > self.bl_trigger_rh * qs[i])
+    }
+}
+
 impl ColumnScheme for SimplifiedBettsMiller {
     fn name(&self) -> &'static str {
         "simplified_betts_miller"
@@ -352,6 +387,10 @@ impl ColumnScheme for SimplifiedBettsMiller {
             diag[3] += 1.0;
             return;
         }
+        if self.bl_trigger_rh > 0.0 && !self.bl_triggered(ctx, st) {
+            diag[3] += 1.0;
+            return;
+        }
         diag[2] += 1.0;
         // energy closure: shift T_ref by a uniform ΔT so that heating balances drying,
         // Σ c_p (T_ref − T) dp = Σ L (q − q_ref) dp (q_ref held at the first-guess value)
@@ -402,6 +441,7 @@ mod tests {
             shallow: Shallow::None,
             deep_requires_pt: false,
             keep_lowest: 0,
+            bl_trigger_rh: 0.0,
             substeps: n,
         };
         let mut b = vec![0.0; 26];
@@ -474,6 +514,7 @@ mod tests {
                 shallow,
                 deep_requires_pt: false,
                 keep_lowest: 0,
+                bl_trigger_rh: 0.0,
                 substeps: 1,
             };
             let mut st = ColumnState::new(l, 1);
@@ -550,6 +591,7 @@ mod tests {
                 shallow: Shallow::None,
                 deep_requires_pt: req,
                 keep_lowest: 0,
+                bl_trigger_rh: 0.0,
                 substeps: 1,
             };
             let mut st = ColumnState::new(l, 1);
@@ -604,6 +646,7 @@ mod tests {
                 shallow: Shallow::None,
                 deep_requires_pt: false,
                 keep_lowest: n,
+                bl_trigger_rh: 0.0,
                 substeps: 1,
             };
             let mut st = ColumnState::new(l, 1);
@@ -656,5 +699,86 @@ mod tests {
                 "enthalpy {dh}"
             );
         }
+    }
+    /// `bl_trigger_rh`: below the threshold in the boundary layer or the layer above, deep
+    /// convection leaves the column alone and counts it skipped; above it the scheme runs
+    /// as without the trigger and conserves moist enthalpy and water.
+    #[test]
+    fn bl_trigger_gates_deep_convection_and_conserves() {
+        let geo = Geometry::l26();
+        let planet = Planet::earth();
+        let cond = Condensable::water();
+        let ctx = geo.ctx(&planet, Some(&cond), 1800.0);
+        let l = geo.p.len();
+        let run = |trigger: f64, rh_bl: f64, rh_above: f64| {
+            let sbm = SimplifiedBettsMiller {
+                cond: cond.clone(),
+                tau: 7200.0,
+                rh_ref: 0.7,
+                shallow: Shallow::None,
+                deep_requires_pt: false,
+                keep_lowest: 0,
+                bl_trigger_rh: trigger,
+                substeps: 1,
+            };
+            let mut st = ColumnState::new(l, 1);
+            st.begin(1800.0);
+            let q0 = rh_bl * cond.qsat(&planet, 300.0, geo.p[l - 1]);
+            let mut tp = vec![0.0; l];
+            sbm.parcel(&planet, &geo.p, 300.0, q0, &mut tp);
+            for k in 0..l {
+                st.t[k] = if k == l - 1 {
+                    300.0
+                } else {
+                    (tp[k] - 1.0).max(200.0)
+                };
+                let s = geo.sigma[k];
+                let rh = if s >= 0.9 {
+                    rh_bl
+                } else if s >= 0.77 {
+                    rh_above
+                } else {
+                    0.6
+                };
+                st.q[k] = rh * cond.qsat(&planet, st.t[k], geo.p[k]);
+            }
+            let (t0, qv) = (st.t.clone(), st.q.clone());
+            let mut sfc = SurfaceExchange::default();
+            let mut diag = [0.0; 5];
+            sbm.apply(&ctx, &mut st, &mut sfc, &mut diag, &mut Workspace::new(l));
+            (st, t0, qv, sfc, diag)
+        };
+        // dry boundary layer, then dry layer above: no adjustment, counted as skipped
+        for (bl, above) in [(0.85, 0.95), (0.95, 0.85)] {
+            let (st, t0, q0, sfc, d) = run(0.9, bl, above);
+            assert!(d[1] > 0.0, "CAPE {}", d[1]);
+            assert_eq!(d[2], 0.0, "{d:?}");
+            assert_eq!(d[3], 1.0, "{d:?}");
+            assert_eq!(st.t, t0);
+            assert_eq!(st.q, q0);
+            assert_eq!(sfc.rain + sfc.snow, 0.0);
+        }
+        // both moist: same result as without the trigger, conserving
+        let (st, t0, q0, sfc, d) = run(0.9, 0.95, 0.95);
+        let (st_off, ..) = run(0.0, 0.95, 0.95);
+        assert_eq!(d[2], 1.0, "{d:?}");
+        assert_eq!(st.t, st_off.t);
+        assert_eq!(st.q, st_off.q);
+        let g = planet.gravity;
+        let dw: f64 = (0..l).map(|k| (st.q[k] - q0[k]) * geo.dp[k] / g).sum();
+        let dh: f64 = (0..l)
+            .map(|k| {
+                (planet.cp * (st.t[k] - t0[k]) + cond.latent_heat * (st.q[k] - q0[k])) * geo.dp[k]
+                    / g
+            })
+            .sum();
+        let pr = (sfc.rain + sfc.snow) * 1800.0;
+        assert!(pr > 0.0);
+        assert!((dw + pr).abs() < 1e-9 * pr, "water {dw} vs precip {pr}");
+        let lf = cond.latent_heat_fusion * sfc.snow * 1800.0;
+        assert!(
+            (dh - lf).abs() < 1e-6 * (cond.latent_heat * pr),
+            "enthalpy {dh}"
+        );
     }
 }
