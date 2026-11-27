@@ -731,3 +731,63 @@ Moved unchanged from `docs/progress.md` on 2026-11-23 (old line ranges 2591–25
         - Low cloud follows neither.
         - L32 tropical net CRE is −26.8 (net TOA +11).
         - Options in docs/progress.md question 13.
+    - **Owner decision after the level and mixing runs (2026-11-27, follows b8f6d65), as given:**
+      - Interpretation:
+        1. Route A (`ri_crit`) is not adopted. It fixes near-surface RH and the precipitation
+           total, but removes cloud at 690–780 hPa, strengthens the monsoon shift and loses
+           pattern correlation in every run. `ri_crit` stays at 1. It may return later in
+           combination; not now.
+        2. Route B is not adopted yet, but v4 is the first run that moves two long-standing
+           errors the right way at once: tropical net cloud effect −26.8 (s1 −39.8, CERES
+           −14.6) and precipitation correlation 0.722 (s1 0.704), with the monsoon shift
+           reversed. Its net TOA of +11 is expected when the tropics get dimmer and nothing is
+           rebalanced; it also leaves room for the mid-latitude cloud that the albedo limit
+           blocked before (runs c–e of 2026-11-26).
+        3. Two things must be known before 35 hours of reruns and a SPEC amendment: why v4
+           works, and whether it holds at T42.
+        4. Option 1 (offline check of the near-surface cloud thresholds) is authorised.
+           Option 4 (park) is the fallback if the steps below do not confirm v4.
+      - Step 1 — why v4 works, from existing output (s1, v2, v4): tropical cloud by level,
+        cloud water path, SW and LW cloud effect by layer group and by convective /
+        stratiform, s1 against v4. Is the gain physical (cloud and humidity placed
+        differently, convection tops, the 787 hPa layer resolved into moist and dry parts) or
+        arithmetic (the same single-layer cloud now sits in a thinner layer and so carries
+        less water)? State which, with the numbers. Humidity and temperature profile
+        600–900 hPa in the trade belts and the north-west Pacific in summer, s1 against v4
+        against NCEP. State the L30 and L32 level sets and how they were chosen.
+      - Step 2 — offline cloud-threshold check (existing output, no runs): for 40–60°N and
+        40–60°S in winter, with the model's RH and q at each low level, and again with the
+        NCEP profile substituted: the low cover the scheme gives as a function of
+        `rh_crit_surface` (0.75–0.95), with freeze-dry on and off, and with the gate on and
+        off. Against GOCCP low cover. Answer: with observed humidity, would the scheme as it
+        stands make the observed low cloud? If not, which threshold prevents it?
+      - Step 3 — confirmation runs, in parallel: a. T42 L32, Earth AMIP 1 + 1 years, r3
+        clouds with the corrected freeze-dry, nothing rebalanced. Report against the r3 T42
+        L26 run (first year after spin-up of that run, for a like-for-like comparison):
+        criteria 1, 2, 3 and 5, zonal cover and the shape row, CERES bands, tropical net cloud
+        effect, the precipitation correlation against GPCP, Hadley cells, jets, near-surface
+        RH, stability and run time. b. T21 L32, Earth AMIP 1 + 1 years, at most 4 cloud
+        variants within the logged ranges, aimed at using the TOA room for mid- and
+        high-latitude low cloud (informed by step 2). Targets: criteria 1–2, cover by band
+        against CERES, low cover against GOCCP, tropical net cloud effect. Diagnostics;
+        nothing adopted.
+      - Then stop and report: tables for steps 1–3, and a recommendation on route B with the
+        proposed level set and its justification; the exact SPEC.md wording that would have
+        to change ("T42 L26" in P1 criterion 5 and the P4 gate, and anywhere else), as a
+        proposal only (do not edit SPEC.md); the list and machine time of the reruns. Change
+        no default.
+      - Stop early and report if step 1 shows the v4 gain is arithmetic only, or the T42 L32
+        run is unstable or needs a shorter time step.
+      - At most 16 threads. Rules unchanged; nothing is chosen by the 2×CO₂ warming or the
+        aquaplanet temperature. End with a docs/progress.md entry with the measured numbers.
+      - Result (2026-11-27): stopped early as the decision's first stop condition requires.
+        - The v4 tropical CRE gain is arithmetic. Halving the low-layer cloud water of s1
+          (what an L32 layer carries) reproduces 93 % of it. The cause is the
+          thickness-proportional water of the single-layer stratus, plus the LTS level moving
+          from σ 0.696 to 0.721.
+        - Step 2: with NCEP daily humidity the r3 scheme makes 0.21 / 0.22 winter low cover at
+          40–60°N / S (model humidity 0.34 / 0.37, GOCCP 0.50 / 0.58). Only freeze-dry off,
+          gate off and RH_c,s 0.75 together reach 0.42 / 0.48.
+        - The T42 L32 and L26 runs were stopped at days 105 / 110; 3b was not run; route B is
+          not recommended.
+        - Options in docs/progress.md question 13.
