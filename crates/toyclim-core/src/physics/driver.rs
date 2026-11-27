@@ -127,7 +127,13 @@ pub struct DriverCtx<'a> {
 }
 
 /// One row's output slices: (row, ((tendencies, diagnostics), exchange)).
-type RowJob<'a> = (usize, ((&'a mut [Real], &'a mut [Real]), &'a mut [f64]));
+type RowJob<'a> = (
+    usize,
+    (
+        ((&'a mut [Real], &'a mut [Real]), &'a mut [f64]),
+        &'a mut [Real],
+    ),
+);
 
 /// Column scratch of one job.
 struct ColumnScratch {
@@ -138,6 +144,10 @@ struct ColumnScratch {
     dp: Vec<f64>,
     ph: Vec<f64>,
     diag: Vec<f64>,
+    /// ω and the per-level scratch of its computation (empty unless needed).
+    omega: Vec<f64>,
+    div: Vec<f64>,
+    vg: Vec<f64>,
 }
 
 /// The column physics of a model and everything it needs between calls.
@@ -161,6 +171,12 @@ pub struct PhysicsDriver {
     row_diag: Vec<Real>,
     insol: Vec<Real>,
     coszen: Vec<Real>,
+    /// Per-column memory kept between physics steps (`[point][mem_len]`, at least one slot
+    /// per point; see [`ColumnScheme::memory`]); part of the restart state.
+    memory: Vec<Real>,
+    mem_len: usize,
+    /// The σ levels, kept when a scheme needs ω ([`ColumnScheme::needs_omega`]).
+    omega_levels: Option<SigmaLevels>,
 }
 
 impl PhysicsDriver {
@@ -175,7 +191,10 @@ impl PhysicsDriver {
         let z = Grid3::filled(l, n, 0.0);
         let active = !schemes.is_empty();
         let w = (3 + ntracers) * l;
+        let mem_len = schemes.iter().map(|s| s.memory(l)).max().unwrap_or(0);
         PhysicsDriver {
+            memory: vec![0.0; if active { n * mem_len.max(1) } else { 0 }],
+            mem_len,
             diag: Grid3::filled(registry.len(), n, 0.0),
             tend: PhysTend {
                 du: z.clone(),
@@ -193,12 +212,54 @@ impl PhysicsDriver {
             insol: vec![0.0; n],
             coszen: vec![0.0; n],
             registry,
+            omega_levels: schemes
+                .iter()
+                .any(|s| s.needs_omega())
+                .then(|| levels.clone()),
             schemes,
         }
     }
 
     pub fn is_empty(&self) -> bool {
         self.schemes.is_empty()
+    }
+
+    /// The per-column memory (`[point][slot]`), empty when no scheme keeps any.
+    pub fn memory(&self) -> &[Real] {
+        if self.mem_len == 0 {
+            &[]
+        } else {
+            &self.memory
+        }
+    }
+
+    /// Restore the per-column memory (restart); `m` must have the length of [`Self::memory`].
+    /// One exception: a restart written without the diagnostic CRE-split block of the cloud
+    /// memory (3·L slots per column where this run keeps 4·L) is accepted and the extra
+    /// block starts at zero (it is rewritten in the first physics step).
+    pub fn set_memory(&mut self, m: &[Real]) -> Result<(), String> {
+        let n = self.insol.len();
+        let l = self.sigma.len();
+        if self.mem_len == 4 * l && n > 0 && m.len() == n * 3 * l {
+            log::info!("restart: cloud memory without the CRE-split block, padded with zeros");
+            for p in 0..n {
+                let dst = &mut self.memory[p * 4 * l..(p + 1) * 4 * l];
+                dst[..3 * l].copy_from_slice(&m[p * 3 * l..(p + 1) * 3 * l]);
+                dst[3 * l..].fill(0.0);
+            }
+            return Ok(());
+        }
+        if m.len() != self.memory().len() {
+            return Err(format!(
+                "physics memory: {} values, expected {}",
+                m.len(),
+                self.memory().len()
+            ));
+        }
+        if self.mem_len > 0 {
+            self.memory.copy_from_slice(m);
+        }
+        Ok(())
     }
 
     /// Largest specific humidity (tracer 0) of the state the physics last saw.
@@ -227,7 +288,9 @@ impl PhysicsDriver {
         let ndiag = self.registry.len();
         let dslot = ndiag.max(1);
         let tref = cx.planet.t_ref as Real;
-        self.grids.fill_with(tr, s, false);
+        let omega_levels = self.omega_levels.as_ref();
+        // divergence only when ω is needed (vorticity comes along, unused)
+        self.grids.fill_with(tr, s, omega_levels.is_some());
         if let Some(orbit) = cx.orbit {
             let sun = orbit.sun(cx.time);
             self.insol
@@ -249,7 +312,9 @@ impl PhysicsDriver {
         let olr = self.registry.olr;
         let surface = cx.surface;
         let dtp = cx.dt;
-        let row = |sc: &mut ColumnScratch, (j, ((out, diag), exch)): RowJob| {
+        let mem_len = self.mem_len;
+        let mslot = mem_len.max(1);
+        let row = |sc: &mut ColumnScratch, (j, (((out, diag), exch), mem)): RowJob| {
             let coslat = (1.0 - tr.grid.mu[j] * tr.grid.mu[j]).sqrt() as Real;
             for i in 0..nlon {
                 let p = j * nlon + i;
@@ -272,9 +337,26 @@ impl PhysicsDriver {
                     sc.ph[k] = sigma_half[k] * ps;
                 }
                 sc.ph[l] = ps;
+                if let Some(lev) = omega_levels {
+                    let ic2 = tr.inv_cos2[j] as f64;
+                    for k in 0..l {
+                        let (u, v) = (g.u[k][p] as f64, g.v[k][p] as f64);
+                        sc.vg[k] = (u * g.px[p] as f64 + v * g.py[p] as f64) * ic2;
+                        sc.div[k] = g.div[k][p] as f64;
+                    }
+                    lev.omega_over_p(&sc.div, &sc.vg, &mut sc.omega);
+                    for k in 0..l {
+                        sc.omega[k] *= sc.p[k];
+                    }
+                }
                 let sfc = &mut sc.sfc;
                 sfc.begin();
                 sfc.tiles.clear();
+                sfc.cloud.clear();
+                if mem_len > 0 {
+                    let mm = &mem[i * mslot..i * mslot + mem_len];
+                    sfc.cloud.extend(mm.iter().map(|&x| x as f64));
+                }
                 if let Some(sf) = surface {
                     sf.tiles_at(p, dtp, &mut sfc.tiles);
                     sfc.ustar_prev = sf.ustar[p];
@@ -296,6 +378,7 @@ impl PhysicsDriver {
                     cond: cx.cond,
                     insolation: insol[p] as f64,
                     cos_zenith: coszen[p] as f64,
+                    omega: &sc.omega,
                 };
                 sc.diag.fill(0.0);
                 for (ph, r) in schemes.iter().zip(ranges) {
@@ -336,6 +419,12 @@ impl PhysicsDriver {
                 // and the latent-heat deficit of the snow that reaches it
                 let lf = cx.cond.map_or(0.0, |c| c.latent_heat_fusion);
                 e[Exchange::SFC_NET] = sfc.sfc_net - lf * sfc.snow;
+                if mem_len > 0 {
+                    let mm = &mut mem[i * mslot..i * mslot + mem_len];
+                    for (x, &y) in mm.iter_mut().zip(&sfc.cloud) {
+                        *x = y as Real;
+                    }
+                }
             }
         };
         let jobs = self
@@ -343,6 +432,7 @@ impl PhysicsDriver {
             .par_chunks_mut(nlon * w)
             .zip(self.row_diag.par_chunks_mut(nlon * dslot))
             .zip(self.exchange.par_chunks_mut(nlon * Exchange::N))
+            .zip(self.memory.par_chunks_mut(nlon * mslot))
             .enumerate();
         let scratch = || ColumnScratch {
             st: ColumnState::new(l, ntr),
@@ -355,6 +445,9 @@ impl PhysicsDriver {
             dp: vec![0.0; l],
             ph: vec![0.0; l + 1],
             diag: vec![0.0; ndiag],
+            omega: vec![0.0; if omega_levels.is_some() { l } else { 0 }],
+            div: vec![0.0; if omega_levels.is_some() { l } else { 0 }],
+            vg: vec![0.0; if omega_levels.is_some() { l } else { 0 }],
         };
         jobs.for_each_init(scratch, row);
         // Scatter the column-major buffers (`[point][du | dv | dT | dq]`) to

@@ -252,3 +252,22 @@ fn pe_thread_independent() {
     };
     assert_eq!(run(1), run(3));
 }
+
+/// Question 7 cold start (2026-11-24): `[surface.sea_ice] initial_snow` puts snow on the
+/// initial ice (kg m⁻² over the ice), the mixed layer starts at freezing and the ice surface at
+/// min(`surface.ocean.initial`, T_f); `initial_snow` without initial ice is refused.
+#[test]
+fn cold_start_snow_on_ice() {
+    let src = include_str!("../../../../cases/bench/p4_retest/bistab_cold.toml");
+    let m = from_config(&Config::parse(src).unwrap()).unwrap();
+    let s = m.surface.as_ref().unwrap();
+    let tf = s.params.t_freeze_sea;
+    for p in 0..s.len() {
+        assert_eq!(s.sic(p), 1.0);
+        assert_eq!(s.ice_snow[p], 100.0);
+        assert_eq!(s.t_ml[p], tf);
+        assert_eq!(s.ice_ts[p], 240.0);
+    }
+    let bad = src.replace("initial_thickness = 3.0\n", "");
+    assert!(from_config(&Config::parse(&bad).unwrap()).is_err());
+}

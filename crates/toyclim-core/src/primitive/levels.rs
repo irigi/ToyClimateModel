@@ -33,7 +33,8 @@ impl Primitive {
             .collect()
     }
 
-    /// A 3D field on model levels (`[lev][lat][lon]`) by name: u, v, vor, div, t, q, rh, phi.
+    /// A 3D field on model levels (`[lev][lat][lon]`) by name: u, v, vor, div, t, q, rh, cl, cldwp,
+    /// cl_split, omega, phi.
     pub(crate) fn level_fields(&self, name: &str) -> Option<Vec<Real>> {
         let tr = &self.tr;
         let l = self.nlev();
@@ -80,6 +81,73 @@ impl Primitive {
                         out.push((q[p] as f64 / qs) as Real);
                     }
                 }
+            }
+            // clouds of the last physics step (SPEC.md §9.5.1 `cl`): fraction per layer, and
+            // `cldwp`, the in-cloud condensate path per layer (liquid + ice) [kg m⁻²]; from the
+            // cloud scheme's per-column memory `[frac | liquid | ice]` (only scheme with memory);
+            // `cl_split`, the fourth block written with `[clouds] cre_split` (stratiform-only
+            // fraction, or the fraction without low stratiform cloud with `cre_split_low_sigma`)
+            "cl_split" => {
+                let m = self.physics.memory();
+                if m.len() != n * 4 * l {
+                    return None;
+                }
+                for k in 0..l {
+                    for p in 0..n {
+                        out.push(m[p * 4 * l + 3 * l + k]);
+                    }
+                }
+            }
+            "cl" | "cldwp" => {
+                let m = self.physics.memory();
+                if m.len() != n * 3 * l && m.len() != n * 4 * l {
+                    return None;
+                }
+                let s = m.len() / n; // 3·L, or 4·L with the CRE-split block
+                for k in 0..l {
+                    for p in 0..n {
+                        let c = &m[p * s..(p + 1) * s];
+                        out.push(if name == "cl" {
+                            c[k]
+                        } else {
+                            c[l + k] + c[2 * l + k]
+                        });
+                    }
+                }
+            }
+            // vertical pressure velocity ω [Pa s⁻¹] of the current state, by the column
+            // discretisation of the dynamics (`SigmaLevels::omega_over_p`, the ω the Slingo
+            // low cloud reads); on request only (not in the default field list)
+            "omega" => {
+                let (px, py) = tr.grad(&s.lnps);
+                let ps: Vec<Real> = tr.synthesis(&s.lnps).iter().map(|x| x.exp()).collect();
+                let (mut vg, mut dv) = (vec![0.0; l * n], vec![0.0; l * n]);
+                for k in 0..l {
+                    let (u, v) = tr.uv_from_vort_div(&s.vor[k], &s.div[k]);
+                    let d = tr.synthesis(&s.div[k]);
+                    for j in 0..tr.nlat() {
+                        let ic2 = tr.inv_cos2[j] as f64;
+                        for i in 0..nlon {
+                            let p = j * nlon + i;
+                            vg[k * n + p] =
+                                (u[p] as f64 * px[p] as f64 + v[p] as f64 * py[p] as f64) * ic2;
+                            dv[k * n + p] = d[p] as f64;
+                        }
+                    }
+                }
+                let mut w = vec![0.0; l * n];
+                let (mut cd, mut cv, mut co) = (vec![0.0; l], vec![0.0; l], vec![0.0; l]);
+                for p in 0..n {
+                    for k in 0..l {
+                        cd[k] = dv[k * n + p];
+                        cv[k] = vg[k * n + p];
+                    }
+                    self.levels.omega_over_p(&cd, &cv, &mut co);
+                    for k in 0..l {
+                        w[k * n + p] = (co[k] * self.levels.full[k] * ps[p] as f64) as Real;
+                    }
+                }
+                out.extend(w);
             }
             "phi" => {
                 // geopotential Φ_k = Φ_s + Σ_j G_kj T_j (full T)

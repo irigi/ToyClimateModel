@@ -376,6 +376,7 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
     };
 
     let every = config.steps_per_output();
+    let diag_every = config.steps_per_diagnostics();
     let total = config.total_steps();
     let mut stations =
         StationRecorder::new(model.as_ref(), &config.stations, &config.station_fields);
@@ -445,9 +446,12 @@ fn run_model(config: &Config, out: &Path, restart_dir: Option<&Path>) -> Result<
                 crash.display()
             );
         }
-        if s % every == 0 || s == total {
-            write_fields(model.as_ref(), &fields, &fields_dir)?;
+        let output_step = s % every == 0 || s == total;
+        if output_step || s % diag_every == 0 {
             write_diag(model.as_ref(), &mut diag)?;
+        }
+        if output_step {
+            write_fields(model.as_ref(), &fields, &fields_dir)?;
             station_io::write(&stations, &station_dir)?;
             if let Some(c) = &clim {
                 clim_io::write(c, &clim_dir, model.grid().nlon)?;

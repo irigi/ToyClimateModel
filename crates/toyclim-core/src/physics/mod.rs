@@ -10,6 +10,8 @@
 //!   balance, dry adjustment, moist convection, large-scale condensation, sponge.
 
 pub mod boundary_layer;
+pub mod budget;
+pub mod clouds;
 pub mod column;
 pub mod condensation;
 pub mod convection;
@@ -19,6 +21,7 @@ pub mod idealized;
 pub mod radiation;
 pub mod surface_flux;
 
+pub use clouds::CLOUD_KEYS;
 pub use column::{ColumnCtx, ColumnScheme, ColumnState, SurfaceExchange, Workspace};
 pub use condensation::Condensable;
 
@@ -26,10 +29,11 @@ use crate::config::{Duration, PhysicsConfig, SchemeConfig};
 use crate::planet::Planet;
 use boundary_layer::KProfile;
 use condensation::{LargeScaleCondensation, PrecipitationFall};
-use convection::{DryAdjustment, SimplifiedBettsMiller};
+use convection::{DryAdjustment, Shallow, SimplifiedBettsMiller};
 use damping::Sponge;
 use idealized::held_suarez::{Damping, HeldSuarez, TidallyLocked};
 use idealized::tj16::{SurfaceTemperature, Tj16BoundaryLayer, Tj16SurfaceFluxes};
+use radiation::cloud_optics::CloudOpticsParams;
 use radiation::GrayRadiation;
 use surface_flux::ExchangeParams;
 
@@ -194,16 +198,55 @@ const GRAY_FORCING_KEYS: &[&str] = &[
     "cloud_lw_tau",
 ];
 
+/// Shallow convection: Frierson's (2007) "shallower" or "qref" scheme with
+/// `shallow = "shallower" | "qref"`; off by default (`"none"`). It was the default for `[convection] scheme = "sbm"` on 2026-11-21
+/// and was switched off on 2026-11-22 after the untuned scores (P4 question 13: APE T21
+/// Hadley cell 16.3 → 4.9 ×10¹⁰ kg s⁻¹, Earth zonal precipitation correlation
+/// 0.82 → 0.66). The SPEC.md §9.4.4 shallow-convection gap stays open.
 fn sbm(
     cond: &Condensable,
     t: &toml::Table,
     tau_key: &str,
     rh_key: &str,
 ) -> Result<SimplifiedBettsMiller, String> {
+    let shallow = match t.get("shallow") {
+        None => Shallow::None,
+        Some(v) => match v.as_str() {
+            Some("shallower") => Shallow::Shallower,
+            Some("qref") => Shallow::Qref,
+            Some("none") => Shallow::None,
+            _ => {
+                return Err(format!(
+                    "[convection] shallow = {v}: expected \"shallower\", \"qref\" or \"none\""
+                ))
+            }
+        },
+    };
+    let keep = num(t, "keep_lowest", 0.0)?;
+    if keep < 0.0 || keep.fract() != 0.0 {
+        return Err(format!(
+            "[convection] keep_lowest = {keep}: expected 0, 1, 2, ..."
+        ));
+    }
+    if keep > 0.0 && shallow != Shallow::None {
+        return Err("[convection] keep_lowest needs shallow = \"none\"".into());
+    }
     Ok(SimplifiedBettsMiller {
         cond: cond.clone(),
         tau: 1.0 / rate(t, tau_key, 1.0 / 7200.0)?,
         rh_ref: num(t, rh_key, 0.7)?,
+        shallow,
+        deep_requires_pt: boolean(t, "deep_requires_pt", false)?,
+        keep_lowest: keep as usize,
+        bl_trigger_rh: {
+            let r = num(t, "bl_trigger_rh", 0.0)?;
+            if !(0.0..1.0).contains(&r) {
+                return Err(format!(
+                    "[convection] bl_trigger_rh = {r}: expected 0 (off) or 0 < x < 1"
+                ));
+            }
+            r
+        },
         substeps: 1,
     })
 }
@@ -455,11 +498,19 @@ pub fn semigray(p: &toml::Table, co2_ppm: f64) -> Result<radiation::semigray::Se
         lw_p_ref: num(p, "lw_p_ref", d.lw_p_ref)?,
         lw_n_co2: num(p, "lw_n_co2", d.lw_n_co2)?,
         lw_co2_curvature: num(p, "lw_co2_curvature", d.lw_co2_curvature)?,
+        lw_co2_band: array(p, "lw_co2_band", d.lw_co2_band)?,
         co2_ppm,
         ..d
     };
     if !(0.0..=1.0).contains(&sg.lw_strong_share) {
         return Err("[radiation] lw_strong_share must be in [0, 1]".into());
+    }
+    if sg.lw_co2_band[0] < 0.0
+        || sg.lw_co2_band[1] <= 0.0
+        || sg.lw_co2_band[2] < 0.0
+        || sg.lw_co2_band[3] <= 0.0
+    {
+        return Err("[radiation] lw_co2_band = [l >= 0, c_ref > 0, kappa0 >= 0, c_win > 0]".into());
     }
     if !(0.0..=1.0).contains(&sg.nir_weak_share) {
         return Err("[radiation] nir_weak_share must be in [0, 1]".into());
@@ -477,6 +528,7 @@ pub fn build_world(
 ) -> Result<Schemes, String> {
     let mut schemes: Schemes = Vec::new();
     // 1. radiation (with the experimental clouds inside the gray scheme)
+    let mut diagnostic: Option<(clouds::DiagnosticClouds, CloudOpticsParams)> = None;
     let clouds = match &pc.clouds {
         None => None,
         Some(c) => match c.scheme.as_str() {
@@ -492,11 +544,12 @@ pub fn build_world(
                 })
             }
             "diagnostic" => {
-                return Err("clouds scheme \"diagnostic\" is not implemented yet (P4)".into())
+                diagnostic = Some(clouds::diagnostic_clouds(&c.params, moisture, env)?);
+                None
             }
             other => {
                 return Err(format!(
-                    "unknown clouds scheme {other:?} (none, rh_prototype)"
+                    "unknown clouds scheme {other:?} (none, diagnostic, rh_prototype)"
                 ))
             }
         },
@@ -505,6 +558,11 @@ pub fn build_world(
     match r.scheme.as_str() {
         "gray" => {
             check_keys("[radiation]", &r.params, GRAY_KEYS)?;
+            if diagnostic.is_some() {
+                return Err(
+                    "[clouds] scheme \"diagnostic\" needs [radiation] scheme \"semigray\"".into(),
+                );
+            }
             let d = GrayRadiation::default();
             schemes.push(Box::new(GrayRadiation {
                 tau_eq: num(&r.params, "tau_eq", d.tau_eq)?,
@@ -524,7 +582,7 @@ pub fn build_world(
             }))
         }
         "none" => {
-            if clouds.is_some() {
+            if clouds.is_some() || diagnostic.is_some() {
                 return Err("[clouds] needs radiation".into());
             }
         }
@@ -551,6 +609,8 @@ pub fn build_world(
             if !(0.0..1.0).contains(&ts.reflectance) {
                 return Err("[radiation] reflectance must be in [0, 1)".into());
             }
+            ts.clouds = diagnostic.as_ref().map(|d| d.1.clone());
+            ts.cre_split = diagnostic.as_ref().is_some_and(|d| d.0.cre_split);
             schemes.push(Box::new(ts));
         }
         other => {
@@ -581,6 +641,28 @@ pub fn build_world(
         .convection
         .clone()
         .unwrap_or_else(|| SchemeConfig::new("dry", toml::Table::new()));
+    // diagnostic moisture-budget probes (budget.rs), only with `budget_sigma`
+    let mut conv_params = conv.params.clone();
+    let probe_sigma = match conv_params.remove("budget_sigma") {
+        None => None,
+        Some(v) => Some(
+            v.as_float()
+                .ok_or("[convection] budget_sigma must be a number")?,
+        ),
+    };
+    let conv = SchemeConfig::new(&conv.scheme, conv_params);
+    let probe = |stage| -> Result<Box<dyn ColumnScheme>, String> {
+        Ok(Box::new(budget::MoistureProbe {
+            cond: moisture
+                .ok_or("[convection] budget_sigma needs a [moisture] block")?
+                .clone(),
+            sigma_min: probe_sigma.unwrap_or(0.0),
+            stage,
+        }))
+    };
+    if probe_sigma.is_some() {
+        schemes.push(probe(budget::ProbeStage::BoundaryLayer)?);
+    }
     match conv.scheme.as_str() {
         "none" => check_keys("[convection]", &conv.params, &[])?,
         "dry" => {
@@ -588,7 +670,18 @@ pub fn build_world(
             schemes.push(Box::new(DryAdjustment::default()));
         }
         "sbm" | "simplified_betts_miller" => {
-            check_keys("[convection]", &conv.params, &["tau", "rh_ref"])?;
+            check_keys(
+                "[convection]",
+                &conv.params,
+                &[
+                    "tau",
+                    "rh_ref",
+                    "shallow",
+                    "deep_requires_pt",
+                    "keep_lowest",
+                    "bl_trigger_rh",
+                ],
+            )?;
             let cond = moisture.ok_or("convection \"sbm\" needs a [moisture] block")?;
             schemes.push(Box::new(DryAdjustment::default()));
             schemes.push(Box::new(sbm(cond, &conv.params, "tau", "rh_ref")?));
@@ -606,9 +699,19 @@ pub fn build_world(
             return Err("condensation.reevaporation is not implemented yet (P2)".into());
         }
     }
+    if probe_sigma.is_some() {
+        schemes.push(probe(budget::ProbeStage::Convection)?);
+    }
     if let Some(cond) = moisture {
         schemes.push(Box::new(LargeScaleCondensation { cond: cond.clone() }));
+        if probe_sigma.is_some() {
+            schemes.push(probe(budget::ProbeStage::Condensation)?);
+        }
         schemes.push(Box::new(PrecipitationFall { cond: cond.clone() }));
+    }
+    // 6. cloud diagnosis (for the next radiation call)
+    if let Some((d, _)) = diagnostic {
+        schemes.push(Box::new(d));
     }
     // 7. sponge
     if let Some(s) = sponge {

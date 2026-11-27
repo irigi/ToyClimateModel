@@ -418,3 +418,70 @@ fn radiation_report() {
         }
     }
 }
+
+/// The optional CO₂ band (P4 question 11; Jeevanjee et al. 2021): off by default; on, the
+/// Planck fractions still sum to 1, its fraction agrees with the exact fraction of
+/// [ν₀ − W/2, ν₀ + W/2] (W = 2l ln(CO₂/c_ref)), the upper half comes out of the window and
+/// the lower half out of the weak rest band, and a doubling reduces the OLR.
+#[test]
+fn co2_band() {
+    let off = SemiGray::default();
+    assert_eq!(off.lw_bands(), 3);
+    let on = SemiGray {
+        lw_co2_band: [10.2, 1.0, 50.0, 1.0],
+        lw_rest_strong: [7.835, 30.93, 19261.6, 0.0],
+        lw_window: [0.0, 346.4, 2046.9, 0.0],
+        ..SemiGray::default()
+    };
+    assert_eq!(on.lw_bands(), 4);
+    let mut f0 = [0.0; 3];
+    let mut f = [0.0; 4];
+    for t in [200.0, 250.0, 288.0, 320.0] {
+        off.lw_planck_fraction(t, &mut f0);
+        on.lw_planck_fraction(t, &mut f);
+        assert!((f.iter().sum::<f64>() - 1.0).abs() < 1e-12, "{t}: {f:?}");
+        let w = 2.0 * 10.2 * 400f64.ln();
+        let frac = |a: f64, b: f64| super::planck::fraction_between(1e-2 / b, 1e-2 / a, t);
+        let (up, low) = (frac(667.5, 667.5 + w / 2.0), frac(667.5 - w / 2.0, 667.5));
+        assert!(
+            (f0[0] - f[0] - up).abs() < 0.01 * up,
+            "{t}: window {} {up}",
+            f0[0] - f[0]
+        );
+        assert!(
+            (f0[1] - f[1] - low).abs() < 0.01 * low,
+            "{t}: weak {} {low}",
+            f0[1] - f[1]
+        );
+        assert!((f0[2] - f[2]).abs() < 1e-15, "{t}: strong band changed");
+        // c_win above c_ref: the core comes out of both rest bands, only the wings out of
+        // the window and the weak band
+        let split = SemiGray {
+            lw_co2_band: [10.2, 1.0, 50.0, 100.0],
+            ..on.clone()
+        };
+        let mut g = [0.0; 4];
+        split.lw_planck_fraction(t, &mut g);
+        assert!((g.iter().sum::<f64>() - 1.0).abs() < 1e-12, "{t}: {g:?}");
+        let ww = 10.2 * 4f64.ln();
+        let up = frac(667.5 + w / 2.0 - ww, 667.5 + w / 2.0);
+        assert!(
+            (f0[0] - g[0] - up).abs() < 0.01 * up,
+            "{t}: wing {} {up}",
+            f0[0] - g[0]
+        );
+        assert!(
+            g[2] < f0[2] && (g[3] - f[3]).abs() < 0.02 * f[3],
+            "{t}: {g:?} {f:?}"
+        );
+    }
+    let d = olr(&on, 288.0)
+        - olr(
+            &SemiGray {
+                co2_ppm: 800.0,
+                ..on.clone()
+            },
+            288.0,
+        );
+    assert!(d > 0.5, "ΔOLR = {d}");
+}

@@ -41,6 +41,10 @@ pub struct ColumnCtx<'a> {
     /// Stellar flux on a horizontal surface at the top \[W m⁻²\] and cos zenith (0 at night).
     pub insolation: f64,
     pub cos_zenith: f64,
+    /// Vertical pressure velocity ω \[Pa s⁻¹\] at the full levels, from the state the physics
+    /// sees (σ-coordinate continuity, the dynamics' ω/p times p_k). Filled only when a scheme
+    /// asks for it ([`ColumnScheme::needs_omega`]); empty otherwise (and in the SCM).
+    pub omega: &'a [f64],
 }
 
 /// The provisional column state and the tendencies accumulated so far.
@@ -62,6 +66,11 @@ pub struct ColumnState {
     /// ice \[kg m⁻² s⁻¹\] (convection and condensation add, the fall scheme removes).
     pub prod_rain: Vec<f64>,
     pub prod_snow: Vec<f64>,
+    /// Convection of this step (written by the convection scheme, read by the cloud
+    /// diagnosis): precipitation \[kg m⁻² s⁻¹\] and the highest convecting level (index from
+    /// the top; `nlev` = no convection). The convecting layer reaches the lowest level.
+    pub conv_precip: f64,
+    pub conv_top: usize,
     dtp: f64,
 }
 
@@ -81,6 +90,8 @@ impl ColumnState {
             prod_snow: z.clone(),
             dt: z,
             dq: zq,
+            conv_precip: 0.0,
+            conv_top: nlev,
             dtp: 1.0,
         }
     }
@@ -97,6 +108,8 @@ impl ColumnState {
         ] {
             x.fill(0.0);
         }
+        self.conv_precip = 0.0;
+        self.conv_top = self.nlev;
     }
     /// Record condensate `m` \[kg m⁻² s⁻¹\] formed in layer k with ice fraction `ice`.
     pub fn produce(&mut self, k: usize, m: f64, ice: f64) {
@@ -194,14 +207,21 @@ pub struct SurfaceExchange {
     pub lw_up_change: f64,
     /// Net energy flux into the surface (radiation − turbulent fluxes).
     pub sfc_net: f64,
+    /// Clouds of this column (SPEC.md §9.3.3 step 6 → step 1 of the next physics call),
+    /// kept by the driver between steps: `[frac (L) | liquid path (L) | ice path (L)]`,
+    /// fraction per layer and in-cloud water paths \[kg m⁻²\]. Empty without a cloud scheme.
+    pub cloud: Vec<f64>,
 }
 
 impl SurfaceExchange {
     /// Reset the per-step fluxes (tiles are refilled by the driver).
+    /// The driver's per-column memory (`cloud`) is kept.
     pub fn begin(&mut self) {
         let tiles = std::mem::take(&mut self.tiles);
+        let cloud = std::mem::take(&mut self.cloud);
         *self = SurfaceExchange {
             tiles,
+            cloud,
             ..Default::default()
         };
     }
@@ -247,6 +267,16 @@ pub trait ColumnScheme: Send + Sync {
     /// Names of the per-column diagnostics this scheme writes, in slot order.
     fn diagnostics(&self) -> &'static [&'static str] {
         &[]
+    }
+    /// Length of the per-column memory this scheme keeps between physics steps in
+    /// [`SurfaceExchange::cloud`] (the driver keeps one buffer of the largest length, saved
+    /// in restarts).
+    fn memory(&self, _nlev: usize) -> usize {
+        0
+    }
+    /// Whether this scheme reads [`ColumnCtx::omega`] (the driver then computes it).
+    fn needs_omega(&self) -> bool {
+        false
     }
     /// Update `state` over Δt_p = `ctx.dt`, read and write the surface exchange, and write
     /// this scheme's diagnostics to `diag` (zeroed by the driver).
@@ -323,6 +353,7 @@ pub mod testing {
                 cond,
                 insolation: 0.0,
                 cos_zenith: 0.0,
+                omega: &[],
             }
         }
     }

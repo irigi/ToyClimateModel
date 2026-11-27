@@ -1,0 +1,106 @@
+# P4 completion-plan step 6 with r3 (owner decision after the screen, 2026-11-25, step 3; record only):
+# P2 bistability, cold start as cases/bench/p4_retest/bistab_cold.toml (question 7 rerun) with the r3 cloud knobs; the warm
+# branch is the r3 400 ppm gate run (out/p4/lts/gate_r3/slab_t21_400).
+# Run: toyclim run --config <this> --out out/p4/lts/close_r3/bistab_cold
+#
+# Question 7 rerun (owner, 2026-11-23/24): P2 acceptance 6 from a properly cold state.
+# As bistab_ice.toml (frozen P4 physics, semi-gray, 400 ppm, 1361 W m-2, slab 20 m) but:
+# mixed layer at freezing (set by initial_thickness), ice surface 240 K (surface.ocean
+# initial; the ice surface starts at min(initial, T_f)), atmosphere isothermal 240 K at rest
+# with 0.1 K noise and dry, 3 m of ice over all ocean with 100 kg m-2 snow on it.
+# 12 years, statistics over the last 5. Not a P4 criterion; must be settled before P6.
+schema = 2
+description = "P4 step 6 with r3: P2 bistability cold start (ice + snow, mixed layer at freezing, 240 K atmosphere), 400 ppm"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "4383day"
+output_every = "365.25day"
+diagnostics_every = "1day"
+output_fields = ["ts", "tos", "sic", "sit", "snw", "precip", "tas"]
+initial_condition = { case = "isothermal", temperature = 240.0, noise = 0.1 }
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+# year: the original 365.25 days (derived: 365.256 d), kept so that results are
+# unchanged; checked against the derived value (< 1%).
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+# Earth preset: rotation rate 7.292e-5 s⁻¹ (Williamson et al. 1992).
+[planet]
+preset = "earth"
+
+# R_d and c_p: the Williamson et al. (1992) values used by the dynamical core, checked
+# against the mixture (287.04 / 1005.0 J kg⁻¹ K⁻¹).
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "dry"
+
+[radiation]
+scheme = "semigray"
+# Earth ozone column of the calibration (docs/radiation/calibration.md)
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
+[clouds]
+scheme = "diagnostic"
+low_cloud = "slingo_lts"
+low_rh = "sundqvist"
+water_max = 0.00015
+rh_crit_upper = 0.8
+
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+geography = "aquaplanet"
+
+[surface.ocean]
+model = "slab"
+albedo = 0.06
+mixed_layer_depth = 20.0
+initial = 240.0
+
+# Zero-layer sea-ice thermodynamics with band albedos (P2).
+[surface.sea_ice]
+enabled = true
+initial_thickness = 3.0
+initial_snow = 100.0
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "2557day"
+every = "1day"
+maps = ["ts", "tos", "sic", "sit", "tas", "precip", "clt", "clwvi", "olr", "olr_cs", "asr", "asr_cs", "rsdt"]

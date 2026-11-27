@@ -50,6 +50,20 @@ impl SigmaLevels {
         Self::from_half((0..=nlev).map(|k| k as f64 / nlev as f64).collect())
     }
 
+    /// ω_k/p_k \[s⁻¹\] of one column from the horizontal divergence `div` and v·∇ln p_s `vg`
+    /// per full level \[s⁻¹\], written to `out`: the discretisation of the explicit
+    /// tendencies (Simmons & Burridge 1981), ω_k/p_k = (v·∇ln p_s)_k − [ln(σ_{k+1/2}/σ_{k−1/2})
+    /// Σ_{i<k} Δσ_i D_i + α_k Δσ_k D_k]/Δσ_k with D_i = δ_i + (v·∇ln p_s)_i.
+    pub fn omega_over_p(&self, div: &[f64], vg: &[f64], out: &mut [f64]) {
+        let mut cum = 0.0;
+        for k in 0..self.nlev {
+            let d = div[k] + vg[k];
+            let above = if k > 0 { self.lnratio[k] * cum } else { 0.0 };
+            out[k] = vg[k] - (above + self.alpha[k] * self.dsigma[k] * d) / self.dsigma[k];
+            cum += self.dsigma[k] * d;
+        }
+    }
+
     /// Hydrostatic matrix G (L×L, row-major) times R: Φ'_k = Σ_j G_kj T'_j.
     /// G_kj = R ln(σ_{j+1/2}/σ_{j−1/2}) for j > k, G_kk = R α_k, 0 for j < k.
     pub fn g_matrix(&self, r: f64) -> Vec<f64> {
@@ -142,6 +156,36 @@ mod tests {
             assert!((phi / exact - 1.0).abs() < 1e-12, "k={k}");
         }
         assert!(s.dsigma.iter().sum::<f64>() == 1.0);
+    }
+
+    /// Uniform divergence without a surface-pressure gradient: ∂ω/∂p = −δ gives ω/p = −δ
+    /// exactly below the top level (the α_k identity), and a pressure gradient adds v·∇ln p_s
+    /// with the column's integrated D vanishing only where it should.
+    #[test]
+    fn omega_over_p_uniform_divergence() {
+        let s = SigmaLevels::from_half(L26_HALF.to_vec());
+        let l = s.nlev;
+        let (div, vg) = (vec![2e-6; l], vec![0.0; l]);
+        let mut out = vec![0.0; l];
+        s.omega_over_p(&div, &vg, &mut out);
+        for (k, w) in out.iter().enumerate().skip(1) {
+            assert!((w / -2e-6 - 1.0).abs() < 1e-12, "k={k}: {w}");
+        }
+        // convergence below, divergence above with zero column mean: ω = 0 at the surface
+        // half level, so ω/p at the lowest full level is small and of the sign of the flow
+        let div: Vec<f64> = (0..l)
+            .map(|k| if s.full[k] > 0.8 { -1e-5 } else { 0.0 })
+            .collect();
+        let mean: f64 = (0..l).map(|k| s.dsigma[k] * div[k]).sum();
+        let div: Vec<f64> = div.iter().map(|d| d - mean).collect();
+        s.omega_over_p(&div, &vg, &mut out);
+        let k8 = s.full.iter().position(|&x| x > 0.8).unwrap();
+        assert!(
+            out[k8 - 1] < 0.0,
+            "ascent above the convergence: {}",
+            out[k8 - 1]
+        );
+        assert!(out[l - 1].abs() < out[k8].abs(), "{out:?}");
     }
 
     #[test]

@@ -1,0 +1,163 @@
+# P4 question 13, owner decision (vi)/(A) of 2026-11-23, step 4: T21 Earth AMIP variant e_wm2, 1 + 1 years,
+# Earth targets only (CERES EBAF Ed4.1 bands, P4 criteria 1-3). Changes from the frozen P4 knobs: low_cloud = "slingo_lts", low_rh = "sundqvist", water_max = 2e-4
+# Run: toyclim run --config <this> --out out/p4/lts/t21/e_wm2
+schema = 2
+description = "P4 Q13 (vi)/(A) step 4, T21 Earth AMIP variant e_wm2: low_cloud = 'slingo_lts', low_rh = 'sundqvist', water_max = 2e-4"
+model = "primitive"
+truncation = 21
+levels = "L26"
+dt = "20min"
+length = "730.5day"
+output_every = "10day"
+output_fields = ["ts", "ps", "land", "cl"]
+initial_condition = { case = "jw06", perturbed = true }
+station_every = "1h"
+station_fields = ["precip", "tas", "sfcwind", "ts", "ps"]
+
+# Diurnal 2 m range (SPEC.md P5): the Sahara box (18-30N, 10W-30E) and the open tropical
+# Pacific; the others are the "ten cities in different climates" of the P5 record.
+[[stations]]
+name = "sahara"
+lat = 24.0
+lon = 10.0
+
+[[stations]]
+name = "tropical_pacific"
+lat = 0.0
+lon = 200.0
+
+[[stations]]
+name = "prague"
+lat = 50.08
+lon = 14.42
+
+[[stations]]
+name = "manaus"
+lat = -3.12
+lon = 299.98
+
+[[stations]]
+name = "singapore"
+lat = 1.35
+lon = 103.82
+
+[[stations]]
+name = "cairo"
+lat = 30.04
+lon = 31.24
+
+[[stations]]
+name = "yakutsk"
+lat = 62.03
+lon = 129.73
+
+[[stations]]
+name = "sydney"
+lat = -33.87
+lon = 151.21
+
+[[stations]]
+name = "los_angeles"
+lat = 34.05
+lon = 241.76
+
+[[stations]]
+name = "nairobi"
+lat = -1.29
+lon = 36.82
+
+[[stations]]
+name = "reykjavik"
+lat = 64.15
+lon = 338.06
+
+[[stations]]
+name = "delhi"
+lat = 28.61
+lon = 77.21
+
+[star]
+t_eff = 5772.0
+luminosity = 1.0
+mass = 1.0
+
+# year: the original 365.25 days (derived: 365.256 d), kept so that results are
+# unchanged; checked against the derived value (< 1%).
+[orbit]
+semi_major_axis = 1.0
+eccentricity = 0.0167
+obliquity = 23.44
+perihelion_longitude = 282.9
+start_solar_longitude = 280.0
+spin = "free"
+diurnal = true
+year = "365.25day"
+instellation = 1361.0
+
+# Earth preset: rotation rate 7.292e-5 s⁻¹ (Williamson et al. 1992).
+[planet]
+preset = "earth"
+
+# R_d and c_p: the Williamson et al. (1992) values used by the dynamical core, checked
+# against the mixture (287.04 / 1005.0 J kg⁻¹ K⁻¹).
+[atmosphere]
+surface_pressure = 100000.0
+composition = { N2 = 0.7808, O2 = 0.2095, Ar = 0.0093, CO2 = 0.0004 }
+gas_constant = 287.04
+cp = 1004.64
+
+[moisture]
+condensable = "water"
+initial = "tj16"
+
+[radiation]
+scheme = "semigray"
+# Earth ozone column (P3, docs/tuning.md)
+ozone_tau = 0.02425
+ozone_p = 6429.6
+
+[clouds]
+scheme = "diagnostic"
+low_cloud = "slingo_lts"
+low_rh = "sundqvist"
+water_max = 2e-4
+
+# Bulk surface fluxes (Louis 1979 stability, Charnock roughness) and the K-profile
+# boundary layer of Frierson et al. (2006), solved implicitly with the surface energy
+# balance (SPEC.md §9.4.2–9.4.3); no Rayleigh drag. Energy fixer for the hyperdiffusion.
+[boundary_layer]
+scheme = "kprofile"
+
+[dynamics]
+# grid-point semi-Lagrangian humidity transport: the §9.8 tracer-fixer trigger fired in P1
+# (spectral transport: fixer 2.3%/day of the vapour mass at T42, APE Control)
+tracer_transport = "semi_lagrangian"
+energy_fixer = true
+
+[convection]
+scheme = "sbm"
+
+[surface]
+# ETOPO5 (NOAA NGDC 1988), 5 arc-minutes; <= 0 m is ocean (so the Caspian is ocean)
+geography = "reference/derived/earth_heightmap.npy"
+
+[surface.ocean]
+# AMIP-style: OISST v2 monthly means, interpolated between mid-months; sea ice floes 2 m
+# (NH) / 1 m (SH) thick (CICE prescribed-ice mode; surface::prescribed)
+model = "prescribed"
+sst = "reference/derived/t21/tos.npy"
+sea_ice = "reference/derived/t21/sic.npy"
+initial = "tj16"
+
+[surface.land]
+bucket_capacity = 150.0
+
+[diffusion]
+order = 4
+tau = "2.4h"
+
+[climatology]
+start = "365.25day"
+every = "6h"
+maps = ["ts", "tas", "tos", "sic", "snw", "mrso", "precip", "evap", "pw", "olr", "asr", "psl", "u200", "clt", "clwvi", "olr_cs", "asr_cs", "rsdt", "cl_lts", "lts"]
+monthly = true

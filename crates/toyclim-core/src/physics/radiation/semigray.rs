@@ -46,6 +46,32 @@
 //! form. Geen use a fixed window fraction 0.3732; here the window carries the exact
 //! Planck fraction of 8–14 µm at the layer temperature (0.366 at 288 K).
 //!
+//! **Optional CO₂ band** (`lw_co2_band`, off when its first entry is 0; P4 question 11):
+//! a fourth longwave band carved out of the rest, after the analytical forcing model of
+//! Jeevanjee, Seeley, Paynter & Fueglistaler (2021, J. Climate 34, 9463; read from the
+//! published PDF). There the mass absorption coefficient of the 667 cm⁻¹ band is
+//! κ(ν) = κ₀ exp(−|ν − ν₀|/l) at (p_ref, T_ref) = (100 hPa, 250 K), eq. (1), with
+//! ν₀ = 667.5 cm⁻¹, κ₀ = 50 m² kg⁻¹, l = 10.2 cm⁻¹ (Table 1), pressure-broadened linearly,
+//! τ_ν(p) = D κ(ν) q p²/(2 g p_ref) with D = 1.5, eq. (2); the band widens by
+//! Δν = l ln(q_f/q_i) on each side, eq. (6), and the forcing is a swap of the emission that
+//! the widened band blocks (surface, or H₂O emission where vapour overlaps: T_em of
+//! eqs. 8–9) for emission from the CO₂ emission level p₀ ≈ 16 hPa (τ_em = 0.5, eq. 3),
+//! F = 2l ln(q_f/q_i) [πB(ν₀, T_em) − πB(ν₀, T_strat)], eqs. (7) and (13). Here the band is
+//! gray: its width is W = 2l ln(CO₂/c_ref) (≥ 0) and its Planck fraction W πB(ν, T)/σT⁴
+//! (eq. 7 takes B at ν₀; here at the centre of each piece). In the paper the wavenumbers
+//! that switch under a CO₂ change are the band's outer edges, near 585 and 750 cm⁻¹, where
+//! the blocked emission is that of the H₂O lines and of the window continuum; the gray
+//! band's core sits in the rest bands' spectrum. So the band is split: two wings of width
+//! l ln(CO₂/c_win) (≥ 0, at most W/2 each), the upper one taken from the window and the lower
+//! one from the weak rest pseudo-band, and a core (the remaining width) taken from the two
+//! rest pseudo-bands in proportion. A CO₂ change above c_win moves only wing flux. The band's optical
+//! depth is that of the band centre, dτ_flux = D κ₀ q (p/p_ref) dp/g (q the CO₂ mass mixing
+//! ratio), so a doubling moves 2l ln 2 of Planck flux from the window and weak-band emission
+//! levels (where H₂O sets them, the overlap of the paper) to the CO₂ emission level. Knobs:
+//! l, c_ref [ppm], κ₀, c_win [ppm]; the paper's values are the starting point of the fit. No water vapour in the
+//! band: at the band-centre opacity (τ_flux ≈ 1600 at the surface) it would not change the
+//! emission. Turning the band on adds a fourth longwave band to the solve.
+//!
 //! All knobs are refitted to RRTMG clear-sky fluxes by `tools/calibrate_radiation.py`;
 //! the fitted values and residuals are in `docs/radiation/` and these defaults.
 
@@ -142,6 +168,9 @@ pub struct SemiGray {
     /// Pressure exponent of the CO₂ terms and the curvature κ of their amount dependence.
     pub lw_n_co2: f64,
     pub lw_co2_curvature: f64,
+    /// Optional CO₂ band (see the module doc): l \[cm⁻¹\] (0 = off), c_ref \[ppm\],
+    /// κ₀ \[m² kg⁻¹\], c_win \[ppm\].
+    pub lw_co2_band: [f64; 4],
     /// CO₂ volume mixing ratio \[ppm\] (from the atmosphere composition).
     pub co2_ppm: f64,
     /// Window Planck fractions for `window` (built on first use).
@@ -170,6 +199,7 @@ impl Default for SemiGray {
             lw_p_ref: P0,
             lw_n_co2: 0.0,
             lw_co2_curvature: 0.223756,
+            lw_co2_band: [0.0, 1.0, 50.0, 1.0],
             co2_ppm: 400.0,
             table: PlanckCache::default(),
         }
@@ -185,6 +215,35 @@ impl SemiGray {
         let l = (self.co2_ppm.max(1e-9) / 360.0).ln();
         l + self.lw_co2_curvature * l * l
     }
+    fn co2_band_on(&self) -> bool {
+        self.lw_co2_band[0] > 0.0
+    }
+    /// Width of each wing of the CO₂ band \[m⁻¹\]: l ln(CO₂/c_win), at least 0.
+    fn co2_wing_width(&self) -> f64 {
+        let [l, _, _, c_win] = self.lw_co2_band;
+        (l * (self.co2_ppm.max(1e-9) / c_win.max(1e-9)).ln()).max(0.0) * 100.0
+    }
+    /// Width of the CO₂ band \[m⁻¹\]: 2l ln(CO₂/c_ref), at least 0.
+    fn co2_band_width(&self) -> f64 {
+        let [l, c_ref, _, _] = self.lw_co2_band;
+        (2.0 * l * (self.co2_ppm.max(1e-9) / c_ref.max(1e-9)).ln()).max(0.0) * 100.0
+    }
+}
+
+/// Band centre of the CO₂ band \[m⁻¹\] (Jeevanjee et al. 2021, Table 1: 667.5 cm⁻¹).
+const CO2_NU0: f64 = 66_750.0;
+/// Reference pressure of κ₀ \[Pa\] and the paper's diffusivity factor (Table 1, eq. 2).
+const CO2_P_REF: f64 = 1e4;
+const CO2_D: f64 = 1.5;
+/// Molar mass of CO₂ \[kg mol⁻¹\] and the molar gas constant \[J mol⁻¹ K⁻¹\].
+const M_CO2: f64 = 44.0095e-3;
+const R_MOLAR: f64 = 8.314_462_618;
+
+/// πB_ν(ν, T) / σT⁴ per unit wavenumber \[m\] at wavenumber `nu` \[m⁻¹\].
+fn planck_density(nu: f64, t: f64) -> f64 {
+    let (h, c) = (6.626_070_15e-34, 2.997_924_58e8);
+    let b = 2.0 * h * c * c * nu.powi(3) / ((planck::C2 * nu / t).exp_m1());
+    std::f64::consts::PI * b / (super::STEFAN_BOLTZMANN * t.powi(4))
 }
 
 impl Opacity for SemiGray {
@@ -192,7 +251,11 @@ impl Opacity for SemiGray {
         3
     }
     fn lw_bands(&self) -> usize {
-        3
+        if self.co2_band_on() {
+            4
+        } else {
+            3
+        }
     }
     fn layer_optics(&self, ctx: &ColumnCtx, st: &ColumnState, out: &mut LayerOptics) {
         let l = st.nlev;
@@ -245,6 +308,11 @@ impl Opacity for SemiGray {
             out.lw_tau[k] = win * x / DIFFUSIVITY;
             out.lw_tau[l + k] = rest * x / DIFFUSIVITY;
             out.lw_tau[2 * l + k] = strong * x / DIFFUSIVITY;
+            if self.co2_band_on() {
+                let qc = self.co2_ppm * 1e-6 * M_CO2 * ctx.planet.gas_constant / R_MOLAR;
+                let tau = CO2_D * self.lw_co2_band[2] * qc * (ctx.p[k] / CO2_P_REF) * m;
+                out.lw_tau[3 * l + k] = tau / DIFFUSIVITY;
+            }
         }
     }
     fn sw_weights(&self, t_eff: f64, out: &mut [f64]) {
@@ -263,9 +331,27 @@ impl Opacity for SemiGray {
         } else {
             planck::fraction_between(self.window[0], self.window[1], t)
         };
-        out[0] = w;
-        out[1] = (1.0 - w) * (1.0 - self.lw_strong_share);
-        out[2] = (1.0 - w) * self.lw_strong_share;
+        // CO₂ band: the widening beyond c_win, l ln(CO₂/c_win) on each side, comes out of the
+        // window (upper wing) and the weak rest band (lower wing); the core that remains out
+        // of the two rest pseudo-bands in proportion. B at the centre of each piece.
+        let (cw, cweak, ccore) = if self.co2_band_on() {
+            let width = self.co2_band_width();
+            let wing = self.co2_wing_width().min(0.5 * width);
+            let core = width - 2.0 * wing;
+            let cw = (wing * planck_density(CO2_NU0 + 0.5 * width - 0.5 * wing, t)).min(w);
+            let weak = (1.0 - w) * (1.0 - self.lw_strong_share);
+            let cweak = (wing * planck_density(CO2_NU0 - 0.5 * width + 0.5 * wing, t)).min(weak);
+            let ccore = (core * planck_density(CO2_NU0, t)).min(1.0 - w - cweak);
+            (cw, cweak, ccore)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
+        out[0] = w - cw;
+        out[1] = (1.0 - w - ccore) * (1.0 - self.lw_strong_share) - cweak;
+        out[2] = (1.0 - w - ccore) * self.lw_strong_share;
+        if self.co2_band_on() {
+            out[3] = cw + cweak + ccore;
+        }
     }
 }
 
@@ -288,6 +374,7 @@ pub const KEYS: &[&str] = &[
     "lw_n",
     "lw_n_co2",
     "lw_co2_curvature",
+    "lw_co2_band",
     "lw_p_ref",
     "albedo",
     "t_surface_default",

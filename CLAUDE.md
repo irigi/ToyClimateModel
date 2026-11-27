@@ -1,7 +1,10 @@
 # Instructions for Claude sessions
 
-- Read `SPEC.md` in full, then `docs/progress.md`, `docs/design-decisions.md` and
-  `docs/tuning.md` (once it exists), before changing anything. **SPEC.md is the plan.**
+- Read `SPEC.md` in full, then `docs/progress.md` in full, `docs/design-decisions.md` and
+  `docs/tuning.md` (once it exists), before changing anything. Open the archive
+  `docs/progress/` only where a summary in `docs/progress.md` points to it. New session
+  entries go into `docs/progress.md`; at each milestone close, older entries move unchanged
+  to the archive (SPEC.md §10 item 10). **SPEC.md is the plan.**
   Part I (§1–§8, milestones M0–M6) is accepted; Part II (§9, milestones P0–P11) is the
   current work.
 - Continue at the lowest milestone whose acceptance criteria are not all met (SPEC.md

@@ -27,6 +27,10 @@ impl Primitive {
         if let Some(sf) = &self.surface {
             a.extend(sf.restart_arrays());
         }
+        let mem = self.physics.memory();
+        if !mem.is_empty() {
+            a.push(("physics_memory".to_string(), pack(mem)));
+        }
         let mut sc = vec![
             ("steps".to_string(), self.steps as f64),
             ("mass_target".to_string(), self.mass_target),
@@ -97,6 +101,25 @@ impl Primitive {
         }
         if let Some(sf) = self.surface.as_mut() {
             sf.load_restart(arrays)?;
+        }
+        let n = self.physics.memory().len();
+        if n > 0 {
+            let a = arrays
+                .iter()
+                .find(|(name, _)| name == "physics_memory")
+                .ok_or("restart lacks physics_memory (the clouds of the last step)")?;
+            // a restart without the diagnostic CRE-split block holds 3/4 of the memory
+            // (see `PhysicsDriver::set_memory`, which checks the layout)
+            let stored = if a.1.len() == n.div_ceil(2) {
+                n
+            } else if n.is_multiple_of(4) && a.1.len() == (n / 4 * 3).div_ceil(2) {
+                n / 4 * 3
+            } else {
+                return Err("physics_memory: wrong size".into());
+            };
+            let mut m = vec![0.0 as Real; stored];
+            unpack(&a.1, &mut m);
+            self.physics.set_memory(&m)?;
         }
         for (k, v) in scalars {
             match k.as_str() {

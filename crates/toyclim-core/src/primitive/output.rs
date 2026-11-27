@@ -112,6 +112,15 @@ impl Primitive {
         if self.curr.ntracers() > 0 {
             v.extend_from_slice(&["q", "rh", "pw"]);
         }
+        let mlen = self.physics.memory().len();
+        let (ng, nl) = (self.tr.ngrid(), self.nlev());
+        if mlen == ng * 3 * nl || mlen == ng * 4 * nl {
+            v.extend_from_slice(&["cl", "cldwp"]);
+        }
+        if mlen == ng * 4 * nl {
+            // `[clouds] cre_split`: the fourth memory block
+            v.push("cl_split");
+        }
         v.extend_from_slice(&["t_low", "u_low", "v_low", "wind_low", "psl"]);
         if self.surface.is_some() {
             v.extend_from_slice(&[
